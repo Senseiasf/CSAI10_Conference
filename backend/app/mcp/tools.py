@@ -1,0 +1,295 @@
+import json
+import logging
+from pathlib import Path
+from typing import Dict, Any, List, Optional
+from sqlalchemy import select, text
+from sqlalchemy.orm import selectinload
+
+from app.database import async_session_maker
+from app.models import DestinationModel, HotelModel, RiskAlertModel, UserSessionModel
+from app.services.vector_service import generate_text_embedding
+from app.services.graph_service import GraphService
+
+logger = logging.getLogger("mcp_tools")
+
+# Кэш данных направлений для быстрых расчетов
+_DESTINATIONS_DATA_CACHE = None
+
+def _get_destinations_json():
+    global _DESTINATIONS_DATA_CACHE
+    if _DESTINATIONS_DATA_CACHE is None:
+        p = Path(__file__).resolve().parent.parent / "data" / "destinations.json"
+        if p.exists():
+            with open(p, "r", encoding="utf-8") as f:
+                _DESTINATIONS_DATA_CACHE = json.load(f)
+        else:
+            _DESTINATIONS_DATA_CACHE = {"destinations": []}
+    return _DESTINATIONS_DATA_CACHE
+
+
+class MCPTools:
+    """
+    Реестр инструментов агента, совместимых со спецификацией Model Context Protocol (MCP)
+    и Function Calling OpenAI.
+    """
+
+    @staticmethod
+    async def get_destination_risks(destination_id: str, month: Optional[str] = None) -> Dict[str, Any]:
+        """
+        MCP Tool: Запрашивает актуальные риски, сезонные опасности (наводнения, штормы, медузы, жара)
+        и геополитическую обстановку по направлению.
+        """
+        logger.info(f"[MCP] Calling get_destination_risks for {destination_id}, month={month}")
+        async with async_session_maker() as session:
+            stmt = select(RiskAlertModel).where(RiskAlertModel.destination_id == destination_id)
+            res = await session.execute(stmt)
+            alerts = res.scalars().all()
+
+            dest_res = await session.execute(select(DestinationModel).where(DestinationModel.id == destination_id))
+            dest = dest_res.scalar_one_or_none()
+
+            dest_name = dest.name if dest else destination_id
+
+        alerts_data = []
+        has_high_severity = False
+
+        for a in alerts:
+            alerts_data.append({
+                "type": a.risk_type,
+                "severity": a.severity,
+                "title": a.title,
+                "description": a.description
+            })
+            if a.severity == "high":
+                has_high_severity = True
+
+        recommendations = [
+            "Рекомендуем оформить комплексную страховку с опцией защиты от задержки рейсов и задержки багажа.",
+            "Все трансферы работают с flight tracking: при задержке рейса водитель ожидает бесплатно до 90 минут.",
+            "Вещи первой необходимости, зарядки и сменную одежду держите в ручной клади на случай задержки выдачи багажа."
+        ]
+        if destination_id == "thailand":
+            recommendations.append("Ни в коем случае не заходите в воду при установленных красных флагах (опасные отбойные течения).")
+            recommendations.append("На Пхукете закладывайте 80 минут на прохождение границы и получение багажа.")
+            recommendations.append("При стыковке через ОАЭ используйте сквозной билет для автоматической перегрузки багажа.")
+        elif destination_id == "uae":
+            recommendations.append("В светлое время суток избегайте открытого солнца, пейте больше электролитов.")
+            recommendations.append("В терминалах Дубая (DXB) закладывайте не менее 75-80 минут на границу и выдачу багажа.")
+        elif destination_id == "sochi":
+            recommendations.append("В межсезонье в горах проверяйте статус канатных дорог на официальном сайте курорта.")
+            recommendations.append("При штормовых задержках прилёта в Сочи трансфер переносится без доплат.")
+        elif destination_id == "turkey":
+            recommendations.append("При стыковках через аэропорты Стамбула (IST/SAW) выбирайте интервал пересадки не менее 2 часов.")
+            recommendations.append("При поездках по Стамбулу закладывайте дополнительно 40-50 минут на дорожные пробки.")
+
+        return {
+            "destination_id": destination_id,
+            "destination_name": dest_name,
+            "month_context": month or "текущий сезон",
+            "overall_threat_level": "HIGH" if has_high_severity else "MEDIUM",
+            "active_alerts": alerts_data,
+            "safety_recommendations": recommendations,
+            "source": "Ostrovok Safety & Force-Majeure MCP Provider"
+        }
+
+    @staticmethod
+    async def compare_hotels(
+        destination_id: str,
+        pet_friendly: Optional[bool] = None,
+        family_friendly: Optional[bool] = None,
+        max_price_per_night: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        MCP Tool: Находит и сравнивает 2-3 отеля по ключевым параметрам:
+        цена, условия отмены, питание, удаленность от моря, pet-friendly.
+        Формирует сравнительную матрицу и анализ компромиссов.
+        """
+        logger.info(f"[MCP] Calling compare_hotels for {destination_id}")
+        async with async_session_maker() as session:
+            stmt = select(HotelModel).where(HotelModel.destination_id == destination_id)
+            if pet_friendly:
+                stmt = stmt.where(HotelModel.pet_friendly == True)
+            if family_friendly is not None:
+                stmt = stmt.where(HotelModel.family_friendly == family_friendly)
+            if max_price_per_night:
+                stmt = stmt.where(HotelModel.price_per_night_rub <= max_price_per_night)
+
+            stmt = stmt.order_by(HotelModel.price_per_night_rub.asc())
+            res = await session.execute(stmt)
+            hotels = res.scalars().all()
+
+            if not hotels:
+                fallback_res = await session.execute(
+                    select(HotelModel).where(HotelModel.destination_id == destination_id)
+                )
+                hotels = fallback_res.scalars().all()
+
+        selected_hotels = hotels[:3]
+        if not selected_hotels:
+            return {"hotels": [], "tradeoffs": "Отели не найдены"}
+
+        comparison_table = []
+        for h in selected_hotels:
+            comparison_table.append({
+                "id": h.id,
+                "name": h.name,
+                "stars": f"{h.stars}★",
+                "price_per_night_rub": h.price_per_night_rub,
+                "price_per_night_formatted": f"{h.price_per_night_rub:,} ₽",
+                "meals": h.meals,
+                "cancellation": h.cancellation_policy,
+                "pet_friendly": "✅ Да" if h.pet_friendly else "❌ Нет",
+                "distance_to_sea": f"{h.distance_to_sea_meters} м" if h.distance_to_sea_meters > 0 else "Пляж / Первая линия",
+                "features": h.features or []
+            })
+
+        tradeoffs = []
+        if len(selected_hotels) >= 2:
+            h1 = selected_hotels[0]
+            h2 = selected_hotels[1]
+            price_diff = abs(h2.price_per_night_rub - h1.price_per_night_rub)
+            tradeoffs.append(
+                f"• Вариант «{h1.name}» доступнее на {price_diff:,} ₽/ночь, но условия отмены: «{h1.cancellation_policy}»."
+            )
+            tradeoffs.append(
+                f"• Вариант «{h2.name}» предлагает более высокий уровень комфорта ({h2.category}), но требует больший бюджет."
+            )
+
+        return {
+            "destination_id": destination_id,
+            "compared_hotels": comparison_table,
+            "tradeoff_analysis": tradeoffs,
+            "recommended_choice": comparison_table[0]
+        }
+
+    @staticmethod
+    async def check_logistics_compatibility(
+        airport_code: str,
+        hotel_id: str,
+        origin_airport_code: Optional[str] = "SVO"
+    ) -> Dict[str, Any]:
+        """
+        MCP Tool: Запрашивает графовую базу Neo4j для проверки сквозной цепочки:
+        (Аэропорт вылета) -[:FLIGHT_TO]-> (Аэропорт прибытия) -[:TRANSFER_TO]-> (Отель)
+        """
+        logger.info(f"[MCP] Calling check_logistics_compatibility: {origin_airport_code} -> {airport_code} -> {hotel_id}")
+        return await GraphService.validate_logistics(airport_code, hotel_id, origin_airport_code)
+
+    @staticmethod
+    def calculate_budget_breakdown(
+        destination_id: str,
+        flight_price_roundtrip: int,
+        hotel_price_per_night: int,
+        transfer_price: int,
+        meals_type: str = "Завтрак включен",
+        nights: int = 7
+    ) -> Dict[str, Any]:
+        """
+        MCP Tool / Calculator: Рассчитывает детальную структуру расходов:
+        1. Обязательные платежи (сразу под ключ): перелет туда-обратно + проживание + трансфер.
+        2. Траты не сразу (карманные расходы на месте): питание (с учетом типа питания в отеле) + развлечения.
+        3. Итоговый ориентир общего бюджета поездки.
+        """
+        data = _get_destinations_json()
+        dest_meta = next((d for d in data.get("destinations", []) if d["id"] == destination_id), {})
+        onsite_meta = dest_meta.get("onsite_expenses_rub", {})
+
+        food_daily = onsite_meta.get("food_per_day", {"min": 2000, "max": 4500})
+        ent_tour = onsite_meta.get("entertainment_7d", {"min": 10000, "max": 25000})
+
+        # Корректировка расходов на еду в зависимости от включенного питания
+        is_all_inclusive = "all inclusive" in meals_type.lower() or "все включено" in meals_type.lower()
+        is_half_board = "полупансион" in meals_type.lower() or "ужин" in meals_type.lower() or "half board" in meals_type.lower()
+
+        if is_all_inclusive:
+            # При All Inclusive на еду вне отеля нужно минимум
+            food_7d_min = 3000
+            food_7d_max = 8000
+            food_note = "All-Inclusive в отеле: основные приемы пищи включены, заложены перекусы и напитки в городе"
+        elif is_half_board:
+            food_7d_min = int(food_daily["min"] * 0.5 * nights)
+            food_7d_max = int(food_daily["max"] * 0.5 * nights)
+            food_note = "Полупансион (завтрак + ужин): заложены обеды в кафе и ресторанах"
+        else:
+            food_7d_min = food_daily["min"] * nights
+            food_7d_max = food_daily["max"] * nights
+            food_note = "Завтрак включен: заложены обеды и ужины в кафе и ресторанах"
+
+        ent_min = ent_tour["min"]
+        ent_max = ent_tour["max"]
+
+        hotel_total = hotel_price_per_night * nights
+        mandatory_total = flight_price_roundtrip + hotel_total + transfer_price
+
+        onsite_min = food_7d_min + ent_min
+        onsite_max = food_7d_max + ent_max
+
+        total_min = mandatory_total + onsite_min
+        total_max = mandatory_total + onsite_max
+
+        return {
+            "nights": nights,
+            "mandatory": {
+                "flight_roundtrip": flight_price_roundtrip,
+                "hotel_total": hotel_total,
+                "hotel_per_night": hotel_price_per_night,
+                "transfer": transfer_price,
+                "total_mandatory_rub": mandatory_total
+            },
+            "onsite_flexible": {
+                "food_range_rub": {"min": food_7d_min, "max": food_7d_max},
+                "food_note": food_note,
+                "entertainment_range_rub": {"min": ent_min, "max": ent_max},
+                "total_onsite_range_rub": {"min": onsite_min, "max": onsite_max},
+                "description": onsite_meta.get("description", "Экскурсии, активности, местный транспорт, сувениры.")
+            },
+            "total_trip_budget_range_rub": {
+                "min": total_min,
+                "max": total_max
+            }
+        }
+
+    @staticmethod
+    async def checkout_cart(user_id: str, payment_method: str = "Банковская карта онлайн") -> Dict[str, Any]:
+        """
+        MCP Tool: Имитирует процесс покупки и бронирования тура (билеты + отель + трансфер).
+        """
+        logger.info(f"[MCP] Calling checkout_cart for {user_id}")
+        async with async_session_maker() as session:
+            sess_obj = await session.get(UserSessionModel, user_id)
+            if not sess_obj:
+                return {"status": "error", "message": "Сессия не найдена"}
+
+            cart = sess_obj.current_cart or {}
+            booking_id = f"OST-{abs(hash(user_id)) % 899999 + 100000}"
+
+            mandatory_cost = cart.get("total_mandatory_rub")
+            if not mandatory_cost:
+                raw_price = cart.get("price_per_night_rub", 15000)
+                mandatory_cost = int(raw_price) * 7 + 25000 + 2500
+
+            confirmation = {
+                "booking_id": booking_id,
+                "status": "CONFIRMED",
+                "payment_status": "PAID_SIMULATION",
+                "payment_method": payment_method,
+                "destination": cart.get("destination", "Выбранный курорт"),
+                "hotel": cart.get("hotel", "Выбранный отель"),
+                "flight": cart.get("flight", "Прямой рейс"),
+                "transfer": cart.get("transfer", "Стандартный трансфер"),
+                "dates": cart.get("dates", "7 ночей"),
+                "total_paid_rub": mandatory_cost,
+                "flight_tracking": "Включен мониторинг задержек рейса и бесплатное ожидание трансфера до 90 мин",
+                "baggage_protection": "Включена страховка задержки выдачи багажа",
+                "hotel_checkin_guarantee": "Гарантированный круглосуточный Late Check-in 24/7",
+                "onsite_spending_guide": cart.get("onsite_spending_guide", "Рекомендуется иметь с собой наличные/карту"),
+                "voucher_url": f"/api/voucher/{booking_id}",
+                "message": f"🎉 Поездка успешно оформлена! Ваучер бронирования #{booking_id} готов."
+            }
+
+            sess_obj.current_state = "CONFIRMED"
+            cart["booking_confirmation"] = confirmation
+            sess_obj.current_cart = cart
+            await session.commit()
+
+            return confirmation

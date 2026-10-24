@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Островок AI Travel Agent | Панель управления и Демо</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="logo-badge">🏝️</div>
+        <div>
+          <h1>Островок <span class="highlight">AI Agent</span></h1>
+          <p class="subtitle">Интеллектуальный помощник для планирования поездок «под ключ»</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div id="healthBadge" class="status-pill status-loading">
+          <span class="status-dot"></span>
+          <span id="healthStatusText">Проверка системы...</span>
+        </div>
+        <a href="https://t.me/{{ bot_username }}" target="_blank" class="tg-btn" id="tgBotLink">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
+          Telegram Бот
+        </a>
+      </div>
+    </header>
+
+    <!-- Main Layout -->
+    <main class="main-grid">
+      <!-- Left Column: Interactive Chat Simulator -->
+      <section class="card chat-card">
+        <div class="card-header">
+          <div class="card-title">
+            <span class="icon">💬</span>
+            <h2>Интерактивный диалог с AI-агентом</h2>
+          </div>
+          <span class="badge">Live Test</span>
+        </div>
+        
+        <div class="quick-prompts">
+          <button class="prompt-chip" onclick="fillPrompt('Хочу к теплому морю в ноябре с ребенком и собакой, без долгого перелета')">🏖️ Ноябрь с ребенком и собакой</button>
+          <button class="prompt-chip" onclick="fillPrompt('Поездка в горы на выходные со спа и красивыми видами')">⛰️ Горы и СПА</button>
+          <button class="prompt-chip" onclick="fillPrompt('Роскошный отдых в Дубае с аквапарком')">✨ Дубай люкс</button>
+          <button class="prompt-chip" onclick="fillPrompt('Тайланд, но боюсь штормов и волн')">🇹🇭 Тайланд и риски</button>
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+          <div class="msg msg-agent">
+            <div class="msg-avatar">🤖</div>
+            <div class="msg-body">
+              <p>Здравствуйте! Я тестовый интерфейс AI-агента Островка. Напишите свои пожелания, и я подберу направление, проведу валидацию логистики через <strong>Neo4j</strong>, выполню семантический поиск через <strong>pgvector</strong> и предупрежу о рисках.</p>
+            </div>
+          </div>
+        </div>
+
+        <form class="chat-input-form" id="chatForm" onsubmit="sendMessage(event)">
+          <input type="text" id="userInput" placeholder="Например: хочу к теплому морю в ноябре..." autocomplete="off" required>
+          <button type="submit" id="sendBtn" class="send-btn">
+            <span>Отправить</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+          </button>
+        </form>
+      </section>
+
+      <!-- Right Column: System Architecture & Knowledge Stats -->
+      <aside class="sidebar-column">
+        <!-- Architecture Status Card -->
+        <div class="card status-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="icon">⚙️</span>
+              <h3>Компоненты решения</h3>
+            </div>
+          </div>
+          <ul class="system-checklist">
+            <li class="check-item">
+              <div class="check-icon status-ok" id="statPg">✓</div>
+              <div class="check-info">
+                <strong>PostgreSQL + pgvector</strong>
+                <span>Реляционная модель + векторный поиск по вайбу</span>
+              </div>
+            </li>
+            <li class="check-item">
+              <div class="check-icon status-ok" id="statNeo">✓</div>
+              <div class="check-info">
+                <strong>Neo4j Logistics Graph</strong>
+                <span>Валидация стыковок, времени рейсов и трансферов</span>
+              </div>
+            </li>
+            <li class="check-item">
+              <div class="check-icon status-ok" id="statLlm">✓</div>
+              <div class="check-info">
+                <strong>LLM Orchestrator</strong>
+                <span id="llmModeText">Mock / OpenAI Compatible</span>
+              </div>
+            </li>
+            <li class="check-item">
+              <div class="check-icon status-ok" id="statBot">✓</div>
+              <div class="check-info">
+                <strong>Telegram Bot (aiogram)</strong>
+                <span>Мобильный канал взаимодействия</span>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Graph & Dataset Statistics -->
+        <div class="card stats-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="icon">📊</span>
+              <h3>База знаний и граф (Синтетика)</h3>
+            </div>
+          </div>
+          <div class="stats-grid">
+            <div class="stat-box">
+              <span class="stat-number" id="numCities">4</span>
+              <span class="stat-label">Направления</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-number" id="numHotels">16</span>
+              <span class="stat-label">Отелей</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-number" id="numAirports">6</span>
+              <span class="stat-label">Аэропортов</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-number" id="numTransfers">20</span>
+              <span class="stat-label">Маршрутов</span>
+            </div>
+          </div>
+          <div class="dest-tags">
+            <span class="dest-tag">🇷🇺 Сочи / Красная Поляна</span>
+            <span class="dest-tag">🇦🇪 ОАЭ (Дубай)</span>
+            <span class="dest-tag">🇹🇷 Турция (Анталья/Стамбул)</span>
+            <span class="dest-tag">🇹🇭 Таиланд (Пхукет)</span>
+          </div>
+        </div>
+
+        <!-- Verification / Criteria Checklist Card -->
+        <div class="card info-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="icon">🎯</span>
+              <h3>Критерии ТЗ хакатона</h3>
+            </div>
+          </div>
+          <p class="info-text">
+            • <strong>Не 15 вопросов:</strong> Агент выявляет параметры из контекста.<br>
+            • <strong>Объяснение компромиссов:</strong> Честно указывает на риски и минусы отелей.<br>
+            • <strong>Точность стыковок:</strong> Neo4j гарантирует совпадение времени прибытия и заселения.<br>
+            • <strong>Пересборка:</strong> Возможность менять параметры («с собакой», «на 2 дня позже»).
+          </p>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script>
+    async function checkHealth() {
+      try {
+        const res = await fetch('/health');
+        const data = await res.json();
+        const badge = document.getElementById('healthBadge');
+        const text = document.getElementById('healthStatusText');
+        if (data.status === 'ok') {
+          badge.className = 'status-pill status-ready';
+          text.textContent = 'Система активна и готова';
+        } else {
+          badge.className = 'status-pill status-error';
+          text.textContent = 'Ошибка сервисов';
+        }
+
+        if (data.graph_stats) {
+          document.getElementById('numCities').textContent = data.graph_stats.cities || 4;
+          document.getElementById('numAirports').textContent = data.graph_stats.airports || 6;
+          document.getElementById('numHotels').textContent = data.graph_stats.hotels || 16;
+          document.getElementById('numTransfers').textContent = data.graph_stats.transfers || 20;
+        }
+      } catch (err) {
+        console.warn('Health check error:', err);
+      }
+    }
+
+    function fillPrompt(text) {
+      document.getElementById('userInput').value = text;
+      document.getElementById('userInput').focus();
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function formatMarkdown(text) {
+      let safe = escapeHtml(text);
+      safe = safe.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      safe = safe.replace(/_(.*?)_/g, '<em>$1</em>');
+      safe = safe.replace(/\n/g, '<br>');
+      return safe;
+    }
+
+    async function sendMessage(e) {
+      e.preventDefault();
+      const input = document.getElementById('userInput');
+      const message = input.value.trim();
+      if (!message) return;
+
+      const chatMessages = document.getElementById('chatMessages');
+
+      // Add user message
+      const userDiv = document.createElement('div');
+      userDiv.className = 'msg msg-user';
+      userDiv.innerHTML = `<div class="msg-body"><p>${escapeHtml(message)}</p></div><div class="msg-avatar">👤</div>`;
+      chatMessages.appendChild(userDiv);
+      input.value = '';
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+
+      // Loading indicator
+      const loaderDiv = document.createElement('div');
+      loaderDiv.className = 'msg msg-agent msg-typing';
+      loaderDiv.id = 'typingIndicator';
+      loaderDiv.innerHTML = `<div class="msg-avatar">🤖</div><div class="msg-body"><div class="dots"><span></span><span></span><span></span></div></div>`;
+      chatMessages.appendChild(loaderDiv);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: message, user_id: 'web_session_user' })
+        });
+        const data = await res.json();
+        
+        loaderDiv.remove();
+
+        const agentDiv = document.createElement('div');
+        agentDiv.className = 'msg msg-agent';
+        agentDiv.innerHTML = `<div class="msg-avatar">🤖</div><div class="msg-body">${formatMarkdown(data.text)}</div>`;
+        chatMessages.appendChild(agentDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      } catch (err) {
+        loaderDiv.remove();
+        const errDiv = document.createElement('div');
+        errDiv.className = 'msg msg-agent';
+        errDiv.innerHTML = `<div class="msg-avatar">⚠️</div><div class="msg-body"><p>Ошибка соединения с агентом. Пожалуйста, проверьте статус контейнеров.</p></div>`;
+        chatMessages.appendChild(errDiv);
+      }
+    }
+
+    checkHealth();
+    setInterval(checkHealth, 10000);
+  </script>
+</body>
+</html>
