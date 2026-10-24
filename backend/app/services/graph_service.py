@@ -203,6 +203,7 @@ class GraphService:
                t.duration_minutes AS transfer_duration,
                t.price_rub AS transfer_price
         ORDER BY 
+            CASE WHEN f.layover_duration_minutes > 0 AND f.layover_duration_minutes < 60 THEN 2 ELSE 0 END,
             CASE 
                 WHEN $prefer_direct = true THEN (CASE WHEN f.flight_type = 'direct' THEN 0 ELSE 1 END)
                 WHEN $prefer_direct = false THEN (CASE WHEN f.flight_type = 'connecting' THEN 0 ELSE 1 END)
@@ -283,7 +284,7 @@ class GraphService:
 
             try:
                 dest_code = best.get("dest_code", "")
-                is_international = dest_code in ("DXB", "DWC", "AYT", "IST", "HKT")
+                is_international = dest_code in ("DXB", "DWC", "AYT", "IST", "HKT", "MLE", "SSH")
                 
                 # Детализированный буфер после прилёта: высадка, паспортный контроль, выдача багажа на ленте, таможня
                 if is_international:

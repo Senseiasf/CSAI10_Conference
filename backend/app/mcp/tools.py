@@ -81,6 +81,19 @@ class MCPTools:
         elif destination_id == "turkey":
             recommendations.append("При стыковках через аэропорты Стамбула (IST/SAW) выбирайте интервал пересадки не менее 2 часов.")
             recommendations.append("При поездках по Стамбулу закладывайте дополнительно 40-50 минут на дорожные пробки.")
+        elif destination_id == "maldives":
+            recommendations.append("Гидросамолеты летают строго при дневном свете (до 16:30); при вечернем прилёте требуется транзитная ночь в Мале.")
+            recommendations.append("На локальных островах алкоголь строго запрещён законами Мальдивской Республики.")
+            recommendations.append("При снорклинге на внешних рифах атоллов обязательно используйте спасательный жилет из-за сильных океанических течений.")
+        elif destination_id == "egypt":
+            recommendations.append("Купание на коралловых рифах разрешено только в защитной обуви (опасность морских ежей и рыб-камней).")
+            recommendations.append("В Шарм-эль-Шейхе действует бесплатный штамп Sinai Only на 14 дней.")
+        elif destination_id == "spb":
+            recommendations.append("В период навигации с 01:10 до 05:00 разводятся мосты через Неву; проезд на Васильевский остров на авто заблокирован.")
+            recommendations.append("В Санкт-Петербурге ветреная влажная погода с Финского залива; берите непродуваемую куртку.")
+        elif destination_id == "altai":
+            recommendations.append("В мае-июне активны таёжные клещи: оформите противоклещевую страховку и используйте репелленты.")
+            recommendations.append("В горных ущельях сотовая связь может отсутствовать: скачайте офлайн-карты заранее.")
 
         return {
             "destination_id": destination_id,
@@ -112,8 +125,8 @@ class MCPTools:
             stmt = select(HotelModel).where(HotelModel.destination_id == destination_id)
             if pet_friendly:
                 stmt = stmt.where(HotelModel.pet_friendly == True)
-            if family_friendly is not None:
-                stmt = stmt.where(HotelModel.family_friendly == family_friendly)
+            if family_friendly:
+                stmt = stmt.where(HotelModel.family_friendly == True)
             if max_price_per_night:
                 stmt = stmt.where(HotelModel.price_per_night_rub <= max_price_per_night)
             if exclude_hotel_ids:
@@ -135,25 +148,44 @@ class MCPTools:
             return {"hotels": [], "tradeoffs": "Отели не найдены"}
 
         # Ранжирование по интересам и тегам
-        if preferred_tags:
-            def hotel_tag_score(h: HotelModel) -> int:
-                score = 0
-                feats = [str(f).lower() for f in (h.features or [])]
-                cat = h.category.lower()
-                for tag in preferred_tags:
-                    t = tag.lower()
-                    if any(t in f for f in feats) or t in cat:
-                        score += 3
-                    if t == "budget_friendly" and h.price_per_night_rub <= 10000:
-                        score += 3
-                    if t == "luxury" and h.price_per_night_rub >= 30000:
-                        score += 3
-                    if t == "beach" and h.distance_to_sea_meters <= 100:
-                        score += 2
-                    if t == "family_kids" and h.family_friendly:
-                        score += 2
-                return score
+        def hotel_tag_score(h: HotelModel) -> int:
+            score = 0
+            feats = [str(f).lower() for f in (h.features or [])]
+            cat = h.category.lower()
+            tags = preferred_tags or []
 
+            # Если путешествуют с детьми: жестко отсекаем Adults Only!
+            if family_friendly is True and (not h.family_friendly or any("adults_only" in f for f in feats)):
+                return -9999
+
+            # Если отель экстремально дорогой (люкс > 80k), но пользователь НЕ просил luxury:
+            if h.price_per_night_rub > 80000 and not any(t in ("luxury", "extreme_luxury") for t in tags):
+                score -= 10
+
+            # Если отель 1★ хостел / дорм, но пользователь НЕ просил budget_friendly:
+            if any(k in feats for k in ("hostel_dorm", "shared_bathroom")) and not any(t in ("budget_friendly", "hostel_dorm") for t in tags):
+                score -= 10
+
+            for tag in tags:
+                t = tag.lower()
+                if any(t in f for f in feats) or t in cat:
+                    score += 3
+                if t == "budget_friendly" and h.price_per_night_rub <= 10000:
+                    score += 4
+                if t == "luxury" and h.price_per_night_rub >= 30000:
+                    score += 4
+                if t == "extreme_luxury" and h.price_per_night_rub >= 100000:
+                    score += 6
+                if t == "beach" and h.distance_to_sea_meters <= 100:
+                    score += 2
+                if t == "family_kids" and h.family_friendly:
+                    score += 3
+            return score
+
+        is_extreme_lux = any(t in ("extreme_luxury", "luxury_extreme") for t in (preferred_tags or []))
+        if is_extreme_lux:
+            hotels.sort(key=lambda h: (-hotel_tag_score(h), -h.price_per_night_rub))
+        else:
             hotels.sort(key=lambda h: (-hotel_tag_score(h), h.price_per_night_rub))
 
         if preferred_hotel_id:
