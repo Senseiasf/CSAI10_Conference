@@ -164,7 +164,9 @@ class GraphService:
     async def validate_logistics(
         airport_code: str,
         hotel_id: str,
-        origin_airport_code: Optional[str] = None
+        origin_airport_code: Optional[str] = None,
+        prefer_direct_flight: Optional[bool] = None,
+        without_transfer: Optional[bool] = False
     ) -> Dict[str, Any]:
         """
         Проверяет сквозную логистику от вылета до заселения:
@@ -200,14 +202,22 @@ class GraphService:
                t.name AS transfer_name,
                t.duration_minutes AS transfer_duration,
                t.price_rub AS transfer_price
-        ORDER BY f.price_rub_roundtrip ASC, t.duration_minutes ASC
+        ORDER BY 
+            CASE 
+                WHEN $prefer_direct = true THEN (CASE WHEN f.flight_type = 'direct' THEN 0 ELSE 1 END)
+                WHEN $prefer_direct = false THEN (CASE WHEN f.flight_type = 'connecting' THEN 0 ELSE 1 END)
+                ELSE 0
+            END,
+            f.price_rub_roundtrip ASC, 
+            t.duration_minutes ASC
         """
         async with driver.session() as session:
             result = await session.run(
                 query,
                 airport_code=airport_code,
                 hotel_id=hotel_id,
-                origin_code=origin_airport_code
+                origin_code=origin_airport_code,
+                prefer_direct=prefer_direct_flight
             )
             records = await result.data()
 
@@ -261,6 +271,12 @@ class GraphService:
                     "layover_duration_minutes": best.get("layover_duration_minutes", 0),
                     "layover_risk_note": best.get("layover_risk_note", "")
                 }
+
+            if without_transfer:
+                best["transfer_name"] = "Самостоятельно (такси / каршеринг / общественный транспорт)"
+                best["transfer_type"] = "self"
+                best["transfer_duration"] = 30
+                best["transfer_price"] = 0
 
             checkin_str = best.get("checkin_time") or "15:00"
             flight_arr_str = flight_info["arrival_time"]

@@ -97,14 +97,17 @@ class MCPTools:
         destination_id: str,
         pet_friendly: Optional[bool] = None,
         family_friendly: Optional[bool] = None,
-        max_price_per_night: Optional[int] = None
+        max_price_per_night: Optional[int] = None,
+        exclude_hotel_ids: Optional[List[str]] = None,
+        preferred_tags: Optional[List[str]] = None,
+        preferred_hotel_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         MCP Tool: Находит и сравнивает 2-3 отеля по ключевым параметрам:
-        цена, условия отмены, питание, удаленность от моря, pet-friendly.
-        Формирует сравнительную матрицу и анализ компромиссов.
+        цена, условия отмены, питание, удаленность от моря, pet-friendly, теги интересов,
+        исключая ранее отклоненные отели (Point 2 Re-planning).
         """
-        logger.info(f"[MCP] Calling compare_hotels for {destination_id}")
+        logger.info(f"[MCP] Calling compare_hotels for {destination_id}, exclude={exclude_hotel_ids}, tags={preferred_tags}")
         async with async_session_maker() as session:
             stmt = select(HotelModel).where(HotelModel.destination_id == destination_id)
             if pet_friendly:
@@ -113,20 +116,50 @@ class MCPTools:
                 stmt = stmt.where(HotelModel.family_friendly == family_friendly)
             if max_price_per_night:
                 stmt = stmt.where(HotelModel.price_per_night_rub <= max_price_per_night)
+            if exclude_hotel_ids:
+                stmt = stmt.where(~HotelModel.id.in_(exclude_hotel_ids))
 
             stmt = stmt.order_by(HotelModel.price_per_night_rub.asc())
             res = await session.execute(stmt)
-            hotels = res.scalars().all()
+            hotels = list(res.scalars().all())
 
+            # Fallback если все отели исключены или фильтр был слишком жестким
             if not hotels:
-                fallback_res = await session.execute(
-                    select(HotelModel).where(HotelModel.destination_id == destination_id)
-                )
-                hotels = fallback_res.scalars().all()
+                fallback_stmt = select(HotelModel).where(HotelModel.destination_id == destination_id)
+                if exclude_hotel_ids and len(exclude_hotel_ids) == 1:
+                    fallback_stmt = fallback_stmt.where(~HotelModel.id.in_(exclude_hotel_ids))
+                fallback_res = await session.execute(fallback_stmt.order_by(HotelModel.price_per_night_rub.asc()))
+                hotels = list(fallback_res.scalars().all())
+
+        if not hotels:
+            return {"hotels": [], "tradeoffs": "Отели не найдены"}
+
+        # Ранжирование по интересам и тегам
+        if preferred_tags:
+            def hotel_tag_score(h: HotelModel) -> int:
+                score = 0
+                feats = [str(f).lower() for f in (h.features or [])]
+                cat = h.category.lower()
+                for tag in preferred_tags:
+                    t = tag.lower()
+                    if any(t in f for f in feats) or t in cat:
+                        score += 3
+                    if t == "budget_friendly" and h.price_per_night_rub <= 10000:
+                        score += 3
+                    if t == "luxury" and h.price_per_night_rub >= 30000:
+                        score += 3
+                    if t == "beach" and h.distance_to_sea_meters <= 100:
+                        score += 2
+                    if t == "family_kids" and h.family_friendly:
+                        score += 2
+                return score
+
+            hotels.sort(key=lambda h: (-hotel_tag_score(h), h.price_per_night_rub))
+
+        if preferred_hotel_id:
+            hotels.sort(key=lambda h: 0 if h.id == preferred_hotel_id else 1)
 
         selected_hotels = hotels[:3]
-        if not selected_hotels:
-            return {"hotels": [], "tradeoffs": "Отели не найдены"}
 
         comparison_table = []
         for h in selected_hotels:
@@ -149,10 +182,10 @@ class MCPTools:
             h2 = selected_hotels[1]
             price_diff = abs(h2.price_per_night_rub - h1.price_per_night_rub)
             tradeoffs.append(
-                f"• Вариант «{h1.name}» доступнее на {price_diff:,} ₽/ночь, но условия отмены: «{h1.cancellation_policy}»."
+                f"• Вариант «{h1.name}» доступнее на {price_diff:,} ₽/ночь ({h1.price_per_night_rub:,} ₽ vs {h2.price_per_night_rub:,} ₽), отмена: «{h1.cancellation_policy}»."
             )
             tradeoffs.append(
-                f"• Вариант «{h2.name}» предлагает более высокий уровень комфорта ({h2.category}), но требует больший бюджет."
+                f"• Вариант «{h2.name}» предлагает формат «{h2.category}» ({h2.meals})."
             )
 
         return {
@@ -166,14 +199,22 @@ class MCPTools:
     async def check_logistics_compatibility(
         airport_code: str,
         hotel_id: str,
-        origin_airport_code: Optional[str] = "SVO"
+        origin_airport_code: Optional[str] = "SVO",
+        prefer_direct_flight: Optional[bool] = None,
+        without_transfer: Optional[bool] = False
     ) -> Dict[str, Any]:
         """
         MCP Tool: Запрашивает графовую базу Neo4j для проверки сквозной цепочки:
         (Аэропорт вылета) -[:FLIGHT_TO]-> (Аэропорт прибытия) -[:TRANSFER_TO]-> (Отель)
         """
-        logger.info(f"[MCP] Calling check_logistics_compatibility: {origin_airport_code} -> {airport_code} -> {hotel_id}")
-        return await GraphService.validate_logistics(airport_code, hotel_id, origin_airport_code)
+        logger.info(f"[MCP] Calling check_logistics_compatibility: {origin_airport_code} -> {airport_code} -> {hotel_id}, direct={prefer_direct_flight}, no_transfer={without_transfer}")
+        return await GraphService.validate_logistics(
+            airport_code=airport_code,
+            hotel_id=hotel_id,
+            origin_airport_code=origin_airport_code,
+            prefer_direct_flight=prefer_direct_flight,
+            without_transfer=without_transfer
+        )
 
     @staticmethod
     def calculate_budget_breakdown(

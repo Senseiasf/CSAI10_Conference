@@ -1,17 +1,37 @@
 {
   "origin_airports": [
-    {"code": "SVO", "name": "Москва (Шереметьево)", "city": "Москва"},
-    {"code": "VKO", "name": "Москва (Внуково)", "city": "Москва"},
-    {"code": "DME", "name": "Москва (Домодедово)", "city": "Москва"}
+    {
+      "code": "SVO",
+      "name": "Москва (Шереметьево)",
+      "city": "Москва"
+    },
+    {
+      "code": "VKO",
+      "name": "Москва (Внуково)",
+      "city": "Москва"
+    },
+    {
+      "code": "DME",
+      "name": "Москва (Домодедово)",
+      "city": "Москва"
+    }
   ],
   "destinations": [
     {
       "id": "sochi",
       "name": "Сочи и Красная Поляна",
       "country": "Россия",
-      "cities": ["Сочи", "Сириус", "Адлер", "Красная Поляна"],
+      "cities": [
+        "Сочи",
+        "Сириус",
+        "Адлер",
+        "Красная Поляна"
+      ],
       "airports": [
-        {"code": "AER", "name": "Международный аэропорт Сочи (Адлер)"}
+        {
+          "code": "AER",
+          "name": "Международный аэропорт Сочи (Адлер)"
+        }
       ],
       "price_range_rub": {
         "min": 45000,
@@ -19,8 +39,14 @@
         "avg_check_per_person_tour_7d": 110000
       },
       "onsite_expenses_rub": {
-        "food_per_day": {"min": 2000, "max": 4500},
-        "entertainment_7d": {"min": 10000, "max": 25000},
+        "food_per_day": {
+          "min": 2000,
+          "max": 4500
+        },
+        "entertainment_7d": {
+          "min": 10000,
+          "max": 25000
+        },
         "description": "Обеды/ужины в кафе и ресторанах Имеретинки, билеты в Сочи Парк, ски-пассы/подъемники на Поляне, сувениры."
       },
       "flights": [
@@ -99,7 +125,12 @@
           "price_per_night_rub": 22000,
           "distance_to_sea_meters": 50,
           "family_friendly": true,
-          "features": ["Первая линия", "Открытый подогреваемый бассейн", "Спа-комплекс 2500 кв.м", "Детский клуб"]
+          "features": [
+            "Первая линия",
+            "Открытый подогреваемый бассейн",
+            "Спа-комплекс 2500 кв.м",
+            "Детский клуб"
+          ]
         },
         {
           "id": "sochi_polyana_grand",
@@ -116,7 +147,11 @@
           "price_per_night_rub": 18500,
           "distance_to_sea_meters": 45000,
           "family_friendly": true,
-          "features": ["Олимпийский 50м бассейн", "Рядом с канатными дорогами Газпром", "Хвойный реликтовый парк"]
+          "features": [
+            "Олимпийский 50м бассейн",
+            "Рядом с канатными дорогами Газпром",
+            "Хвойный реликтовый парк"
+          ]
         },
         {
           "id": "sochi_bogatyr",
@@ -133,7 +168,10 @@
           "price_per_night_rub": 13500,
           "distance_to_sea_meters": 500,
           "family_friendly": true,
-          "features": ["Бесплатный вход в тематический парк аттракционов", "Стилизация под средневековый замок"]
+          "features": [
+            "Бесплатный вход в тематический парк аттракционов",
+            "Стилизация под средневековый замок"
+          ]
         },
         {
           "id": "sochi_gorki_panorama",
@@ -150,7 +188,86 @@
           "price_per_night_rub": 9500,
           "distance_to_sea_meters": 48000,
           "family_friendly": true,
-          "features": ["Панорамные виды на Кавказские горы", "Крытый теплый бассейн", "Pet-friendly с набором для собак"]
+          "features": [
+            "Панорамные виды на Кавказские горы",
+            "Крытый теплый бассейн",
+            "Pet-friendly с набором для собак"
+          ]
+        },
+        {
+          "id": "sochi_bridge_resort",
+          "name": "Bridge Resort 4★",
+          "city": "Сириус",
+          "stars": 4,
+          "category": "Семейный резорт Все Включено",
+          "pet_friendly": false,
+          "cancellation_policy": "Бесплатная отмена за 3 дня до заезда",
+          "cancellation_type": "flexible",
+          "meals": "All Inclusive (шведский стол 3-разовое + снек-бары)",
+          "checkin_time": "14:00",
+          "checkout_time": "12:00",
+          "price_per_night_rub": 8200,
+          "distance_to_sea_meters": 150,
+          "family_friendly": true,
+          "features": [
+            "Все включено",
+            "Комплекс подогреваемых бассейнов",
+            "Детский клуб и анимация",
+            "Медицинский спа-центр",
+            "family_kids",
+            "beach",
+            "budget_friendly"
+          ]
+        },
+        {
+          "id": "sochi_alfa_sirius",
+          "name": "Альфа Сириус (Морской квартал)",
+          "city": "Сириус",
+          "stars": 3,
+          "category": "Бюджетный апарт-отель",
+          "pet_friendly": true,
+          "cancellation_policy": "Бесплатная отмена за 24 часа",
+          "cancellation_type": "super_flexible",
+          "meals": "Без питания (кухонная зона в номере)",
+          "checkin_time": "15:00",
+          "checkout_time": "12:00",
+          "price_per_night_rub": 4900,
+          "distance_to_sea_meters": 300,
+          "family_friendly": true,
+          "features": [
+            "Кухня в номере",
+            "Супермаркеты рядом",
+            "Pet-friendly (с собаками любого размера)",
+            "Близко к Олимпийскому парку",
+            "budget_friendly",
+            "pet_friendly"
+          ]
+        },
+        {
+          "id": "sochi_swissotel_kamelia",
+          "name": "Swissôtel Resort Сочи Камелия",
+          "city": "Сочи (Центр)",
+          "stars": 5,
+          "category": "Премиальный парк-отель",
+          "pet_friendly": true,
+          "cancellation_policy": "Бесплатная отмена за 7 дней",
+          "cancellation_type": "moderate",
+          "meals": "Завтрак включен (швейцарский шведский стол)",
+          "checkin_time": "15:00",
+          "checkout_time": "12:00",
+          "price_per_night_rub": 34000,
+          "distance_to_sea_meters": 80,
+          "family_friendly": true,
+          "features": [
+            "Природный субтропический парк 7 га",
+            "Частный песчаный пляж",
+            "Открытый подогреваемый бассейн",
+            "Спа-комплекс Pürovel",
+            "luxury",
+            "spa_wellness",
+            "beach",
+            "pet_friendly"
+          ]
         }
       ],
       "transfers": [
@@ -201,6 +318,54 @@
           "name": "Трансфер до Поляны 540 + Канатная дорога до 960",
           "duration_minutes": 65,
           "price_rub": 2800
+        },
+        {
+          "from": "AER",
+          "to": "sochi_bridge_resort",
+          "type": "taxi",
+          "name": "Комфорт Такси в Bridge Resort",
+          "duration_minutes": 15,
+          "price_rub": 800
+        },
+        {
+          "from": "AER",
+          "to": "sochi_bridge_resort",
+          "type": "bus",
+          "name": "Автобус №551 до остановки Bridge Resort",
+          "duration_minutes": 30,
+          "price_rub": 110
+        },
+        {
+          "from": "AER",
+          "to": "sochi_alfa_sirius",
+          "type": "taxi",
+          "name": "Такси в Морской квартал Сириуса",
+          "duration_minutes": 12,
+          "price_rub": 750
+        },
+        {
+          "from": "AER",
+          "to": "sochi_alfa_sirius",
+          "type": "carsharing",
+          "name": "Каршеринг BelkaCar / Делимобиль",
+          "duration_minutes": 15,
+          "price_rub": 400
+        },
+        {
+          "from": "AER",
+          "to": "sochi_swissotel_kamelia",
+          "type": "taxi",
+          "name": "Индивидуальный трансфер в Сочи Центр",
+          "duration_minutes": 35,
+          "price_rub": 1900
+        },
+        {
+          "from": "AER",
+          "to": "sochi_swissotel_kamelia",
+          "type": "train",
+          "name": "Ласточка до Сочи + городское такси",
+          "duration_minutes": 40,
+          "price_rub": 600
         }
       ]
     },
@@ -208,10 +373,20 @@
       "id": "uae",
       "name": "ОАЭ (Дубай и Абу-Даби)",
       "country": "ОАЭ",
-      "cities": ["Дубай", "Абу-Даби", "Шарджа"],
+      "cities": [
+        "Дубай",
+        "Абу-Даби",
+        "Шарджа"
+      ],
       "airports": [
-        {"code": "DXB", "name": "Международный аэропорт Дубай"},
-        {"code": "DWC", "name": "Аэропорт Аль-Мактум"}
+        {
+          "code": "DXB",
+          "name": "Международный аэропорт Дубай"
+        },
+        {
+          "code": "DWC",
+          "name": "Аэропорт Аль-Мактум"
+        }
       ],
       "price_range_rub": {
         "min": 120000,
@@ -219,8 +394,14 @@
         "avg_check_per_person_tour_7d": 240000
       },
       "onsite_expenses_rub": {
-        "food_per_day": {"min": 4000, "max": 9000},
-        "entertainment_7d": {"min": 25000, "max": 60000},
+        "food_per_day": {
+          "min": 4000,
+          "max": 9000
+        },
+        "entertainment_7d": {
+          "min": 25000,
+          "max": 60000
+        },
         "description": "Рестораны в Dubai Marina, подъем на Бурдж-Халифа, сафари в пустыне, шопинг в моллах."
       },
       "flights": [
@@ -253,6 +434,21 @@
           "layover_city": null,
           "layover_duration_minutes": 0,
           "layover_risk_note": "Прямой регулярный рейс (5ч 10м) без промежуточных посадок."
+        },
+        {
+          "from": "SVO",
+          "to": "DXB",
+          "airline": "Победа",
+          "flight_no": "DP-991",
+          "departure_time": "08:45",
+          "arrival_time": "14:55",
+          "duration_minutes": 310,
+          "price_rub_roundtrip": 29900,
+          "flight_type": "direct",
+          "layover_airport": null,
+          "layover_city": null,
+          "layover_duration_minutes": 0,
+          "layover_risk_note": "Прямой бюджетный рейс (5ч 10м). Оптимальная экономия до 24 000 ₽."
         }
       ],
       "vibe_description": "Премиальный футуристичный оазис посреди Аравийской пустыни. Первоклассный сервис, искусственные острова, гигантские моллы, сафари на джипах, аквапарки мирового уровня и чистые пляжи Персидского залива.",
@@ -299,7 +495,11 @@
           "price_per_night_rub": 62000,
           "distance_to_sea_meters": 0,
           "family_friendly": true,
-          "features": ["Крупнейший в мире аквапарк", "Океанариум The Lost Chambers", "Собственный пляж 1.5 км"]
+          "features": [
+            "Крупнейший в мире аквапарк",
+            "Океанариум The Lost Chambers",
+            "Собственный пляж 1.5 км"
+          ]
         },
         {
           "id": "uae_rove_downtown",
@@ -316,7 +516,12 @@
           "price_per_night_rub": 14000,
           "distance_to_sea_meters": 6000,
           "family_friendly": true,
-          "features": ["Вид на Бурдж-Халифа", "В пешей доступности Дубай Молл", "Бассейн на крыше", "Поздний выезд"]
+          "features": [
+            "Вид на Бурдж-Халифа",
+            "В пешей доступности Дубай Молл",
+            "Бассейн на крыше",
+            "Поздний выезд"
+          ]
         },
         {
           "id": "uae_ja_beach",
@@ -333,7 +538,12 @@
           "price_per_night_rub": 31000,
           "distance_to_sea_meters": 50,
           "family_friendly": true,
-          "features": ["800м частный пляж", "Гольф-поле", "Конный клуб", "Pet-friendly номера с садом"]
+          "features": [
+            "800м частный пляж",
+            "Гольф-поле",
+            "Конный клуб",
+            "Pet-friendly номера с садом"
+          ]
         },
         {
           "id": "uae_jumeirah_beach",
@@ -350,7 +560,81 @@
           "price_per_night_rub": 48000,
           "distance_to_sea_meters": 20,
           "family_friendly": true,
-          "features": ["Вид на отель-парус Бурдж-аль-Араб", "5 бассейнов", "Бесплатный аквапарк Wild Wadi"]
+          "features": [
+            "Вид на отель-парус Бурдж-аль-Араб",
+            "5 бассейнов",
+            "Бесплатный аквапарк Wild Wadi"
+          ]
+        },
+        {
+          "id": "uae_centara_mirage",
+          "name": "Centara Mirage Beach Resort Dubai",
+          "city": "Дубай (Дейра Айлендс)",
+          "stars": 4,
+          "category": "Семейный курорт с аквапарком",
+          "pet_friendly": false,
+          "cancellation_policy": "Бесплатная отмена за 5 дней",
+          "cancellation_type": "moderate",
+          "meals": "All Inclusive (всё включено с детским меню)",
+          "checkin_time": "15:00",
+          "checkout_time": "12:00",
+          "price_per_night_rub": 18500,
+          "distance_to_sea_meters": 30,
+          "family_friendly": true,
+          "features": [
+            "Собственный аквапарк с ленивой рекой",
+            "Детский спа-центр Candy Spa",
+            "Семейный пляж с пологим входом",
+            "family_kids",
+            "waterpark",
+            "beach"
+          ]
+        },
+        {
+          "id": "uae_ibis_styles_jumeira",
+          "name": "Ibis Styles Dubai Jumeira",
+          "city": "Дубай (Джумейра)",
+          "stars": 3,
+          "category": "Доступный городской отель",
+          "pet_friendly": false,
+          "cancellation_policy": "Бесплатная отмена за 24 часа",
+          "cancellation_type": "super_flexible",
+          "meals": "Завтрак включен",
+          "checkin_time": "14:00",
+          "checkout_time": "12:00",
+          "price_per_night_rub": 7800,
+          "distance_to_sea_meters": 1800,
+          "family_friendly": true,
+          "features": [
+            "Бюджетный вариант",
+            "Бесплатный шаттл на пляж La Mer",
+            "Крытый бассейн и фитнес-центр",
+            "budget_friendly"
+          ]
+        },
+        {
+          "id": "uae_emirates_palace_abudhabi",
+          "name": "Emirates Palace Mandarin Oriental",
+          "city": "Абу-Даби",
+          "stars": 5,
+          "category": "Королевский ультра-люкс дворец",
+          "pet_friendly": false,
+          "cancellation_policy": "Бесплатная отмена за 14 дней",
+          "cancellation_type": "strict",
+          "meals": "Завтрак включен (высокая гастрономия)",
+          "checkin_time": "15:00",
+          "checkout_time": "12:00",
+          "price_per_night_rub": 78000,
+          "distance_to_sea_meters": 0,
+          "family_friendly": true,
+          "features": [
+            "Приватный белый пляж 1.3 км",
+            "Мраморные интерьеры",
+            "Персональный батлер 24/7",
+            "luxury",
+            "beach",
+            "history_culture"
+          ]
         }
       ],
       "transfers": [
@@ -393,6 +677,54 @@
           "name": "Такси в Джумейру",
           "duration_minutes": 30,
           "price_rub": 2800
+        },
+        {
+          "from": "DXB",
+          "to": "uae_centara_mirage",
+          "type": "taxi",
+          "name": "Такси Dubai Taxi в Centara Mirage",
+          "duration_minutes": 20,
+          "price_rub": 1600
+        },
+        {
+          "from": "DXB",
+          "to": "uae_centara_mirage",
+          "type": "shuttle",
+          "name": "Отельный шаттл",
+          "duration_minutes": 35,
+          "price_rub": 600
+        },
+        {
+          "from": "DXB",
+          "to": "uae_ibis_styles_jumeira",
+          "type": "taxi",
+          "name": "Такси в Джумейру",
+          "duration_minutes": 15,
+          "price_rub": 1200
+        },
+        {
+          "from": "DXB",
+          "to": "uae_ibis_styles_jumeira",
+          "type": "metro",
+          "name": "Метро Дубая (Red Line) + пешком",
+          "duration_minutes": 30,
+          "price_rub": 350
+        },
+        {
+          "from": "DXB",
+          "to": "uae_emirates_palace_abudhabi",
+          "type": "vip_transfer",
+          "name": "VIP Трансфер Mercedes в Абу-Даби",
+          "duration_minutes": 85,
+          "price_rub": 7900
+        },
+        {
+          "from": "DXB",
+          "to": "uae_emirates_palace_abudhabi",
+          "type": "taxi",
+          "name": "Междугороднее такси Дубай - Абу-Даби",
+          "duration_minutes": 90,
+          "price_rub": 4800
         }
       ]
     },
@@ -400,10 +732,21 @@
       "id": "turkey",
       "name": "Турция (Анталья и Стамбул)",
       "country": "Турция",
-      "cities": ["Анталья", "Белек", "Кемер", "Стамбул"],
+      "cities": [
+        "Анталья",
+        "Белек",
+        "Кемер",
+        "Стамбул"
+      ],
       "airports": [
-        {"code": "AYT", "name": "Аэропорт Анталья"},
-        {"code": "IST", "name": "Новый аэропорт Стамбула"}
+        {
+          "code": "AYT",
+          "name": "Аэропорт Анталья"
+        },
+        {
+          "code": "IST",
+          "name": "Новый аэропорт Стамбула"
+        }
       ],
       "price_range_rub": {
         "min": 60000,
@@ -411,8 +754,14 @@
         "avg_check_per_person_tour_7d": 135000
       },
       "onsite_expenses_rub": {
-        "food_per_day": {"min": 1500, "max": 3500},
-        "entertainment_7d": {"min": 8000, "max": 22000},
+        "food_per_day": {
+          "min": 1500,
+          "max": 3500
+        },
+        "entertainment_7d": {
+          "min": 8000,
+          "max": 22000
+        },
         "description": "Экскурсии в Каппадокию/Памуккале, турецкий хаммам, прогулки на яхте, шопинг на Гранд Базаре."
       },
       "flights": [
@@ -460,6 +809,21 @@
           "layover_city": null,
           "layover_duration_minutes": 0,
           "layover_risk_note": "Прямой рейс в Новый аэропорт Стамбула (IST)."
+        },
+        {
+          "from": "VKO",
+          "to": "AYT",
+          "airline": "Победа",
+          "flight_no": "DP-839",
+          "departure_time": "06:10",
+          "arrival_time": "10:55",
+          "duration_minutes": 285,
+          "price_rub_roundtrip": 16900,
+          "flight_type": "direct",
+          "layover_airport": null,
+          "layover_city": null,
+          "layover_duration_minutes": 0,
+          "layover_risk_note": "Прямой утренний рейс Победы. Экономия бюджета до 15 000 ₽."
         }
       ],
       "vibe_description": "Беззаботный пляжный отдых по системе «Все Включено» на чистейших пляжах Средиземноморья (Анталья/Белек) либо атмосферный культурно-исторический и гастрономический трип по Босфору (Стамбул). Отличный баланс цены и комфорта для семей с детьми.",
@@ -506,7 +870,11 @@
           "price_per_night_rub": 68000,
           "distance_to_sea_meters": 0,
           "family_friendly": true,
-          "features": ["Собственное гольф-поле Montgomerie", "Шоколадная фабрика ручной работы", "Пляж с белым мальдивским песком"]
+          "features": [
+            "Собственное гольф-поле Montgomerie",
+            "Шоколадная фабрика ручной работы",
+            "Пляж с белым мальдивским песком"
+          ]
         },
         {
           "id": "turkey_adalya_elite",
@@ -523,7 +891,11 @@
           "price_per_night_rub": 22000,
           "distance_to_sea_meters": 100,
           "family_friendly": true,
-          "features": ["Луна-парк и аквапарк на территории", "Песчаный пляж с пирсом", "20 минут от аэропорта"]
+          "features": [
+            "Луна-парк и аквапарк на территории",
+            "Песчаный пляж с пирсом",
+            "20 минут от аэропорта"
+          ]
         },
         {
           "id": "turkey_akra_antalya",
@@ -540,7 +912,11 @@
           "price_per_night_rub": 16500,
           "distance_to_sea_meters": 50,
           "family_friendly": true,
-          "features": ["Платформа-пляж на скалах", "Инфинити-бассейн над морем", "Pet-friendly номера"]
+          "features": [
+            "Платформа-пляж на скалах",
+            "Инфинити-бассейн над морем",
+            "Pet-friendly номера"
+          ]
         },
         {
           "id": "turkey_pera_palace",
@@ -557,7 +933,86 @@
           "price_per_night_rub": 28500,
           "distance_to_sea_meters": 1200,
           "family_friendly": false,
-          "features": ["Отель-легенда Восточного Экспресса", "Номер-музей Ататюрка", "Пешком до улицы Истикляль"]
+          "features": [
+            "Отель-легенда Восточного Экспресса",
+            "Номер-музей Ататюрка",
+            "Пешком до улицы Истикляль"
+          ]
+        },
+        {
+          "id": "turkey_swandor_topkapi",
+          "name": "Swandor Hotels & Resorts Topkapi Palace",
+          "city": "Анталья (Кунду)",
+          "stars": 5,
+          "category": "Все Включено Дворцовый Комплекс",
+          "pet_friendly": false,
+          "cancellation_policy": "Бесплатная отмена за 7 дней",
+          "cancellation_type": "moderate",
+          "meals": "Ultra All Inclusive 24/7",
+          "checkin_time": "14:00",
+          "checkout_time": "12:00",
+          "price_per_night_rub": 13900,
+          "distance_to_sea_meters": 50,
+          "family_friendly": true,
+          "features": [
+            "Архитектура дворца Топкапы",
+            "Аквапарк с 8 горками",
+            "Песчаный пляж с пирсом",
+            "Детский городок Rino Club",
+            "family_kids",
+            "waterpark",
+            "beach"
+          ]
+        },
+        {
+          "id": "turkey_antalyaspor_city_hotel",
+          "name": "Antalya City Boutique Hotel",
+          "city": "Анталья (Калеичи)",
+          "stars": 3,
+          "category": "Исторический бутик-отель",
+          "pet_friendly": true,
+          "cancellation_policy": "Бесплатная отмена за 24 часа",
+          "cancellation_type": "super_flexible",
+          "meals": "Турецкий традиционный завтрак",
+          "checkin_time": "14:00",
+          "checkout_time": "12:00",
+          "price_per_night_rub": 5800,
+          "distance_to_sea_meters": 400,
+          "family_friendly": true,
+          "features": [
+            "В старом городе Калеичи",
+            "Внутренний дворик с садом",
+            "Pet-friendly",
+            "Бюджетный колорит",
+            "budget_friendly",
+            "pet_friendly",
+            "history_culture"
+          ]
+        },
+        {
+          "id": "turkey_four_seasons_bosphorus",
+          "name": "Four Seasons Hotel Istanbul at the Bosphorus",
+          "city": "Стамбул (Бешикташ)",
+          "stars": 5,
+          "category": "Османский дворец на берегу Босфора",
+          "pet_friendly": true,
+          "cancellation_policy": "Бесплатная отмена за 7 дней",
+          "cancellation_type": "moderate",
+          "meals": "Изысканный завтрак с видом на Босфор",
+          "checkin_time": "15:00",
+          "checkout_time": "12:00",
+          "price_per_night_rub": 72000,
+          "distance_to_sea_meters": 0,
+          "family_friendly": true,
+          "features": [
+            "Терраса прямо у воды пролива",
+            "Открытый подогреваемый бассейн у Босфора",
+            "Османская архитектура XIX века",
+            "Pet-friendly VIP сервис",
+            "luxury",
+            "history_culture",
+            "pet_friendly"
+          ]
         }
       ],
       "transfers": [
@@ -600,6 +1055,54 @@
           "name": "Экспресс-автобус Havaist до площади Таксим",
           "duration_minutes": 80,
           "price_rub": 650
+        },
+        {
+          "from": "AYT",
+          "to": "turkey_swandor_topkapi",
+          "type": "taxi",
+          "name": "Такси в отель Swandor Topkapi",
+          "duration_minutes": 25,
+          "price_rub": 2200
+        },
+        {
+          "from": "AYT",
+          "to": "turkey_swandor_topkapi",
+          "type": "shuttle",
+          "name": "Групповой трансфер-шаттл",
+          "duration_minutes": 45,
+          "price_rub": 700
+        },
+        {
+          "from": "AYT",
+          "to": "turkey_antalyaspor_city_hotel",
+          "type": "taxi",
+          "name": "Такси в Старый город Калеичи",
+          "duration_minutes": 20,
+          "price_rub": 1700
+        },
+        {
+          "from": "AYT",
+          "to": "turkey_antalyaspor_city_hotel",
+          "type": "tram",
+          "name": "Скоростной трамвай AntRay до станции Ismetpasa",
+          "duration_minutes": 40,
+          "price_rub": 250
+        },
+        {
+          "from": "IST",
+          "to": "turkey_four_seasons_bosphorus",
+          "type": "vip_transfer",
+          "name": "Mercedes E-Class VIP трансфер на Босфор",
+          "duration_minutes": 50,
+          "price_rub": 4900
+        },
+        {
+          "from": "IST",
+          "to": "turkey_four_seasons_bosphorus",
+          "type": "taxi",
+          "name": "Городское желтое такси Стамбула",
+          "duration_minutes": 50,
+          "price_rub": 3600
         }
       ]
     },
@@ -607,9 +1110,17 @@
       "id": "thailand",
       "name": "Таиланд (Пхукет)",
       "country": "Таиланд",
-      "cities": ["Пхукет", "Ката Ной", "Патонг", "Банг Тао"],
+      "cities": [
+        "Пхукет",
+        "Ката Ной",
+        "Патонг",
+        "Банг Тао"
+      ],
       "airports": [
-        {"code": "HKT", "name": "Международный аэропорт Пхукет"}
+        {
+          "code": "HKT",
+          "name": "Международный аэропорт Пхукет"
+        }
       ],
       "price_range_rub": {
         "min": 95000,
@@ -617,8 +1128,14 @@
         "avg_check_per_person_tour_7d": 190000
       },
       "onsite_expenses_rub": {
-        "food_per_day": {"min": 1800, "max": 4000},
-        "entertainment_7d": {"min": 15000, "max": 40000},
+        "food_per_day": {
+          "min": 1800,
+          "max": 4000
+        },
+        "entertainment_7d": {
+          "min": 15000,
+          "max": 40000
+        },
         "description": "Тайский стритфуд и морепродукты, аренда лодок на острова Пхи-Пхи, традиционный тайский массаж, ночные рынки."
       },
       "flights": [
@@ -697,7 +1214,11 @@
           "price_per_night_rub": 52000,
           "distance_to_sea_meters": 0,
           "family_friendly": false,
-          "features": ["Только для взрослых (18+)", "Индивидуальный инфинити-бассейн на каждой вилле", "Пляж Ката Ной"]
+          "features": [
+            "Только для взрослых (18+)",
+            "Индивидуальный инфинити-бассейн на каждой вилле",
+            "Пляж Ката Ной"
+          ]
         },
         {
           "id": "thai_katathani_resort",
@@ -714,7 +1235,11 @@
           "price_per_night_rub": 23000,
           "distance_to_sea_meters": 30,
           "family_friendly": true,
-          "features": ["6 бассейнов", "Детский мини-аквапарк", "850 метров белоснежного пляжа"]
+          "features": [
+            "6 бассейнов",
+            "Детский мини-аквапарк",
+            "850 метров белоснежного пляжа"
+          ]
         },
         {
           "id": "thai_amari_phuket",
@@ -731,7 +1256,11 @@
           "price_per_night_rub": 16000,
           "distance_to_sea_meters": 20,
           "family_friendly": true,
-          "features": ["Приватный коралловый риф для снорклинга", "10 минут пешком до Бангла Роуд", "Красивый пирс с рестораном"]
+          "features": [
+            "Приватный коралловый риф для снорклинга",
+            "10 минут пешком до Бангла Роуд",
+            "Красивый пирс с рестораном"
+          ]
         },
         {
           "id": "thai_banyan_tree",
@@ -748,7 +1277,87 @@
           "price_per_night_rub": 59000,
           "distance_to_sea_meters": 150,
           "family_friendly": true,
-          "features": ["Лагуна Лагуна-Пхукет", "Pet-friendly виллы (до 10 кг)", "Легендарный спа-центр Banyan Tree"]
+          "features": [
+            "Лагуна Лагуна-Пхукет",
+            "Pet-friendly виллы (до 10 кг)",
+            "Легендарный спа-центр Banyan Tree"
+          ]
+        },
+        {
+          "id": "thai_sugar_marina_surf",
+          "name": "Sugar Marina Resort - SURF - Kata Beach",
+          "city": "Ката (Пхукет)",
+          "stars": 4,
+          "category": "Дизайнерский серф-отель",
+          "pet_friendly": true,
+          "cancellation_policy": "Бесплатная отмена за 48 часов",
+          "cancellation_type": "flexible",
+          "meals": "Завтрак включен",
+          "checkin_time": "14:00",
+          "checkout_time": "12:00",
+          "price_per_night_rub": 6900,
+          "distance_to_sea_meters": 200,
+          "family_friendly": true,
+          "features": [
+            "Стильная сёрф-атмосфера",
+            "200м до пляжа Ката",
+            "Бассейн с подсветкой",
+            "Pet-friendly",
+            "budget_friendly",
+            "pet_friendly",
+            "beach"
+          ]
+        },
+        {
+          "id": "thai_splash_beach_resort",
+          "name": "Splash Beach Resort Phuket",
+          "city": "Май Кхао (Пхукет)",
+          "stars": 5,
+          "category": "Семейный резорт с аквапарком",
+          "pet_friendly": false,
+          "cancellation_policy": "Бесплатная отмена за 5 дней",
+          "cancellation_type": "moderate",
+          "meals": "Завтрак включен (вход в аквапарк Splash Jungle включен)",
+          "checkin_time": "15:00",
+          "checkout_time": "12:00",
+          "price_per_night_rub": 12500,
+          "distance_to_sea_meters": 50,
+          "family_friendly": true,
+          "features": [
+            "Крупнейший на Пхукете аквапарк Splash Jungle",
+            "Детский клуб",
+            "Пляж Май Кхао с видом на самолеты",
+            "15 минут от аэропорта",
+            "family_kids",
+            "waterpark",
+            "beach"
+          ]
+        },
+        {
+          "id": "thai_anantara_mai_khao",
+          "name": "Anantara Mai Khao Phuket Villas",
+          "city": "Май Кхао (Пхукет)",
+          "stars": 5,
+          "category": "Эксклюзивные виллы у лагуны",
+          "pet_friendly": true,
+          "cancellation_policy": "Бесплатная отмена за 14 дней",
+          "cancellation_type": "strict",
+          "meals": "Завтрак включен (высокая кухня)",
+          "checkin_time": "15:00",
+          "checkout_time": "12:00",
+          "price_per_night_rub": 45000,
+          "distance_to_sea_meters": 100,
+          "family_friendly": true,
+          "features": [
+            "Виллы с персональным бассейном в тропическом саду",
+            "Озеро с лотосами",
+            "Знаменитый Anantara Spa",
+            "Pet-friendly по запросу",
+            "luxury",
+            "spa_wellness",
+            "beach",
+            "pet_friendly"
+          ]
         }
       ],
       "transfers": [
@@ -783,6 +1392,54 @@
           "name": "Групповой минивэн аэропорта",
           "duration_minutes": 95,
           "price_rub": 850
+        },
+        {
+          "from": "HKT",
+          "to": "thai_splash_beach_resort",
+          "type": "shuttle",
+          "name": "Отельный экспресс-шаттл",
+          "duration_minutes": 12,
+          "price_rub": 600
+        },
+        {
+          "from": "HKT",
+          "to": "thai_splash_beach_resort",
+          "type": "taxi",
+          "name": "Такси до Май Кхао",
+          "duration_minutes": 10,
+          "price_rub": 700
+        },
+        {
+          "from": "HKT",
+          "to": "thai_anantara_mai_khao",
+          "type": "vip_transfer",
+          "name": "Премиум SUV трансфер Anantara",
+          "duration_minutes": 20,
+          "price_rub": 2200
+        },
+        {
+          "from": "HKT",
+          "to": "thai_anantara_mai_khao",
+          "type": "taxi",
+          "name": "Такси на виллы Май Кхао",
+          "duration_minutes": 20,
+          "price_rub": 1400
+        },
+        {
+          "from": "HKT",
+          "to": "thai_sugar_marina_surf",
+          "type": "taxi",
+          "name": "Такси на Ката Бич",
+          "duration_minutes": 60,
+          "price_rub": 2800
+        },
+        {
+          "from": "HKT",
+          "to": "thai_sugar_marina_surf",
+          "type": "bus",
+          "name": "Phuket Smart Bus до Ката",
+          "duration_minutes": 85,
+          "price_rub": 400
         }
       ]
     }

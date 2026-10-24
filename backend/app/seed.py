@@ -98,6 +98,21 @@ async def seed_postgres(data: dict):
                         features=h.get("features", [])
                     )
                     session.add(hotel_obj)
+                else:
+                    hotel_obj.name = h["name"]
+                    hotel_obj.city = h["city"]
+                    hotel_obj.stars = h.get("stars", 4)
+                    hotel_obj.category = h.get("category", "")
+                    hotel_obj.pet_friendly = h.get("pet_friendly", False)
+                    hotel_obj.cancellation_policy = h.get("cancellation_policy", "")
+                    hotel_obj.cancellation_type = h.get("cancellation_type", "flexible")
+                    hotel_obj.meals = h.get("meals", "")
+                    hotel_obj.checkin_time = h.get("checkin_time", "15:00")
+                    hotel_obj.checkout_time = h.get("checkout_time", "12:00")
+                    hotel_obj.price_per_night_rub = h.get("price_per_night_rub", 10000)
+                    hotel_obj.distance_to_sea_meters = h.get("distance_to_sea_meters", 0)
+                    hotel_obj.family_friendly = h.get("family_friendly", True)
+                    hotel_obj.features = h.get("features", [])
 
             # Внешние обстоятельства и риски
             for r in dest.get("risks_and_alerts", []):
