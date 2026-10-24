@@ -1,5 +1,6 @@
 import json
 import logging
+import httpx
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from sqlalchemy import select, text
@@ -11,6 +12,43 @@ from app.services.vector_service import generate_text_embedding
 from app.services.graph_service import GraphService
 
 logger = logging.getLogger("mcp_tools")
+
+# Координаты курортов для реального метео-сервиса Open-Meteo
+DESTINATION_COORDINATES = {
+    "sochi": {"lat": 43.59, "lon": 39.73, "name": "Сочи"},
+    "uae": {"lat": 25.20, "lon": 55.27, "name": "Дубай"},
+    "turkey": {"lat": 36.89, "lon": 30.71, "name": "Анталья"},
+    "thailand": {"lat": 7.89, "lon": 98.39, "name": "Пхукет"},
+    "maldives": {"lat": 4.18, "lon": 73.51, "name": "Мале"},
+    "egypt": {"lat": 27.92, "lon": 34.33, "name": "Шарм-эль-Шейх"},
+    "spb": {"lat": 59.93, "lon": 30.31, "name": "Санкт-Петербург"},
+    "altai": {"lat": 51.83, "lon": 85.78, "name": "Манжерок / Горно-Алтайск"}
+}
+
+# Расшифровка WMO weather codes на русский язык
+WMO_CODES = {
+    0: "☀️ Ясно",
+    1: "🌤️ Преимущественно ясно",
+    2: "⛅ Переменная облачность",
+    3: "☁️ Пасмурно",
+    45: "🌫️ Туман",
+    48: "🌫️ Изморозь",
+    51: "🌦️ Небольшой дождь",
+    53: "🌧️ Умеренный дождь",
+    55: "🌧️ Сильный дождь",
+    61: "🌧️ Дождь",
+    63: "🌧️ Затяжной дождь",
+    65: "🌧️ Ливень",
+    71: "🌨️ Небольшой снегопад",
+    73: "🌨️ Снегопад",
+    75: "❄️ Сильный снегопад",
+    80: "🌦️ Кратковременный ливень",
+    81: "🌧️ Ливневый дождь",
+    82: "⛈️ Шквалистый ливень",
+    95: "⛈️ Гроза",
+    96: "⛈️ Гроза с градом",
+    99: "⛈️ Сильная гроза с градом"
+}
 
 # Кэш данных направлений для быстрых расчетов
 _DESTINATIONS_DATA_CACHE = None
@@ -32,6 +70,61 @@ class MCPTools:
     Реестр инструментов агента, совместимых со спецификацией Model Context Protocol (MCP)
     и Function Calling OpenAI.
     """
+
+    @staticmethod
+    async def get_live_weather(destination_id: str) -> Dict[str, Any]:
+        """
+        MCP Tool: Запрашивает реальный прогноз погоды на ближайшие 7 дней (неделю)
+        через открытый глобальный метео-сервис Open-Meteo.
+        """
+        coords = DESTINATION_COORDINATES.get(destination_id)
+        if not coords:
+            return {"available": False, "summary": "Координаты региона не найдены"}
+
+        try:
+            url = (
+                f"https://api.open-meteo.com/v1/forecast"
+                f"?latitude={coords['lat']}&longitude={coords['lon']}"
+                f"&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code"
+                f"&timezone=auto"
+            )
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                resp = await client.get(url)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    daily = data.get("daily", {})
+                    t_mins = daily.get("temperature_2m_min", [])[:7]
+                    t_maxs = daily.get("temperature_2m_max", [])[:7]
+                    precs = daily.get("precipitation_probability_max", [])[:7]
+                    w_codes = daily.get("weather_code", [])[:7]
+
+                    if t_mins and t_maxs:
+                        today_code = w_codes[0] if w_codes else 0
+                        today_cond = WMO_CODES.get(today_code, "⛅ Переменная облачность")
+                        min_w = round(min(t_mins))
+                        max_w = round(max(t_maxs))
+                        max_prec = max(precs) if precs else 0
+                        today_max = round(t_maxs[0])
+                        today_min = round(t_mins[0])
+
+                        prec_str = f", осадки до {max_prec}%" if max_prec > 20 else ", без существенных осадков"
+                        summary = f"Сегодня: {today_cond}, +{today_min}..+{today_max}°C. На 7 дней: от +{min_w}°C до +{max_w}°C{prec_str}."
+                        return {
+                            "available": True,
+                            "city": coords["name"],
+                            "today": {"condition": today_cond, "temp_min": today_min, "temp_max": today_max},
+                            "week_range": {"min": min_w, "max": max_w, "max_precipitation_pct": max_prec},
+                            "summary": summary,
+                            "source": "Open-Meteo Live API"
+                        }
+        except Exception as e:
+            logger.warning(f"Live weather API error for {destination_id}: {e}")
+
+        return {
+            "available": False,
+            "summary": "Прогноз формируется на основе сезонных климатических норм.",
+            "source": "PostgreSQL Climate Cache"
+        }
 
     @staticmethod
     async def get_destination_risks(destination_id: str, month: Optional[str] = None) -> Dict[str, Any]:
@@ -275,27 +368,28 @@ class MCPTools:
         is_half_board = "полупансион" in meals_type.lower() or "ужин" in meals_type.lower() or "half board" in meals_type.lower()
 
         if is_all_inclusive:
-            # При All Inclusive на еду вне отеля нужно минимум
-            food_7d_min = 3000
-            food_7d_max = 8000
-            food_note = "All-Inclusive в отеле: основные приемы пищи включены, заложены перекусы и напитки в городе"
+            # При All Inclusive на еду вне отеля нужно минимум на напитки/кафе
+            food_min = int(600 * nights)
+            food_max = int(1500 * nights)
+            food_note = f"All-Inclusive в отеле: основное питание включено, заложены перекусы и напитки ({food_min:,}–{food_max:,} ₽ за {nights} н.)"
         elif is_half_board:
-            food_7d_min = int(food_daily["min"] * 0.5 * nights)
-            food_7d_max = int(food_daily["max"] * 0.5 * nights)
-            food_note = "Полупансион (завтрак + ужин): заложены обеды в кафе и ресторанах"
+            food_min = int(food_daily["min"] * 0.5 * nights)
+            food_max = int(food_daily["max"] * 0.5 * nights)
+            food_note = f"Полупансион (завтрак + ужин): заложены обеды в кафе и ресторанах ({food_min:,}–{food_max:,} ₽ за {nights} н.)"
         else:
-            food_7d_min = food_daily["min"] * nights
-            food_7d_max = food_daily["max"] * nights
-            food_note = "Завтрак включен: заложены обеды и ужины в кафе и ресторанах"
+            food_min = int(food_daily["min"] * nights)
+            food_max = int(food_daily["max"] * nights)
+            food_note = f"Завтрак включен: заложены обеды и ужины в кафе и ресторанах ({food_min:,}–{food_max:,} ₽ за {nights} н.)"
 
-        ent_min = ent_tour["min"]
-        ent_max = ent_tour["max"]
+        # Развлечения и экскурсии масштабируются пропорционально длительности
+        ent_min = max(2000, int(ent_tour.get("min", 10000) / 7.0 * nights))
+        ent_max = max(5000, int(ent_tour.get("max", 25000) / 7.0 * nights))
 
         hotel_total = hotel_price_per_night * nights
         mandatory_total = flight_price_roundtrip + hotel_total + transfer_price
 
-        onsite_min = food_7d_min + ent_min
-        onsite_max = food_7d_max + ent_max
+        onsite_min = food_min + ent_min
+        onsite_max = food_max + ent_max
 
         total_min = mandatory_total + onsite_min
         total_max = mandatory_total + onsite_max
@@ -310,7 +404,7 @@ class MCPTools:
                 "total_mandatory_rub": mandatory_total
             },
             "onsite_flexible": {
-                "food_range_rub": {"min": food_7d_min, "max": food_7d_max},
+                "food_range_rub": {"min": food_min, "max": food_max},
                 "food_note": food_note,
                 "entertainment_range_rub": {"min": ent_min, "max": ent_max},
                 "total_onsite_range_rub": {"min": onsite_min, "max": onsite_max},
@@ -335,11 +429,12 @@ class MCPTools:
 
             cart = sess_obj.current_cart or {}
             booking_id = f"OST-{abs(hash(user_id)) % 899999 + 100000}"
+            nights = cart.get("nights", 7)
 
             mandatory_cost = cart.get("total_mandatory_rub")
             if not mandatory_cost:
                 raw_price = cart.get("price_per_night_rub", 15000)
-                mandatory_cost = int(raw_price) * 7 + 25000 + 2500
+                mandatory_cost = int(raw_price) * nights + 25000 + 2500
 
             confirmation = {
                 "booking_id": booking_id,
@@ -350,7 +445,8 @@ class MCPTools:
                 "hotel": cart.get("hotel", "Выбранный отель"),
                 "flight": cart.get("flight", "Прямой рейс"),
                 "transfer": cart.get("transfer", "Стандартный трансфер"),
-                "dates": cart.get("dates", "7 ночей"),
+                "dates": cart.get("dates", f"{nights} ночей"),
+                "nights": nights,
                 "total_paid_rub": mandatory_cost,
                 "flight_tracking": "Включен мониторинг задержек рейса и бесплатное ожидание трансфера до 90 мин",
                 "baggage_protection": "Включена страховка задержки выдачи багажа",

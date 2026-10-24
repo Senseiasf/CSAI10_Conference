@@ -56,7 +56,8 @@ class AgentService:
                         "has_kids": False,
                         "has_pets": False,
                         "preferred_destination": None,
-                        "dates": "ноябрь (7 ночей)",
+                        "nights": 7,
+                        "dates": "7 ночей",
                         "interests": [],
                         "rejected_hotels": [],
                         "prefer_direct_flight": None,
@@ -74,9 +75,38 @@ class AgentService:
     @staticmethod
     def extract_interests_and_slots(user_lower: str, profile: dict) -> dict:
         """
-        Извлекает интересы путешественника и обновляет профиль сессии (Память пользователя).
+        Извлекает интересы путешественника, состав и длительность поездки (Память пользователя).
         """
         interests = set(profile.get("interests", []))
+
+        # Извлечение длительности поездки (ночи / дни)
+        nights_matched = None
+        digit_match = re.search(r'(?:на\s+)?(\d+)\s*(?:ноч|дн|сут)', user_lower)
+        if digit_match:
+            try:
+                val = int(digit_match.group(1))
+                if 1 <= val <= 60:
+                    nights_matched = val
+            except ValueError:
+                pass
+
+        if not nights_matched:
+            if any(w in user_lower for w in ["выходн", "уикенд", "weekend", "пару дней", "на 2 дня"]):
+                nights_matched = 2
+            elif any(w in user_lower for w in ["две недели", "2 недели"]):
+                nights_matched = 14
+            elif any(w in user_lower for w in ["три недели", "3 недели"]):
+                nights_matched = 21
+            elif any(w in user_lower for w in ["на неделю", "неделю", "неделя"]):
+                nights_matched = 7
+            elif any(w in user_lower for w in ["на месяц"]):
+                nights_matched = 30
+            elif "на день" in user_lower or "на сутки" in user_lower:
+                nights_matched = 1
+
+        if nights_matched:
+            profile["nights"] = nights_matched
+            profile["dates"] = f"{nights_matched} ночей"
 
         if any(w in user_lower for w in ["пляж", "море", "купаться", "позагорать", "песок", "загар", "плавать"]):
             interests.add("beach")
@@ -324,7 +354,12 @@ class AgentService:
         is_replan_cheaper = any(w in user_lower for w in ["дешевле", "подешевле", "дорого", "снизь цену", "бюджетнее", "экономнее", "сделай дешевле"])
         is_replan_flight = any(w in user_lower for w in ["только прямой", "прямой рейс", "без пересадок", "с пересадкой", "стыковочный", "рейс подешевле"])
         is_replan_transfer = any(w in user_lower for w in ["убери трансфер", "без трансфера", "поедем сами", "на каршеринге", "возьмем такси сами", "своим ходом", "не нужен трансфер"])
-        is_replan_dates = any(w in user_lower for w in ["позже", "раньше", "сдвинь", "на 2 дня", "другие даты", "в декабре", "в ноябре", "в январе"])
+        is_replan_dates = any(w in user_lower for w in ["позже", "раньше", "сдвинь", "другие даты", "в декабре", "в ноябре", "в январе"])
+        is_replan_nights = any(w in user_lower for w in ["ноч", "дн", "сут", "выходн", "уикенд", "недел", "месяц"]) and profile.get("nights") != cart.get("nights")
+
+        nights = profile.get("nights", 7)
+        cart["nights"] = nights
+        cart["dates"] = profile.get("dates", f"{nights} ночей")
 
         # Обработка сдвига дат
         if is_replan_dates:
@@ -431,14 +466,15 @@ class AgentService:
             hotel_price_per_night=hotel_cost_per_night,
             transfer_price=transfer_cost,
             meals_type=meals_type,
-            nights=7
+            nights=nights
         )
 
-        # 9. Вызов MCP: Сезонные опасности и форс-мажоры
+        # 9. Вызов MCP: Сезонные опасности и форс-мажоры + реальный прогноз погоды
         risks_report = await MCPTools.get_destination_risks(
             destination_id=dest_id,
             month="ноябрь"
         )
+        weather_report = await MCPTools.get_live_weather(dest_id)
 
         # Сохранение в корзину
         if recommended_hotel:
@@ -480,11 +516,16 @@ class AgentService:
             fl_type_str = "только прямой рейс" if profile.get("prefer_direct_flight") else "рейс с комфортной стыковкой"
             response_lines.append(f"✈️ **Маршрут перестроен под условие:** {fl_type_str}.")
             response_lines.append("")
+        elif is_replan_nights:
+            response_lines.append(f"📅 **Длительность тура изменена на {nights} ночей:** пересчитана стоимость проживания и суточные расходы.")
+            response_lines.append("")
         elif is_replan_dates:
             response_lines.append(f"📅 **Даты поездки обновлены:** {profile.get('dates')}, отель и билеты состыкованы.")
             response_lines.append("")
 
         response_lines.append(f"🌴 **{top_dest['name']}** | {top_dest.get('climate_summary', '')}")
+        if weather_report.get("available"):
+            response_lines.append(f"🌤️ **Прогноз погоды на неделю ({weather_report.get('source')}):** {weather_report['summary']}")
         response_lines.append("")
 
         if recommended_hotel:
@@ -522,9 +563,9 @@ class AgentService:
         total_range = budget_breakdown["total_trip_budget_range_rub"]
 
         response_lines.extend([
-            "💰 **Бюджет на 7 дней:**",
-            f"• 🔴 **Сразу (авиа + отель + трансфер):** {mand['total_mandatory_rub']:,} ₽",
-            f"• 🟢 **На месте (питание + активности):** {onsite['total_onsite_range_rub']['min']:,} – {onsite['total_onsite_range_rub']['max']:,} ₽",
+            f"💰 **Бюджет на {nights} ночей:**",
+            f"• 🔴 **Сразу (авиа + отель {nights} н. + трансфер):** {mand['total_mandatory_rub']:,} ₽",
+            f"• 🟢 **На месте ({nights} дн. питание + активности):** {onsite['total_onsite_range_rub']['min']:,} – {onsite['total_onsite_range_rub']['max']:,} ₽",
             f"💵 **Итого под ключ:** **{total_range['min']:,} – {total_range['max']:,} ₽**",
             ""
         ])
@@ -585,6 +626,7 @@ class AgentService:
             "logistics": logistics_info,
             "budget_breakdown": budget_breakdown,
             "risks_report": risks_report,
+            "weather": weather_report,
             "cart": cart
         }
 
