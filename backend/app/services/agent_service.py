@@ -9,6 +9,7 @@ from app.models import DestinationModel, HotelModel, RiskAlertModel, UserSession
 from app.services.vector_service import generate_text_embedding
 from app.mcp.tools import MCPTools
 from app.services.trip_dates import update_trip_dates
+from app.services.trip_budget import update_trip_budget
 
 logger = logging.getLogger(__name__)
 
@@ -245,9 +246,20 @@ class AgentService:
         profile = session_obj.profile or {}
         cart = session_obj.current_cart or {}
 
+        previous_budget = profile.get("budget_rub")
+        budget_question = update_trip_budget(user_lower, profile, cart)
+        if budget_question:
+            await AgentService._save_session(user_id, profile, cart, message, budget_question)
+            return {"text": budget_question, "state": "NEEDS_BUDGET", "cart": cart}
+        budget_changed = profile.get("budget_rub") != previous_budget
+        budget_limit = profile.get("budget_rub")
+        cart_within_budget = budget_limit is None or (
+            cart.get("total_trip_budget_range_rub", {}).get("max", float("inf")) <= budget_limit
+        )
+
         # 0. Проверка намерения покупки / чекаута (Пункт 5 ТЗ)
         if any(w in user_lower for w in ["купить", "оформить", "забронировать", "оплатить", "чек", "подтвердить"]):
-            if cart.get("hotel") and cart.get("destination"):
+            if cart.get("hotel") and cart.get("destination") and not budget_changed and cart_within_budget:
                 checkout_result = await MCPTools.checkout_cart(user_id=user_id)
                 reply = (
                     f"🎉 **Бронирование успешно подтверждено!**\n\n"
@@ -353,7 +365,7 @@ class AgentService:
         matched_destinations = await AgentService.search_destinations_vector(message, limit=2)
         msg_top_dest = matched_destinations[0] if matched_destinations else None
 
-        if current_dest_id and not explicit_dest_change and (is_replan_hotel or is_replan_cheaper or is_replan_flight or is_replan_transfer or is_replan_dates):
+        if current_dest_id and not explicit_dest_change and (is_replan_hotel or is_replan_cheaper or is_replan_flight or is_replan_transfer or is_replan_dates or budget_changed):
             # Контекстное перепланирование в рамках текущего города/курорта!
             dest_id = current_dest_id
             cur_matched = await AgentService.search_destinations_vector(dest_id, limit=1)
@@ -389,27 +401,23 @@ class AgentService:
         rejected_hotels = profile.get("rejected_hotels", [])
         old_hotel_name = cart.get("hotel")
         old_hotel_id = cart.get("hotel_id")
-        old_mandatory_rub = cart.get("total_mandatory_rub", 0)
 
         if is_replan_hotel and old_hotel_id:
             if old_hotel_id not in rejected_hotels:
                 rejected_hotels.append(old_hotel_id)
                 profile["rejected_hotels"] = rejected_hotels
 
-        max_price_limit = None
         if is_replan_cheaper:
             profile.setdefault("interests", []).append("budget_friendly")
-            current_night_price = cart.get("price_per_night_rub", 20000)
-            max_price_limit = max(4500, int(current_night_price * 0.75))
 
         # 6. Вызов MCP: Сравнение отелей с учетом тегов, исключений и фильтров
         hotel_comparison = await MCPTools.compare_hotels(
             destination_id=dest_id,
             pet_friendly=profile.get("has_pets"),
             family_friendly=profile.get("has_kids"),
-            max_price_per_night=max_price_limit,
             exclude_hotel_ids=rejected_hotels,
-            preferred_tags=profile.get("interests")
+            preferred_tags=profile.get("interests"),
+            limit=None if budget_limit is not None else 3,
         )
 
         compared_list = hotel_comparison.get("compared_hotels", [])
@@ -421,8 +429,8 @@ class AgentService:
                 constraints.append("размещение с питомцем")
             if profile.get("has_kids"):
                 constraints.append("размещение с детьми, без Adults Only")
-            if max_price_limit is not None:
-                constraints.append(f"цена до {max_price_limit:,} ₽ за ночь")
+            if budget_limit is not None:
+                constraints.append(f"общий бюджет до {budget_limit:,} ₽")
             if rejected_hotels:
                 constraints.append("без ранее отклонённых отелей")
             details = "; ".join(constraints) or "текущие условия поиска"
@@ -444,32 +452,55 @@ class AgentService:
                 "compared_hotels": [], "cart": cart,
             }
 
-        # 7. Вызов Neo4j: Графовая логистика сквозного маршрута
-        logistics_info = {}
-        if recommended_hotel:
-            logistics_info = await MCPTools.check_logistics_compatibility(
-                airport_code="",
-                hotel_id=recommended_hotel["id"],
-                origin_airport_code=None,
+        # Оцениваем полную стоимость каждого кандидата, а не только цену номера.
+        # Проверяем весь отфильтрованный каталог при наличии лимита бюджета.
+        evaluated = []
+        for hotel in compared_list:
+            logistics = await MCPTools.check_logistics_compatibility(
+                airport_code="", hotel_id=hotel["id"], origin_airport_code=None,
                 prefer_direct_flight=profile.get("prefer_direct_flight"),
-                without_transfer=profile.get("without_transfer", False)
+                without_transfer=profile.get("without_transfer", False),
             )
+            flight = logistics.get("flight", {})
+            transfer = logistics.get("transfer", {})
+            if not logistics.get("compatible") or "price_rub_roundtrip" not in flight:
+                continue
+            if not profile.get("without_transfer") and "price_rub" not in transfer:
+                continue
+            breakdown = MCPTools.calculate_budget_breakdown(
+                destination_id=dest_id,
+                flight_price_roundtrip=flight["price_rub_roundtrip"],
+                hotel_price_per_night=hotel["price_per_night_rub"],
+                transfer_price=0 if profile.get("without_transfer") else transfer["price_rub"],
+                meals_type=hotel.get("meals", "Завтрак включен"), nights=nights,
+            )
+            evaluated.append((hotel, logistics, breakdown))
 
-        # 8. Расчет финансовой структуры
-        flight_info = logistics_info.get("flight", {})
-        flight_cost = flight_info.get("price_rub_roundtrip", 25000)
-        hotel_cost_per_night = recommended_hotel.get("price_per_night_rub", 15000) if recommended_hotel else 15000
-        transfer_cost = 0 if profile.get("without_transfer") else logistics_info.get("transfer", {}).get("price_rub", 2000)
-        meals_type = recommended_hotel.get("meals", "Завтрак включен") if recommended_hotel else "Завтрак включен"
+        affordable = [option for option in evaluated if budget_limit is None or
+                      option[2]["total_trip_budget_range_rub"]["max"] <= budget_limit]
+        if not affordable:
+            if evaluated and budget_limit is not None:
+                lowest = min(x[2]["total_trip_budget_range_rub"]["max"] for x in evaluated)
+                reply_text = (
+                    f"В направлении «{dest_name}» не нашлось поездки в пределах {budget_limit:,} ₽. "
+                    f"Самая низкая верхняя оценка полной стоимости — {lowest:,} ₽ "
+                    f"(на {lowest - budget_limit:,} ₽ выше лимита). "
+                    "В расчёт включены перелёт, отель, трансфер, питание и активности. "
+                    "Можно сократить поездку, выбрать другое направление или явно увеличить бюджет."
+                )
+                state = "BUDGET_EXCEEDED"
+            else:
+                reply_text = "Не удалось собрать маршрут с известными ценами перелёта и трансфера. Бронирование пока недоступно."
+                state = "NO_ROUTE"
+            cart = {"destination_id": dest_id, "destination": dest_name,
+                    "nights": nights, "dates": profile.get("dates"), "selection_status": state.lower()}
+            await AgentService._save_session(user_id, profile, cart, message, reply_text)
+            return {"text": reply_text, "state": state, "cart": cart, "compared_hotels": []}
 
-        budget_breakdown = MCPTools.calculate_budget_breakdown(
-            destination_id=dest_id,
-            flight_price_roundtrip=flight_cost,
-            hotel_price_per_night=hotel_cost_per_night,
-            transfer_price=transfer_cost,
-            meals_type=meals_type,
-            nights=nights
-        )
+        recommended_hotel, logistics_info, budget_breakdown = affordable[0]
+        compared_list = [x[0] for x in affordable[:3]]
+        flight_info = logistics_info["flight"]
+        hotel_cost_per_night = recommended_hotel["price_per_night_rub"]
 
         # 9. Вызов MCP: Сезонные опасности и форс-мажоры + реальный прогноз погоды
         risks_report = await MCPTools.get_destination_risks(
@@ -493,6 +524,9 @@ class AgentService:
         cart["logistics_check"] = logistics_info.get("logistics_status", "Состыковано")
         new_mandatory_rub = budget_breakdown["mandatory"]["total_mandatory_rub"]
         cart["total_mandatory_rub"] = new_mandatory_rub
+        old_total_max = cart.get("total_trip_budget_range_rub", {}).get("max")
+        cart["total_trip_budget_range_rub"] = budget_breakdown["total_trip_budget_range_rub"]
+        cart["budget_rub"] = budget_limit
 
         cart["onsite_spending_guide"] = (
             f"Рекомендуемый бюджет на месте: от {budget_breakdown['onsite_flexible']['total_onsite_range_rub']['min']:,} "
@@ -507,9 +541,9 @@ class AgentService:
             response_lines.append(f"🔄 **Отель успешно заменён без сброса маршрута:**")
             response_lines.append(f"Предыдущий отель «{old_hotel_name}» исключён из рекомендаций.")
             response_lines.append("")
-        elif is_replan_cheaper and old_mandatory_rub > new_mandatory_rub:
-            savings = old_mandatory_rub - new_mandatory_rub
-            response_lines.append(f"📉 **Оптимизировали тур: экономия {savings:,} ₽!**")
+        elif is_replan_cheaper and old_total_max is not None and old_total_max > budget_breakdown["total_trip_budget_range_rub"]["max"]:
+            savings = old_total_max - budget_breakdown["total_trip_budget_range_rub"]["max"]
+            response_lines.append(f"📉 **Снизили верхнюю оценку полной стоимости на {savings:,} ₽!**")
             response_lines.append(f"Подобрали более доступный отель и выгодные условия логистики.")
             response_lines.append("")
         elif is_replan_transfer:
@@ -572,6 +606,12 @@ class AgentService:
             f"💵 **Итого под ключ:** **{total_range['min']:,} – {total_range['max']:,} ₽**",
             ""
         ])
+
+        if budget_limit is not None:
+            response_lines.append(
+                f"Лимит всей поездки: {budget_limit:,} ₽. Верхняя оценка расходов "
+                f"{total_range['max']:,} ₽ укладывается в лимит; это оценка, а не фиксированная цена."
+            )
 
         # Сезонные опасности (сжато)
         active_alerts = risks_report.get("active_alerts", [])

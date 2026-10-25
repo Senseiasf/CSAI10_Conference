@@ -206,7 +206,8 @@ class MCPTools:
         max_price_per_night: Optional[int] = None,
         exclude_hotel_ids: Optional[List[str]] = None,
         preferred_tags: Optional[List[str]] = None,
-        preferred_hotel_id: Optional[str] = None
+        preferred_hotel_id: Optional[str] = None,
+        limit: Optional[int] = 3,
     ) -> Dict[str, Any]:
         """
         MCP Tool: Находит и сравнивает 2-3 отеля по ключевым параметрам:
@@ -287,7 +288,7 @@ class MCPTools:
         if preferred_hotel_id:
             hotels.sort(key=lambda h: 0 if h.id == preferred_hotel_id else 1)
 
-        selected_hotels = hotels[:3]
+        selected_hotels = hotels if limit is None else hotels[:limit]
 
         comparison_table = []
         for h in selected_hotels:
