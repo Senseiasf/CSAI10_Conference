@@ -59,6 +59,26 @@ docker compose exec app python -m app.seed
 
 ## Маршруты и доступ
 
+### Проверки без Docker
+
+Из корня репозитория (Python 3.11–3.12):
+
+```bash
+python -m venv .venv
+# Windows PowerShell:
+.venv\Scripts\python.exe -m pip install -r backend/requirements.txt
+cd backend
+..\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+Проверки изоляции сессий веб-чата и обязательных ограничений подбора отелей
+работают без PostgreSQL, Neo4j и внешних API. Для полного запуска приложения
+по-прежнему используется Docker Compose.
+
+Веб-чат хранит идентификатор сессии в HttpOnly cookie на 30 дней:
+разные браузеры получают разные корзины, вкладки одного профиля браузера — общую.
+Это разделение демо-сессий, а не авторизация пользователей.
+
 - `http://localhost:8080/` — интерактивный веб-дашборд и тестовый чат с AI-агентом (полная симуляция сценариев из ТЗ).
 - `http://localhost:8080/health` — 200 OK, JSON `{"status": "ok", "postgres": true, "neo4j": true, ...}`
 - `http://localhost:8080/api/chat` — REST API эндпоинт отправки сообщений агенту.

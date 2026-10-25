@@ -3,8 +3,9 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
+from uuid import UUID, uuid4
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -62,7 +63,7 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 
 class ChatRequest(BaseModel):
     message: str
-    user_id: Optional[str] = "web_user"
+    user_id: Optional[str] = None
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -103,10 +104,22 @@ async def health_check():
 
 
 @app.post("/api/chat")
-async def api_chat(req: ChatRequest):
+async def api_chat(req: ChatRequest, request: Request, response: Response):
     """Эндпоинт диалога с AI-агентом для веб-интерфейса."""
+    user_id = req.user_id
+    if not user_id:
+        cookie = request.cookies.get("ostrovok_session", "")
+        try:
+            session_id = str(UUID(cookie))
+        except ValueError:
+            session_id = str(uuid4())
+        user_id = f"web:{session_id}"
+        response.set_cookie(
+            "ostrovok_session", session_id, httponly=True, samesite="lax",
+            secure=request.url.scheme == "https", max_age=60 * 60 * 24 * 30,
+        )
     result = await AgentService.process_message(
-        user_id=req.user_id or "web_user",
+        user_id=user_id,
         message=req.message
     )
     return result

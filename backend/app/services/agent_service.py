@@ -8,6 +8,7 @@ from app.database import async_session_maker
 from app.models import DestinationModel, HotelModel, RiskAlertModel, UserSessionModel
 from app.services.vector_service import generate_text_embedding
 from app.mcp.tools import MCPTools
+from app.services.trip_dates import update_trip_dates
 
 logger = logging.getLogger(__name__)
 
@@ -78,35 +79,6 @@ class AgentService:
         Извлекает интересы путешественника, состав и длительность поездки (Память пользователя).
         """
         interests = set(profile.get("interests", []))
-
-        # Извлечение длительности поездки (ночи / дни)
-        nights_matched = None
-        digit_match = re.search(r'(?:на\s+)?(\d+)\s*(?:ноч|дн|сут)', user_lower)
-        if digit_match:
-            try:
-                val = int(digit_match.group(1))
-                if 1 <= val <= 60:
-                    nights_matched = val
-            except ValueError:
-                pass
-
-        if not nights_matched:
-            if any(w in user_lower for w in ["выходн", "уикенд", "weekend", "пару дней", "на 2 дня"]):
-                nights_matched = 2
-            elif any(w in user_lower for w in ["две недели", "2 недели"]):
-                nights_matched = 14
-            elif any(w in user_lower for w in ["три недели", "3 недели"]):
-                nights_matched = 21
-            elif any(w in user_lower for w in ["на неделю", "неделю", "неделя"]):
-                nights_matched = 7
-            elif any(w in user_lower for w in ["на месяц"]):
-                nights_matched = 30
-            elif "на день" in user_lower or "на сутки" in user_lower:
-                nights_matched = 1
-
-        if nights_matched:
-            profile["nights"] = nights_matched
-            profile["dates"] = f"{nights_matched} ночей"
 
         if any(w in user_lower for w in ["пляж", "море", "купаться", "позагорать", "песок", "загар", "плавать"]):
             interests.add("beach")
@@ -295,6 +267,12 @@ class AgentService:
                     "state": "CONFIRMED"
                 }
 
+        previous_dates = profile.get("dates")
+        date_question = update_trip_dates(user_lower, profile)
+        if date_question:
+            await AgentService._save_session(user_id, profile, cart, message, date_question)
+            return {"text": date_question, "state": "NEEDS_DATES", "cart": cart}
+
         # 1. Извлечение интересов и обновление профиля пользователя (User Memory)
         profile = AgentService.extract_interests_and_slots(user_lower, profile)
 
@@ -354,17 +332,12 @@ class AgentService:
         is_replan_cheaper = any(w in user_lower for w in ["дешевле", "подешевле", "дорого", "снизь цену", "бюджетнее", "экономнее", "сделай дешевле"])
         is_replan_flight = any(w in user_lower for w in ["только прямой", "прямой рейс", "без пересадок", "с пересадкой", "стыковочный", "рейс подешевле"])
         is_replan_transfer = any(w in user_lower for w in ["убери трансфер", "без трансфера", "поедем сами", "на каршеринге", "возьмем такси сами", "своим ходом", "не нужен трансфер"])
-        is_replan_dates = any(w in user_lower for w in ["позже", "раньше", "сдвинь", "другие даты", "в декабре", "в ноябре", "в январе"])
+        is_replan_dates = profile.get("dates") != previous_dates and bool(profile.get("checkin_date"))
         is_replan_nights = any(w in user_lower for w in ["ноч", "дн", "сут", "выходн", "уикенд", "недел", "месяц"]) and profile.get("nights") != cart.get("nights")
 
         nights = profile.get("nights", 7)
         cart["nights"] = nights
         cart["dates"] = profile.get("dates", f"{nights} ночей")
-
-        # Обработка сдвига дат
-        if is_replan_dates:
-            profile["dates"] = "на 2 дня позже (сдвиг графика)"
-            cart["dates"] = profile["dates"]
 
         # Обработка исключения трансфера
         if is_replan_transfer:
@@ -442,6 +415,35 @@ class AgentService:
         compared_list = hotel_comparison.get("compared_hotels", [])
         recommended_hotel = compared_list[0] if compared_list else None
 
+        if not recommended_hotel:
+            constraints = []
+            if profile.get("has_pets"):
+                constraints.append("размещение с питомцем")
+            if profile.get("has_kids"):
+                constraints.append("размещение с детьми, без Adults Only")
+            if max_price_limit is not None:
+                constraints.append(f"цена до {max_price_limit:,} ₽ за ночь")
+            if rejected_hotels:
+                constraints.append("без ранее отклонённых отелей")
+            details = "; ".join(constraints) or "текущие условия поиска"
+            reply_text = (
+                f"В направлении «{dest_name}» нет отелей под ваши условия: {details}. "
+                "Я сохранил ограничения. Можно выбрать другое направление или явно изменить условия. "
+                "Бронирование недоступно, пока не подобран подходящий отель."
+            )
+            # Старое предложение больше не соответствует текущим условиям.
+            # Убираем его из корзины, чтобы его нельзя было случайно оформить.
+            cart = {
+                "destination_id": dest_id, "destination": dest_name,
+                "nights": nights, "dates": profile.get("dates"),
+                "selection_status": "no_matches",
+            }
+            await AgentService._save_session(user_id, profile, cart, message, reply_text)
+            return {
+                "text": reply_text, "state": "NO_MATCHES",
+                "compared_hotels": [], "cart": cart,
+            }
+
         # 7. Вызов Neo4j: Графовая логистика сквозного маршрута
         logistics_info = {}
         if recommended_hotel:
@@ -472,11 +474,12 @@ class AgentService:
         # 9. Вызов MCP: Сезонные опасности и форс-мажоры + реальный прогноз погоды
         risks_report = await MCPTools.get_destination_risks(
             destination_id=dest_id,
-            month="ноябрь"
+            month=profile.get("checkin_date", "не указан")
         )
         weather_report = await MCPTools.get_live_weather(dest_id)
 
         # Сохранение в корзину
+        cart.pop("selection_status", None)
         if recommended_hotel:
             cart["hotel_id"] = recommended_hotel["id"]
             cart["hotel"] = recommended_hotel["name"]
@@ -520,7 +523,7 @@ class AgentService:
             response_lines.append(f"📅 **Длительность тура изменена на {nights} ночей:** пересчитана стоимость проживания и суточные расходы.")
             response_lines.append("")
         elif is_replan_dates:
-            response_lines.append(f"📅 **Даты поездки обновлены:** {profile.get('dates')}, отель и билеты состыкованы.")
+            response_lines.append(f"📅 **Даты поездки обновлены:** {profile.get('dates')}, календарный период пересчитан. Доступность отеля и рейсов на эти даты в демо не проверяется.")
             response_lines.append("")
 
         response_lines.append(f"🌴 **{top_dest['name']}** | {top_dest.get('climate_summary', '')}")

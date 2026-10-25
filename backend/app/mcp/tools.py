@@ -220,7 +220,7 @@ class MCPTools:
                 stmt = stmt.where(HotelModel.pet_friendly == True)
             if family_friendly:
                 stmt = stmt.where(HotelModel.family_friendly == True)
-            if max_price_per_night:
+            if max_price_per_night is not None:
                 stmt = stmt.where(HotelModel.price_per_night_rub <= max_price_per_night)
             if exclude_hotel_ids:
                 stmt = stmt.where(~HotelModel.id.in_(exclude_hotel_ids))
@@ -229,16 +229,19 @@ class MCPTools:
             res = await session.execute(stmt)
             hotels = list(res.scalars().all())
 
-            # Fallback если все отели исключены или фильтр был слишком жестким
-            if not hotels:
-                fallback_stmt = select(HotelModel).where(HotelModel.destination_id == destination_id)
-                if exclude_hotel_ids and len(exclude_hotel_ids) == 1:
-                    fallback_stmt = fallback_stmt.where(~HotelModel.id.in_(exclude_hotel_ids))
-                fallback_res = await session.execute(fallback_stmt.order_by(HotelModel.price_per_night_rub.asc()))
-                hotels = list(fallback_res.scalars().all())
+        # Возрастное ограничение обязательно, даже при противоречивых данных отеля.
+        if family_friendly:
+            hotels = [h for h in hotels if not any(
+                "adults_only" in str(feature).lower() for feature in (h.features or [])
+            )]
 
         if not hotels:
-            return {"hotels": [], "tradeoffs": "Отели не найдены"}
+            return {
+                "compared_hotels": [],
+                "tradeoff_analysis": [],
+                "recommended_choice": None,
+                "status": "no_matches",
+            }
 
         # Ранжирование по интересам и тегам
         def hotel_tag_score(h: HotelModel) -> int:
