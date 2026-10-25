@@ -208,6 +208,7 @@ class MCPTools:
         preferred_tags: Optional[List[str]] = None,
         preferred_hotel_id: Optional[str] = None,
         limit: Optional[int] = 3,
+        private_room_required: bool = False,
     ) -> Dict[str, Any]:
         """
         MCP Tool: Находит и сравнивает 2-3 отеля по ключевым параметрам:
@@ -234,6 +235,15 @@ class MCPTools:
         if family_friendly:
             hotels = [h for h in hotels if not any(
                 "adults_only" in str(feature).lower() for feature in (h.features or [])
+            )]
+
+        if private_room_required:
+            hotels = [h for h in hotels if not (
+                any(tag in str(feature).lower()
+                    for feature in (h.features or [])
+                    for tag in ("hostel_dorm", "shared_bathroom", "shared_room"))
+                or any(word in f"{h.name} {h.category}".lower()
+                       for word in ("хостел", "hostel", "dorm"))
             )]
 
         if not hotels:

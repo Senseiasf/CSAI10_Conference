@@ -46,6 +46,46 @@ class ChatSessionsTest(unittest.TestCase):
 
 
 class HotelConstraintsTest(unittest.IsolatedAsyncioTestCase):
+    def test_exact_user_request_preserves_private_room_and_child(self):
+        profile = AgentService.extract_interests_and_slots(
+            "Хочу в Сочи на 7 ночей с ребёнком, бюджет до 200 тысяч рублей. Нужен отдельный номер, не хостел.", {}
+        )
+        self.assertTrue(profile["has_kids"])
+        self.assertTrue(profile["private_room_required"])
+        self.assertNotIn("budget_friendly", profile["interests"])
+        self.assertNotIn("hostel_dorm", profile["interests"])
+        again = AgentService.extract_interests_and_slots("покажи другой отель", profile)
+        self.assertTrue(again["private_room_required"])
+
+    def test_budget_amount_is_not_a_preference_for_hostels(self):
+        profile = AgentService.extract_interests_and_slots("бюджет до 200 тысяч", {})
+        self.assertNotIn("budget_friendly", profile["interests"])
+        economical = AgentService.extract_interests_and_slots("нужен недорогой отель", {})
+        self.assertIn("budget_friendly", economical["interests"])
+
+    def test_child_word_forms(self):
+        for text in ("с ребенком", "с ребёнком", "с детьми", "с ребеночком"):
+            with self.subTest(text=text):
+                self.assertTrue(AgentService.extract_interests_and_slots(text, {})["has_kids"])
+        self.assertFalse(AgentService.extract_interests_and_slots("без детей", {}).get("has_kids", False))
+
+    async def test_private_room_excludes_hostels_even_when_family_friendly(self):
+        def make(name, features):
+            return SimpleNamespace(id=name, name=name, features=features,
+                family_friendly=True, pet_friendly=False, category="hotel", stars=3,
+                price_per_night_rub=5000, meals="Завтрак", cancellation_policy="Бесплатно",
+                distance_to_sea_meters=100)
+        db = AsyncMock()
+        db.__aenter__.return_value = db
+        db.execute.return_value = SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [
+            make("Хостел У вокзала", []), make("Dorm", []),
+            make("Общий номер", ["hostel_dorm"]), make("Общая ванная", ["shared_bathroom"]),
+            make("Отдельный номер", []),
+        ]))
+        with patch("app.mcp.tools.async_session_maker", return_value=db):
+            result = await MCPTools.compare_hotels("sochi", family_friendly=True, private_room_required=True)
+        self.assertEqual([h["name"] for h in result["compared_hotels"]], ["Отдельный номер"])
+
     async def test_matching_family_hotel_is_still_recommended(self):
         hotel = SimpleNamespace(
             id="family", name="Family hotel", stars=4, category="family",

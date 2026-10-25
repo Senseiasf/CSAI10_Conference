@@ -79,7 +79,14 @@ class AgentService:
         """
         Извлекает интересы путешественника, состав и длительность поездки (Память пользователя).
         """
+        user_lower = user_lower.lower().replace("ё", "е")
         interests = set(profile.get("interests", []))
+        private_room = bool(re.search(
+            r"\b(?:не\s+хостел\w*|без\s+хостел\w*|хостел\w*\s+не\s+(?:нуж\w*|подход\w*)|отдельн\w*\s+номер\w*|собственн\w*\s+ванн\w*)", user_lower
+        ))
+        if private_room:
+            profile["private_room_required"] = True
+            interests.discard("hostel_dorm")
 
         if any(w in user_lower for w in ["пляж", "море", "купаться", "позагорать", "песок", "загар", "плавать"]):
             interests.add("beach")
@@ -89,13 +96,16 @@ class AgentService:
             interests.add("history_culture")
         if any(w in user_lower for w in ["спа", "spa", "релакс", "массаж", "велнес", "бассейн"]):
             interests.add("spa_wellness")
-        if any(w in user_lower for w in ["ребенок", "дет", "малыш", "семь", "аквапарк", "горок"]):
+        children_text = re.sub(r"\bбез\s+(?:детей|ребенка)\b", "", user_lower)
+        if re.search(r"\b(?:ребен\w*|дети|детьми|детей|малыш\w*|семь\w*|аквапарк\w*)", children_text):
             interests.add("family_kids")
             profile["has_kids"] = True
         if any(w in user_lower for w in ["собак", "питомц", "кошк", "пес"]):
             interests.add("pet_friendly")
             profile["has_pets"] = True
-        if any(w in user_lower for w in ["дешев", "бюджет", "эконом", "подешев", "недорог", "хостел", "койко"]):
+        if any(w in user_lower for w in ["дешев", "эконом", "подешев", "недорог", "бюджетн"]) or (
+            not profile.get("private_room_required") and any(w in user_lower for w in ["хостел", "койко"])
+        ):
             interests.add("budget_friendly")
         if any(w in user_lower for w in ["самый дорог", "самый роскошн", "дворец", "burj al arab", "шейх", "президентск", "максимально дорог", "ультра-люкс"]):
             interests.add("extreme_luxury")
@@ -415,6 +425,7 @@ class AgentService:
             destination_id=dest_id,
             pet_friendly=profile.get("has_pets"),
             family_friendly=profile.get("has_kids"),
+            private_room_required=profile.get("private_room_required", False),
             exclude_hotel_ids=rejected_hotels,
             preferred_tags=profile.get("interests"),
             limit=None if budget_limit is not None else 3,
@@ -429,6 +440,8 @@ class AgentService:
                 constraints.append("размещение с питомцем")
             if profile.get("has_kids"):
                 constraints.append("размещение с детьми, без Adults Only")
+            if profile.get("private_room_required"):
+                constraints.append("отдельный номер, без хостелов и общих удобств")
             if budget_limit is not None:
                 constraints.append(f"общий бюджет до {budget_limit:,} ₽")
             if rejected_hotels:
@@ -634,7 +647,7 @@ class AgentService:
             price_n = recommended_hotel.get("price_per_night_rub", 0)
             feats = [str(f).lower() for f in (recommended_hotel.get("features", []))]
             if price_n <= 2500 or any("shared_bathroom" in f or "hostel_dorm" in f for f in feats):
-                audit_notes.append("⚠️ **Контроль эконом-сегмента:** Выбран ультрабюджетный хостел/дормиторий с общими удобствами. Базовые санитарные требования соблюдены, но для приватности рекомендуем отдельный номер.")
+                audit_notes.append("⚠️ **Контроль эконом-сегмента:** Выбран бюджетный вариант. Проверьте формат размещения и наличие общих удобств; отдельная санитарная проверка в демо не проводится.")
             elif price_n >= 100000:
                 audit_notes.append("💎 **Премиум-аудит:** Подтвержден эксклюзивный статус Ultra-Luxury (персональный консьерж-сервис, приватная вилла/дворец, VIP-трансфер).")
 
