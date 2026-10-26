@@ -340,15 +340,26 @@ class AgentService:
         if any(w in user_lower for w in ["собак", "питомц", "кошк", "пес"]):
             interests.add("pet_friendly")
             profile["has_pets"] = True
-        if any(w in user_lower for w in ["дешев", "эконом", "подешев", "недорог", "бюджетн"]) or (
+        if any(w in user_lower for w in [
+            "дешев", "эконом", "подешев", "недорог", "бюджетн", "маленький бюджет",
+            "скромный бюджет", "небольшой бюджет", "минимальный бюджет", "ограниченный бюджет"
+        ]) or (
             not profile.get("private_room_required") and any(w in user_lower for w in ["хостел", "койко"])
         ):
             interests.add("budget_friendly")
-        if any(w in user_lower for w in ["самый дорог", "самый роскошн", "дворец", "burj al arab", "шейх", "президентск", "максимально дорог", "ультра-люкс"]):
+        if any(w in user_lower for w in [
+            "самый дорог", "самый роскошн", "дворец", "burj al arab", "шейх",
+            "президентск", "максимально дорог", "ультра-люкс", "любой бюджет", "денег не жалко"
+        ]):
             interests.add("extreme_luxury")
             interests.add("luxury")
-        elif any(w in user_lower for w in ["люкс", "премиум", "вилл", "5 звезд", "пять звезд", "deluxe", "vip", "роскошн"]):
+            interests.discard("budget_friendly")
+        elif not any(neg in user_lower for neg in ["не дорог", "недорог"]) and any(w in user_lower for w in [
+            "люкс", "премиум", "вилл", "5 звезд", "пять звезд", "deluxe", "vip",
+            "роскошн", "раскошел", "не эконом", "шикануть", "лучший отель"
+        ]):
             interests.add("luxury")
+            interests.discard("budget_friendly")
         if any(w in user_lower for w in ["вдвоем", "парой", "романтик"]):
             profile["party_size"] = "вдвоем"
         elif any(w in user_lower for w in ["один", "одна", "соло"]):
@@ -476,6 +487,78 @@ class AgentService:
             return True
 
         return False
+
+    @staticmethod
+    def answer_internal_route_timing(user_lower: str, cart: dict) -> Optional[str]:
+        """
+        Проверяет, спрашивает ли пользователь о расписании / времени внутреннего маршрута
+        (начало, конец, длительность рейса/поезда/трансфера между городами).
+        """
+        time_keywords = [
+            "во сколько", "какое время", "время вылета", "время прилета", "время отправления",
+            "время прибытия", "расписание", "когда вылет", "когда отправление", "когда прилет",
+            "начало и конец", "во сколько начало", "во сколько конец", "длительность",
+            "сколько лететь", "сколько ехать", "график", "время маршрута", "время рейса",
+            "время поезда", "время переезда", "время трансфера", "время внутреннего"
+        ]
+        has_time_kw = any(tk in user_lower for tk in time_keywords) or (
+            any(w in user_lower for w in ["время", "во сколько", "когда", "тайминг", "часы", "час"]) and
+            any(w in user_lower for w in ["начал", "конец", "конца", "прибыт", "вылет", "отправлен", "маршрут", "рейс", "поезд", "переезд", "трансфер"])
+        )
+        if not has_time_kw:
+            return None
+
+        route_keywords = [
+            "внутренн", "между город", "междугород", "переезд", "ласточк", "между отел",
+            "между част", "анталья и стамбул", "из антальи в стамбул", "из стамбула",
+            "сочи и поляна", "из сочи в поляну", "в красную поляну",
+            "дубай и абу-даби", "из дубая в абу-даби",
+            "горно-алтайск и чемал", "из горно-алтайска в чемал",
+            "шарм и дахаб", "из наама бей", "петергоф", "метеор"
+        ]
+        has_route_kw = any(rk in user_lower for rk in route_keywords) or cart.get("is_multi_city")
+        if not (has_time_kw and has_route_kw):
+            return None
+
+        # Определяем направление мульти-городского тура
+        dest_id = cart.get("destination_id")
+        if not dest_id or dest_id not in MULTI_CITY_CONFIG:
+            if any(w in user_lower for w in ["анталь", "стамбул", "турци"]):
+                dest_id = "turkey"
+            elif any(w in user_lower for w in ["сочи", "полян", "сириус"]):
+                dest_id = "sochi"
+            elif any(w in user_lower for w in ["дуба", "абу-даби", "оаэ"]):
+                dest_id = "uae"
+            elif any(w in user_lower for w in ["алтай", "чемал", "катунь"]):
+                dest_id = "altai"
+            elif any(w in user_lower for w in ["питер", "петербург", "петергоф"]):
+                dest_id = "spb"
+            elif any(w in user_lower for w in ["египет", "шарм", "хадаб"]):
+                dest_id = "egypt"
+            elif cart.get("is_multi_city"):
+                dest_id = "turkey"
+            else:
+                return None
+
+        cfg = MULTI_CITY_CONFIG[dest_id]
+        inter = cfg["intercity"]
+        city_1 = cfg["city_1"]["name"]
+        city_2 = cfg["city_2"]["name"]
+
+        reply = (
+            f"🕒 **Расписание и тайминг внутреннего маршрута ({city_1} ➔ {city_2}):**\n\n"
+            f"• 🚆/✈️ **Транспорт:** {inter['name']}\n"
+            f"• 🛫 **Начало (отправление):** **{inter.get('departure', '11:30')}**\n"
+            f"• 🛬 **Конец (прибытие):** **{inter.get('arrival', '12:45')}**\n"
+            f"• ⏱️ **Время в пути:** **{inter.get('duration', '1 ч 15 мин')}**\n"
+            f"• 🏢 **Перевозчик:** {inter.get('operator', 'Партнёр Островок')}\n"
+            f"• ℹ️ **Маршрут:** {inter.get('description', '')}\n\n"
+            f"✅ **Сквозная стыковка с отелями:** График рассчитан идеально: "
+            f"вы выселяетесь из первого отеля в {city_1} после завтрака (до 11:00/12:00), "
+            f"комфортно совершаете переезд и прибываете во второй отель в {city_2} "
+            f"к началу стандартного заселения (после 14:00)."
+        )
+        return reply
 
     @staticmethod
     async def search_destinations_vector(
@@ -718,6 +801,16 @@ class AgentService:
         )
         hotels_2 = h_res_2.get("compared_hotels", [])
 
+        is_luxury = any(t in ("luxury", "extreme_luxury") for t in profile.get("interests", []))
+        is_budget = "budget_friendly" in profile.get("interests", [])
+
+        if is_luxury:
+            hotels_1.sort(key=lambda h: -h.get("price_per_night_rub", 0))
+            hotels_2.sort(key=lambda h: -h.get("price_per_night_rub", 0))
+        elif is_budget or (budget_limit is not None and not is_luxury):
+            hotels_1.sort(key=lambda h: h.get("price_per_night_rub", 0))
+            hotels_2.sort(key=lambda h: h.get("price_per_night_rub", 0))
+
         # Если отель не найден по точному фильтру города — берем альтернативы из общего каталога
         if not hotels_1 or not hotels_2:
             all_h = (await MCPTools.compare_hotels(
@@ -791,7 +884,11 @@ class AgentService:
         intercity_price = intercity.get("price_rub", 3800)
         transfers_price = 0 if profile.get("without_transfer") else 3500
 
-        mand_total = cost_hotel_1 + cost_hotel_2 + intl_flight_price + intercity_price + transfers_price
+        pet_fee_1 = (hotel_1.get("pet_surcharge_per_night_rub", 0) or 0) * nights_1 if profile.get("has_pets") else 0
+        pet_fee_2 = (hotel_2.get("pet_surcharge_per_night_rub", 0) or 0) * nights_2 if profile.get("has_pets") else 0
+        pet_total = pet_fee_1 + pet_fee_2
+
+        mand_total = cost_hotel_1 + cost_hotel_2 + intl_flight_price + intercity_price + transfers_price + pet_total
         onsite_min = nights * 2500
         onsite_max = nights * 5500
         total_min = mand_total + onsite_min
@@ -802,7 +899,13 @@ class AgentService:
         ai_intro = profile.pop("llm_ai_intro", None) or selection_rationale
         out_dep = outbound_flight.get("departure_time", "13:40")
         if not ai_intro:
-            if is_replan_flight_day:
+            if budget_limit is not None and total_max > budget_limit:
+                ai_intro = (
+                    f"⚠️ К сожалению, с бюджетом {budget_limit:,} ₽ составить комбинированный тур невозможно. "
+                    f"Ближайший доступный вариант — {total_max:,} ₽ (на {total_max - budget_limit:,} ₽ выше лимита). "
+                    f"Ниже подобран самый экономичный вариант под ключ:"
+                )
+            elif is_replan_flight_day:
                 ai_intro = f"Понял вас — никаких подъёмов в 6 утра: подобрал дневной рейс в {out_dep}, чтобы можно было выспаться. Собрал полноценный комбинированный тур по обоим городам:"
             elif is_replan_flight_later:
                 ai_intro = f"Принято! Обновил время вылета на комфортное дневное ({out_dep}) и пересчитал программу тура по городам:"
@@ -860,15 +963,24 @@ class AgentService:
         # Финансовый блок
         response_lines.append(f"💰 **Расчёт стоимости всей поездки (комбинированный тур на {nights} н.):**")
         response_lines.append(f"• 🔴 **Обязательные расходы (все перелёты + 2 отеля на {nights} н. + переезд между городами + трансферы):** {mand_total:,} ₽")
+        if profile.get("has_pets") and pet_total > 0:
+            response_lines.append(f"• 🐾 **Доплата за питомца (в обоих отелях):** {pet_total:,} ₽ (за {nights} н.) — включена в обязательные расходы")
         response_lines.append(f"• 🟢 **Расходы на месте ({nights} дн. питание + досуг в обоих городах):** {onsite_min:,} – {onsite_max:,} ₽")
         response_lines.append(f"💵 **ИТОГО под ключ:** **{total_min:,} – {total_max:,} ₽**")
         response_lines.append("")
 
         if budget_limit is not None:
-            response_lines.append(
-                f"Лимит всей поездки: {budget_limit:,} ₽. Верхняя оценка расходов "
-                f"{total_max:,} ₽ укладывается в лимит; это оценка, а не фиксированная цена.\n"
-            )
+            if total_max <= budget_limit:
+                response_lines.append(
+                    f"Лимит всей поездки: {budget_limit:,} ₽. Верхняя оценка расходов "
+                    f"{total_max:,} ₽ укладывается в бюджет ✅; это оценка, а не фиксированная цена.\n"
+                )
+            else:
+                response_lines.append(
+                    f"⚠️ Лимит всей поездки: {budget_limit:,} ₽ превышен на {total_max - budget_limit:,} ₽. "
+                    f"Верхняя оценка расходов {total_max:,} ₽ — это ближайший доступный вариант для комбинированного тура. "
+                    f"Рекомендуем увеличить бюджет или сократить количество дней.\n"
+                )
 
         response_lines.append("🛡️ **Аудит агента (Smart Filter & Safety Check):**")
         response_lines.append(f"• ✅ **Сквозная состыковка:** График переезда между {cfg['city_1']['name']} и {cfg['city_2']['name']} согласован со временем заселения и выселения.")
@@ -959,6 +1071,16 @@ class AgentService:
 
         # 1. Извлечение интересов и обновление профиля пользователя (User Memory)
         profile = AgentService.extract_interests_and_slots(user_lower, profile)
+
+        # Проверка вопроса о расписании внутреннего маршрута / переезда между городами
+        internal_timing_reply = AgentService.answer_internal_route_timing(user_lower, cart)
+        if internal_timing_reply:
+            await AgentService._save_session(user_id, profile, cart, message, internal_timing_reply)
+            return {
+                "text": internal_timing_reply,
+                "state": "INTERNAL_SCHEDULE_INFO",
+                "cart": cart
+            }
 
         # 2. Интеллектуальный Tool Calling диспетчер на базе DeepSeek Flash
         # ИИ сам извлекает параметры (город вылета, время, географию, неизвестные локации, тип перепланирования, теги)
@@ -1327,24 +1449,39 @@ class AgentService:
                 continue
             if not profile.get("without_transfer") and "price_rub" not in transfer:
                 continue
+            pet_surcharge = hotel.get("pet_surcharge_per_night_rub", 0) if profile.get("has_pets") else 0
             breakdown = MCPTools.calculate_budget_breakdown(
                 destination_id=dest_id,
                 flight_price_roundtrip=flight["price_rub_roundtrip"],
                 hotel_price_per_night=hotel["price_per_night_rub"],
                 transfer_price=0 if profile.get("without_transfer") else transfer["price_rub"],
                 meals_type=hotel.get("meals", "Завтрак включен"), nights=nights,
+                pet_surcharge_per_night=pet_surcharge
             )
             evaluated.append((hotel, logistics, breakdown))
 
         affordable = [option for option in evaluated if budget_limit is None or
                       option[2]["total_trip_budget_range_rub"]["max"] <= budget_limit]
+
+        is_luxury = any(t in ("luxury", "extreme_luxury") for t in profile.get("interests", []))
+        is_budget = "budget_friendly" in profile.get("interests", []) or is_replan_cheaper
+
+        if is_luxury:
+            # Пользователь готов раскошелиться / выбрал люкс: рекомендуем премиум-отель с максимальным комфортом в рамках бюджета
+            affordable.sort(key=lambda x: -x[0]["price_per_night_rub"])
+        elif is_budget or (budget_limit is not None and not is_luxury):
+            # Пользователь ищет доступный вариант или ограничил бюджет: рекомендуем наиболее экономичный вариант
+            affordable.sort(key=lambda x: x[2]["total_trip_budget_range_rub"]["max"])
+
         if not affordable:
             if evaluated and budget_limit is not None:
-                lowest = min(x[2]["total_trip_budget_range_rub"]["max"] for x in evaluated)
+                lowest_option = min(evaluated, key=lambda x: x[2]["total_trip_budget_range_rub"]["max"])
+                lowest = lowest_option[2]["total_trip_budget_range_rub"]["max"]
+                closest_hotel = lowest_option[0]
                 reply_text = (
-                    f"В направлении «{dest_name}» не нашлось поездки в пределах {budget_limit:,} ₽. "
-                    f"Самая низкая верхняя оценка полной стоимости — {lowest:,} ₽ "
-                    f"(на {lowest - budget_limit:,} ₽ выше лимита). "
+                    f"⚠️ С текущим бюджетом {budget_limit:,} ₽ уложиться нереально. "
+                    f"В направлении «{dest_name}» ближайший найденный вариант — отель «{closest_hotel['name']}» "
+                    f"с верхней оценкой полной стоимости {lowest:,} ₽ (на {lowest - budget_limit:,} ₽ выше лимита). "
                     "В расчёт включены перелёт, отель, трансфер, питание и активности. "
                     "Можно сократить поездку, выбрать другое направление или явно увеличить бюджет."
                 )
@@ -1491,19 +1628,31 @@ class AgentService:
         onsite = budget_breakdown["onsite_flexible"]
         total_range = budget_breakdown["total_trip_budget_range_rub"]
 
-        response_lines.extend([
+        fin_lines = [
             f"💰 **Расчёт стоимости всей поездки (для отеля «{recommended_hotel['name']}» на {nights} н.):**",
             f"• 🔴 **Обязательные расходы (перелёт туда-обратно + {recommended_hotel['name']} {nights} н. + трансфер):** {mand['total_mandatory_rub']:,} ₽",
+        ]
+        if profile.get("has_pets") and mand.get("pet_total", 0) > 0:
+            fin_lines.append(f"• 🐾 **Доплата за питомца в отеле:** {mand.get('pet_surcharge_per_night', 0):,} ₽/ночь ({mand['pet_total']:,} ₽ за {nights} н.) — включена в обязательные расходы")
+        fin_lines.extend([
             f"• 🟢 **Расходы на месте ({nights} дн. питание + досуг):** {onsite['total_onsite_range_rub']['min']:,} – {onsite['total_onsite_range_rub']['max']:,} ₽",
             f"💵 **ИТОГО под ключ:** **{total_range['min']:,} – {total_range['max']:,} ₽**",
             ""
         ])
+        response_lines.extend(fin_lines)
 
         if budget_limit is not None:
-            response_lines.append(
-                f"Лимит всей поездки: {budget_limit:,} ₽. Верхняя оценка расходов "
-                f"{total_range['max']:,} ₽ укладывается в лимит; это оценка, а не фиксированная цена.\n"
-            )
+            if total_range['max'] <= budget_limit:
+                response_lines.append(
+                    f"Лимит всей поездки: {budget_limit:,} ₽. Верхняя оценка расходов "
+                    f"{total_range['max']:,} ₽ укладывается в бюджет ✅; это оценка, а не фиксированная цена.\n"
+                )
+            else:
+                response_lines.append(
+                    f"⚠️ Лимит всей поездки: {budget_limit:,} ₽ превышен на {total_range['max'] - budget_limit:,} ₽. "
+                    f"Верхняя оценка расходов {total_range['max']:,} ₽ — это ближайший доступный вариант. "
+                    f"Попробуйте увеличить бюджет, сократить длительность или выбрать другое направление.\n"
+                )
 
         if len(compared_list) > 1:
             response_lines.append("📋 **Альтернативные отели (для сравнения):**")

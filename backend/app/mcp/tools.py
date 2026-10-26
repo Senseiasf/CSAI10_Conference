@@ -280,8 +280,13 @@ class MCPTools:
                 t = tag.lower()
                 if any(t in f for f in feats) or t in cat:
                     score += 3
-                if t == "budget_friendly" and h.price_per_night_rub <= 10000:
-                    score += 4
+                if t == "budget_friendly":
+                    if h.price_per_night_rub <= 6000:
+                        score += 10
+                    elif h.price_per_night_rub <= 12000:
+                        score += 6
+                    elif h.price_per_night_rub > 25000:
+                        score -= 8
                 if t == "luxury" and h.price_per_night_rub >= 30000:
                     score += 4
                 if t == "extreme_luxury" and h.price_per_night_rub >= 100000:
@@ -292,8 +297,8 @@ class MCPTools:
                     score += 3
             return score
 
-        is_extreme_lux = any(t in ("extreme_luxury", "luxury_extreme") for t in (preferred_tags or []))
-        if is_extreme_lux:
+        is_any_lux = any(t in ("luxury", "extreme_luxury", "luxury_extreme") for t in (preferred_tags or []))
+        if is_any_lux:
             hotels.sort(key=lambda h: (-hotel_tag_score(h), -h.price_per_night_rub))
         else:
             hotels.sort(key=lambda h: (-hotel_tag_score(h), h.price_per_night_rub))
@@ -312,6 +317,7 @@ class MCPTools:
                 "stars": f"{h.stars}★",
                 "price_per_night_rub": h.price_per_night_rub,
                 "price_per_night_formatted": f"{h.price_per_night_rub:,} ₽",
+                "pet_surcharge_per_night_rub": getattr(h, "pet_surcharge_per_night_rub", 0) or 0,
                 "meals": h.meals,
                 "cancellation": h.cancellation_policy,
                 "pet_friendly": "✅ Да" if h.pet_friendly else "❌ Нет",
@@ -383,11 +389,12 @@ class MCPTools:
         hotel_price_per_night: int,
         transfer_price: int,
         meals_type: str = "Завтрак включен",
-        nights: int = 7
+        nights: int = 7,
+        pet_surcharge_per_night: int = 0
     ) -> Dict[str, Any]:
         """
         MCP Tool / Calculator: Рассчитывает детальную структуру расходов:
-        1. Обязательные платежи (сразу под ключ): перелет туда-обратно + проживание + трансфер.
+        1. Обязательные платежи (сразу под ключ): перелет туда-обратно + проживание + трансфер + доплата за питомца.
         2. Траты не сразу (карманные расходы на месте): питание (с учетом типа питания в отеле) + развлечения.
         3. Итоговый ориентир общего бюджета поездки.
         """
@@ -421,7 +428,8 @@ class MCPTools:
         ent_max = max(5000, int(ent_tour.get("max", 25000) / 7.0 * nights))
 
         hotel_total = hotel_price_per_night * nights
-        mandatory_total = flight_price_roundtrip + hotel_total + transfer_price
+        pet_total = (pet_surcharge_per_night or 0) * nights
+        mandatory_total = flight_price_roundtrip + hotel_total + transfer_price + pet_total
 
         onsite_min = food_min + ent_min
         onsite_max = food_max + ent_max
@@ -436,6 +444,8 @@ class MCPTools:
                 "hotel_total": hotel_total,
                 "hotel_per_night": hotel_price_per_night,
                 "transfer": transfer_price,
+                "pet_surcharge_per_night": pet_surcharge_per_night or 0,
+                "pet_total": pet_total,
                 "total_mandatory_rub": mandatory_total
             },
             "onsite_flexible": {

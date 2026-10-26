@@ -43,6 +43,7 @@ class HotelModel(Base):
     checkin_time = Column(String(10), default="15:00")
     checkout_time = Column(String(10), default="12:00")
     price_per_night_rub = Column(Integer, nullable=False)
+    pet_surcharge_per_night_rub = Column(Integer, default=0, nullable=True)
     distance_to_sea_meters = Column(Integer, default=0)
     family_friendly = Column(Boolean, default=True)
     features = Column(JSONB, nullable=True)

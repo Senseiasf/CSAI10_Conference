@@ -32,6 +32,7 @@ async def seed_postgres(data: dict):
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
         # Create all tables
         await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(text("ALTER TABLE hotels ADD COLUMN IF NOT EXISTS pet_surcharge_per_night_rub INTEGER DEFAULT 0;"))
 
     async with async_session_maker() as session:
         for dest in data["destinations"]:
@@ -106,6 +107,7 @@ async def seed_postgres(data: dict):
                         checkin_time=h.get("checkin_time", "15:00"),
                         checkout_time=h.get("checkout_time", "12:00"),
                         price_per_night_rub=h.get("price_per_night_rub", 10000),
+                        pet_surcharge_per_night_rub=h.get("pet_surcharge_per_night_rub", 1500 if h.get("pet_friendly") else 0),
                         distance_to_sea_meters=h.get("distance_to_sea_meters", 0),
                         family_friendly=h.get("family_friendly", True),
                         features=features_data
@@ -123,6 +125,7 @@ async def seed_postgres(data: dict):
                     hotel_obj.checkin_time = h.get("checkin_time", "15:00")
                     hotel_obj.checkout_time = h.get("checkout_time", "12:00")
                     hotel_obj.price_per_night_rub = h.get("price_per_night_rub", 10000)
+                    hotel_obj.pet_surcharge_per_night_rub = h.get("pet_surcharge_per_night_rub", 1500 if h.get("pet_friendly") else 0)
                     hotel_obj.distance_to_sea_meters = h.get("distance_to_sea_meters", 0)
                     hotel_obj.family_friendly = h.get("family_friendly", True)
                     hotel_obj.features = features_data
