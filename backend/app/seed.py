@@ -78,6 +78,19 @@ async def seed_postgres(data: dict):
             for h in dest.get("hotels", []):
                 hotel_res = await session.execute(select(HotelModel).where(HotelModel.id == h["id"]))
                 hotel_obj = hotel_res.scalar_one_or_none()
+                
+                features_data = list(h.get("features", []))
+                if "coordinates" in h:
+                    features_data.append({"coordinates": h["coordinates"]})
+                if "rating_score" in h:
+                    features_data.append({"rating_score": h["rating_score"]})
+                if "reviews_count" in h:
+                    features_data.append({"reviews_count": h["reviews_count"]})
+                if "website_url" in h:
+                    features_data.append({"website_url": h["website_url"]})
+                if "real_description" in h:
+                    features_data.append({"real_description": h["real_description"]})
+
                 if not hotel_obj:
                     hotel_obj = HotelModel(
                         id=h["id"],
@@ -95,7 +108,7 @@ async def seed_postgres(data: dict):
                         price_per_night_rub=h.get("price_per_night_rub", 10000),
                         distance_to_sea_meters=h.get("distance_to_sea_meters", 0),
                         family_friendly=h.get("family_friendly", True),
-                        features=h.get("features", [])
+                        features=features_data
                     )
                     session.add(hotel_obj)
                 else:
@@ -112,7 +125,7 @@ async def seed_postgres(data: dict):
                     hotel_obj.price_per_night_rub = h.get("price_per_night_rub", 10000)
                     hotel_obj.distance_to_sea_meters = h.get("distance_to_sea_meters", 0)
                     hotel_obj.family_friendly = h.get("family_friendly", True)
-                    hotel_obj.features = h.get("features", [])
+                    hotel_obj.features = features_data
 
             # Внешние обстоятельства и риски
             for r in dest.get("risks_and_alerts", []):

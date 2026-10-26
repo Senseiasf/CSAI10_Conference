@@ -305,7 +305,7 @@ class MCPTools:
 
         comparison_table = []
         for h in selected_hotels:
-            comparison_table.append({
+            hotel_dict = {
                 "id": h.id,
                 "name": h.name,
                 "city": getattr(h, "city", ""),
@@ -316,8 +316,23 @@ class MCPTools:
                 "cancellation": h.cancellation_policy,
                 "pet_friendly": "✅ Да" if h.pet_friendly else "❌ Нет",
                 "distance_to_sea": f"{h.distance_to_sea_meters} м" if h.distance_to_sea_meters > 0 else "Пляж / Первая линия",
-                "features": h.features or []
-            })
+                "features": [f for f in (h.features or []) if isinstance(f, str)]
+            }
+            # Extract metadata (coordinates, rating, reviews, website) if stored in features
+            for f in (h.features or []):
+                if isinstance(f, dict):
+                    if "coordinates" in f:
+                        hotel_dict["coordinates"] = f["coordinates"]
+                    if "rating_score" in f:
+                        hotel_dict["rating_score"] = f["rating_score"]
+                    if "reviews_count" in f:
+                        hotel_dict["reviews_count"] = f["reviews_count"]
+                    if "website_url" in f:
+                        hotel_dict["website_url"] = f["website_url"]
+                    if "real_description" in f:
+                        hotel_dict["real_description"] = f["real_description"]
+
+            comparison_table.append(hotel_dict)
 
         tradeoffs = []
         if len(selected_hotels) >= 2:

@@ -80,82 +80,113 @@ class GraphService:
                         dest_id=dest["id"]
                     )
 
-                # Рейсы (FLIGHT_TO с расписанием, ценами, пересадками и рисками)
-                for fl in dest.get("flights", []):
+                # Рейсы (FLIGHT_TO с расписанием, ценами, пересадками, пунктуальностью и типами ВС - батчевая вставка)
+                flights_batch = [
+                    {
+                        "from_code": fl["from"],
+                        "to_code": fl["to"],
+                        "flight_no": fl["flight_no"],
+                        "airline": fl["airline"],
+                        "departure_time": fl["departure_time"],
+                        "arrival_time": fl["arrival_time"],
+                        "duration": fl["duration_minutes"],
+                        "price": fl["price_rub_roundtrip"],
+                        "flight_type": fl.get("flight_type", "direct"),
+                        "layover_airport": fl.get("layover_airport"),
+                        "layover_city": fl.get("layover_city"),
+                        "layover_duration_minutes": fl.get("layover_duration_minutes", 0),
+                        "layover_risk_note": fl.get("layover_risk_note", ""),
+                        "on_time_pct": fl.get("on_time_pct", 85.0),
+                        "aircraft_type": fl.get("aircraft_type", "Airbus A320"),
+                        "baggage_allowance": fl.get("baggage_allowance", "Багаж 23 кг"),
+                        "meal_service": fl.get("meal_service", "Питание включено"),
+                        "seat_pitch": fl.get("seat_pitch", "79-81 см")
+                    }
+                    for fl in dest.get("flights", [])
+                ]
+                if flights_batch:
                     await session.run(
                         """
-                        MATCH (orig:Airport {code: $from_code})
-                        MATCH (dest:Airport {code: $to_code})
-                        MERGE (orig)-[f:FLIGHT_TO {flight_no: $flight_no}]->(dest)
-                        SET f.airline = $airline,
-                            f.departure_time = $departure_time,
-                            f.arrival_time = $arrival_time,
-                            f.duration_minutes = $duration,
-                            f.price_rub_roundtrip = $price,
-                            f.flight_type = $flight_type,
-                            f.layover_airport = $layover_airport,
-                            f.layover_city = $layover_city,
-                            f.layover_duration_minutes = $layover_duration_minutes,
-                            f.layover_risk_note = $layover_risk_note
+                        UNWIND $batch AS item
+                        MATCH (orig:Airport {code: item.from_code})
+                        MATCH (dest:Airport {code: item.to_code})
+                        MERGE (orig)-[f:FLIGHT_TO {flight_no: item.flight_no}]->(dest)
+                        SET f.airline = item.airline,
+                            f.departure_time = item.departure_time,
+                            f.arrival_time = item.arrival_time,
+                            f.duration_minutes = item.duration,
+                            f.price_rub_roundtrip = item.price,
+                            f.flight_type = item.flight_type,
+                            f.layover_airport = item.layover_airport,
+                            f.layover_city = item.layover_city,
+                            f.layover_duration_minutes = item.layover_duration_minutes,
+                            f.layover_risk_note = item.layover_risk_note,
+                            f.on_time_pct = item.on_time_pct,
+                            f.aircraft_type = item.aircraft_type,
+                            f.baggage_allowance = item.baggage_allowance,
+                            f.meal_service = item.meal_service,
+                            f.seat_pitch = item.seat_pitch
                         """,
-                        from_code=fl["from"],
-                        to_code=fl["to"],
-                        flight_no=fl["flight_no"],
-                        airline=fl["airline"],
-                        departure_time=fl["departure_time"],
-                        arrival_time=fl["arrival_time"],
-                        duration=fl["duration_minutes"],
-                        price=fl["price_rub_roundtrip"],
-                        flight_type=fl.get("flight_type", "direct"),
-                        layover_airport=fl.get("layover_airport"),
-                        layover_city=fl.get("layover_city"),
-                        layover_duration_minutes=fl.get("layover_duration_minutes", 0),
-                        layover_risk_note=fl.get("layover_risk_note", "")
+                        batch=flights_batch
                     )
 
-                # Отели
-                for hotel in dest.get("hotels", []):
+                # Отели (батчевая вставка через UNWIND)
+                hotels_batch = [
+                    {
+                        "id": hotel["id"],
+                        "name": hotel["name"],
+                        "city": hotel["city"],
+                        "stars": hotel["stars"],
+                        "pet_friendly": hotel["pet_friendly"],
+                        "price": hotel["price_per_night_rub"],
+                        "checkin": hotel["checkin_time"],
+                        "checkout": hotel["checkout_time"],
+                        "dest_id": dest["id"]
+                    }
+                    for hotel in dest.get("hotels", [])
+                ]
+                if hotels_batch:
                     await session.run(
                         """
-                        MERGE (h:Hotel {id: $id})
-                        SET h.name = $name,
-                            h.city = $city,
-                            h.stars = $stars,
-                            h.pet_friendly = $pet_friendly,
-                            h.price_per_night = $price,
-                            h.checkin_time = $checkin,
-                            h.checkout_time = $checkout
-                        WITH h
-                        MATCH (c:City {id: $dest_id})
+                        UNWIND $batch AS item
+                        MERGE (h:Hotel {id: item.id})
+                        SET h.name = item.name,
+                            h.city = item.city,
+                            h.stars = item.stars,
+                            h.pet_friendly = item.pet_friendly,
+                            h.price_per_night = item.price,
+                            h.checkin_time = item.checkin,
+                            h.checkout_time = item.checkout
+                        WITH h, item
+                        MATCH (c:City {id: item.dest_id})
                         MERGE (h)-[:LOCATED_IN]->(c)
                         """,
-                        id=hotel["id"],
-                        name=hotel["name"],
-                        city=hotel["city"],
-                        stars=hotel["stars"],
-                        pet_friendly=hotel["pet_friendly"],
-                        price=hotel["price_per_night_rub"],
-                        checkin=hotel["checkin_time"],
-                        checkout=hotel["checkout_time"],
-                        dest_id=dest["id"]
+                        batch=hotels_batch
                     )
 
-                # Связи трансферов
-                for tr in dest.get("transfers", []):
+                # Связи трансферов (батчевая вставка через UNWIND)
+                transfers_batch = [
+                    {
+                        "from_code": tr["from"],
+                        "to_id": tr["to"],
+                        "type": tr["type"],
+                        "name": tr["name"],
+                        "duration": tr["duration_minutes"],
+                        "price": tr["price_rub"]
+                    }
+                    for tr in dest.get("transfers", [])
+                ]
+                if transfers_batch:
                     await session.run(
                         """
-                        MATCH (a:Airport {code: $from_code})
-                        MATCH (h:Hotel {id: $to_id})
-                        MERGE (a)-[r:TRANSFER_TO {type: $type, name: $name}]->(h)
-                        SET r.duration_minutes = $duration,
-                            r.price_rub = $price
+                        UNWIND $batch AS item
+                        MATCH (a:Airport {code: item.from_code})
+                        MATCH (h:Hotel {id: item.to_id})
+                        MERGE (a)-[r:TRANSFER_TO {type: item.type, name: item.name}]->(h)
+                        SET r.duration_minutes = item.duration,
+                            r.price_rub = item.price
                         """,
-                        from_code=tr["from"],
-                        to_id=tr["to"],
-                        type=tr["type"],
-                        name=tr["name"],
-                        duration=tr["duration_minutes"],
-                        price=tr["price_rub"]
+                        batch=transfers_batch
                     )
 
         logger.info("Neo4j graph seeded with airports, flights, hotels, and transfers.")
@@ -221,6 +252,11 @@ class GraphService:
                f.layover_city AS layover_city,
                f.layover_duration_minutes AS layover_duration_minutes,
                f.layover_risk_note AS layover_risk_note,
+               f.on_time_pct AS on_time_pct,
+               f.aircraft_type AS aircraft_type,
+               f.baggage_allowance AS baggage_allowance,
+               f.meal_service AS meal_service,
+               f.seat_pitch AS seat_pitch,
                dest.code AS dest_code,
                dest.name AS dest_airport_name,
                h.name AS hotel_name,
@@ -343,7 +379,12 @@ class GraphService:
                     "layover_airport": best.get("layover_airport"),
                     "layover_city": best.get("layover_city"),
                     "layover_duration_minutes": best.get("layover_duration_minutes", 0),
-                    "layover_risk_note": best.get("layover_risk_note", "")
+                    "layover_risk_note": best.get("layover_risk_note", ""),
+                    "on_time_pct": best.get("on_time_pct"),
+                    "aircraft_type": best.get("aircraft_type"),
+                    "baggage_allowance": best.get("baggage_allowance"),
+                    "meal_service": best.get("meal_service"),
+                    "seat_pitch": best.get("seat_pitch")
                 }
 
             # Поиск или синтез обратного рейса (roundtrip)
@@ -356,7 +397,12 @@ class GraphService:
                        rf.departure_time AS departure_time,
                        rf.arrival_time AS arrival_time,
                        rf.duration_minutes AS duration_minutes,
-                       rf.flight_type AS flight_type
+                       rf.flight_type AS flight_type,
+                       rf.on_time_pct AS on_time_pct,
+                       rf.aircraft_type AS aircraft_type,
+                       rf.baggage_allowance AS baggage_allowance,
+                       rf.meal_service AS meal_service,
+                       rf.seat_pitch AS seat_pitch
                 ORDER BY 
                     CASE WHEN rf.airline = $airline THEN 0 ELSE 1 END,
                     CASE WHEN rf.departure_time >= '12:00' THEN 0 ELSE 1 END,
@@ -380,7 +426,12 @@ class GraphService:
                         "departure_time": rf["departure_time"],
                         "arrival_time": rf["arrival_time"],
                         "duration_minutes": rf["duration_minutes"],
-                        "flight_type": rf.get("flight_type", "direct")
+                        "flight_type": rf.get("flight_type", "direct"),
+                        "on_time_pct": rf.get("on_time_pct"),
+                        "aircraft_type": rf.get("aircraft_type"),
+                        "baggage_allowance": rf.get("baggage_allowance"),
+                        "meal_service": rf.get("meal_service"),
+                        "seat_pitch": rf.get("seat_pitch")
                     }
 
             if not return_flight_info:
@@ -406,7 +457,12 @@ class GraphService:
                     "departure_time": dep,
                     "arrival_time": arr,
                     "duration_minutes": dur,
-                    "flight_type": flight_info.get("flight_type", "direct")
+                    "flight_type": flight_info.get("flight_type", "direct"),
+                    "on_time_pct": flight_info.get("on_time_pct"),
+                    "aircraft_type": flight_info.get("aircraft_type"),
+                    "baggage_allowance": flight_info.get("baggage_allowance"),
+                    "meal_service": flight_info.get("meal_service"),
+                    "seat_pitch": flight_info.get("seat_pitch")
                 }
 
             flight_info["return_flight"] = return_flight_info
