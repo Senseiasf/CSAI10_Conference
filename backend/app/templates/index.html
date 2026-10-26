@@ -193,6 +193,13 @@
           document.getElementById('numHotels').textContent = data.graph_stats.hotels || 16;
           document.getElementById('numTransfers').textContent = data.graph_stats.transfers || 20;
         }
+
+        if (data.llm_mode) {
+          const llmEl = document.getElementById('llmModeText');
+          if (llmEl) {
+            llmEl.textContent = data.llm_mode === 'mock' ? 'Mock Agent' : ('DeepSeek Flash (' + data.llm_mode + ')');
+          }
+        }
       } catch (err) {
         console.warn('Health check error:', err);
       }

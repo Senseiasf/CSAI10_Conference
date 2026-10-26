@@ -26,14 +26,14 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_BOT_USERNAME: str = "OstrovokTravelBot"
     
-    # LLM (OpenAI-compatible)
+    # LLM (OpenAI-compatible / DeepSeek)
     OPENAI_API_KEY: str = ""
-    OPENAI_BASE_URL: str = "https://api.openai.com/v1"
-    OPENAI_MODEL: str = "gpt-4o-mini"
+    OPENAI_BASE_URL: str = "https://api.deepseek.com"
+    OPENAI_MODEL: str = "deepseek-flash"
     
     @property
     def is_mock_llm(self) -> bool:
-        return not self.OPENAI_API_KEY or self.OPENAI_API_KEY in ("mock", "stub", "dummy", "")
+        return not self.OPENAI_API_KEY or self.OPENAI_API_KEY.strip().lower() in ("mock", "stub", "dummy", "")
     
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -51,6 +51,7 @@ services:
       NEO4J_URI: bolt://neo4j:7687
     volumes:
       - ./backend/app:/app/app
+      - ./backend/tests:/app/tests
     depends_on:
       db:
         condition: service_healthy

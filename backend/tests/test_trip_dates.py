@@ -51,6 +51,11 @@ class TripDatesTest(unittest.TestCase):
         self.assertIsNotNone(update_trip_dates("на 0 ночей", profile))
         self.assertEqual(profile["nights"], 7)
 
+    def test_flight_time_is_not_treated_as_calendar_shift(self):
+        profile = {"checkin_date": "2026-11-10", "nights": 7}
+        self.assertIsNone(update_trip_dates("я хочу вылетать не в 6 утра. поставь самолет попозже", profile))
+        self.assertEqual(profile["checkin_date"], "2026-11-10")
+
 
 if __name__ == "__main__":
     unittest.main()

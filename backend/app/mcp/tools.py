@@ -340,19 +340,21 @@ class MCPTools:
         hotel_id: str,
         origin_airport_code: Optional[str] = "SVO",
         prefer_direct_flight: Optional[bool] = None,
-        without_transfer: Optional[bool] = False
+        without_transfer: Optional[bool] = False,
+        flight_time_pref: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         MCP Tool: Запрашивает графовую базу Neo4j для проверки сквозной цепочки:
         (Аэропорт вылета) -[:FLIGHT_TO]-> (Аэропорт прибытия) -[:TRANSFER_TO]-> (Отель)
         """
-        logger.info(f"[MCP] Calling check_logistics_compatibility: {origin_airport_code} -> {airport_code} -> {hotel_id}, direct={prefer_direct_flight}, no_transfer={without_transfer}")
+        logger.info(f"[MCP] Calling check_logistics_compatibility: {origin_airport_code} -> {airport_code} -> {hotel_id}, direct={prefer_direct_flight}, no_transfer={without_transfer}, time_pref={flight_time_pref}")
         return await GraphService.validate_logistics(
             airport_code=airport_code,
             hotel_id=hotel_id,
             origin_airport_code=origin_airport_code,
             prefer_direct_flight=prefer_direct_flight,
-            without_transfer=without_transfer
+            without_transfer=without_transfer,
+            flight_time_pref=flight_time_pref
         )
 
     @staticmethod

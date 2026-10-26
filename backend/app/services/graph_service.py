@@ -166,14 +166,14 @@ class GraphService:
         hotel_id: str,
         origin_airport_code: Optional[str] = None,
         prefer_direct_flight: Optional[bool] = None,
-        without_transfer: Optional[bool] = False
+        without_transfer: Optional[bool] = False,
+        flight_time_pref: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Проверяет сквозную логистику от вылета до заселения:
         (Аэропорт вылета) -[:FLIGHT_TO]-> (Аэропорт прилёта) -[:TRANSFER_TO]-> (Отель)
-        Рассчитывает время прилёта, детальный буфер после посадки (высадка, паспортный контроль,
-        выдача багажа на ленте, таможня), пересадки и стыковки, устойчивость к задержкам рейса,
-        время трансфера, расчётное прибытие в отель и статус готовности номера.
+        Рассчитывает время прилёта, детальный буфер после посадки, пересадки и стыковки,
+        обратный рейс, время трансфера, расчётное прибытие в отель и статус готовности номера.
         """
         driver = get_neo4j_driver()
         query = """
@@ -205,6 +205,12 @@ class GraphService:
         ORDER BY 
             CASE WHEN f.layover_duration_minutes > 0 AND f.layover_duration_minutes < 60 THEN 2 ELSE 0 END,
             CASE 
+                WHEN $flight_time_pref = 'later' THEN (CASE WHEN f.departure_time >= '10:00' THEN 0 ELSE 1 END)
+                WHEN $flight_time_pref = 'evening' THEN (CASE WHEN f.departure_time >= '16:00' THEN 0 ELSE 1 END)
+                WHEN $flight_time_pref = 'morning' THEN (CASE WHEN f.departure_time < '12:00' THEN 0 ELSE 1 END)
+                ELSE 0
+            END,
+            CASE 
                 WHEN $prefer_direct = true THEN (CASE WHEN f.flight_type = 'direct' THEN 0 ELSE 1 END)
                 WHEN $prefer_direct = false THEN (CASE WHEN f.flight_type = 'connecting' THEN 0 ELSE 1 END)
                 ELSE 0
@@ -218,7 +224,8 @@ class GraphService:
                 airport_code=airport_code,
                 hotel_id=hotel_id,
                 origin_code=origin_airport_code,
-                prefer_direct=prefer_direct_flight
+                prefer_direct=prefer_direct_flight,
+                flight_time_pref=flight_time_pref
             )
             records = await result.data()
 
@@ -246,8 +253,8 @@ class GraphService:
                     "airline": "Регулярный рейс",
                     "flight_no": "Рейс по расписанию",
                     "origin_name": "Москва (SVO/DME)",
-                    "departure_time": "09:00",
-                    "arrival_time": "13:30",
+                    "departure_time": "10:30" if flight_time_pref == "later" else "09:00",
+                    "arrival_time": "15:00" if flight_time_pref == "later" else "13:30",
                     "price_rub_roundtrip": 25000,
                     "flight_type": "direct",
                     "layover_airport": None,
@@ -272,6 +279,71 @@ class GraphService:
                     "layover_duration_minutes": best.get("layover_duration_minutes", 0),
                     "layover_risk_note": best.get("layover_risk_note", "")
                 }
+
+            # Поиск или синтез обратного рейса (roundtrip)
+            return_flight_info = None
+            if best.get("dest_code") and best.get("origin_code"):
+                ret_query = """
+                MATCH (dest:Airport {code: $dest_code})-[rf:FLIGHT_TO]->(orig:Airport {code: $orig_code})
+                RETURN rf.airline AS airline,
+                       rf.flight_no AS flight_no,
+                       rf.departure_time AS departure_time,
+                       rf.arrival_time AS arrival_time,
+                       rf.duration_minutes AS duration_minutes,
+                       rf.flight_type AS flight_type
+                ORDER BY 
+                    CASE WHEN rf.airline = $airline THEN 0 ELSE 1 END,
+                    CASE WHEN rf.departure_time >= '12:00' THEN 0 ELSE 1 END,
+                    rf.departure_time ASC
+                LIMIT 1
+                """
+                ret_res = await session.run(
+                    ret_query,
+                    dest_code=best["dest_code"],
+                    orig_code=best["origin_code"],
+                    airline=best["airline"]
+                )
+                ret_data = await ret_res.data()
+                if ret_data:
+                    rf = ret_data[0]
+                    return_flight_info = {
+                        "airline": rf["airline"],
+                        "flight_no": rf["flight_no"],
+                        "origin_code": best["dest_code"],
+                        "dest_code": best["origin_code"],
+                        "departure_time": rf["departure_time"],
+                        "arrival_time": rf["arrival_time"],
+                        "duration_minutes": rf["duration_minutes"],
+                        "flight_type": rf.get("flight_type", "direct")
+                    }
+
+            if not return_flight_info:
+                out_no = flight_info.get("flight_no", "SU-1000")
+                parts = out_no.split("-")
+                if len(parts) == 2 and parts[1].isdigit():
+                    num = int(parts[1])
+                    ret_no = f"{parts[0]}-{num + 1 if num % 2 == 0 else num - 1}"
+                else:
+                    ret_no = f"{flight_info.get('airline', 'Авиа')} (обратный)"
+                
+                dur = flight_info.get("duration_minutes", 180)
+                dep = "15:45"
+                dep_h, dep_m = 15, 45
+                arr_h = (dep_h + (dep_m + dur) // 60) % 24
+                arr_m = (dep_m + dur) % 60
+                arr = f"{arr_h:02d}:{arr_m:02d}"
+                return_flight_info = {
+                    "airline": flight_info.get("airline", "Регулярный рейс"),
+                    "flight_no": ret_no,
+                    "origin_code": best.get("dest_code", "DEST"),
+                    "dest_code": best.get("origin_code", "SVO"),
+                    "departure_time": dep,
+                    "arrival_time": arr,
+                    "duration_minutes": dur,
+                    "flight_type": flight_info.get("flight_type", "direct")
+                }
+
+            flight_info["return_flight"] = return_flight_info
 
             if without_transfer:
                 best["transfer_name"] = "Самостоятельно (такси / каршеринг / общественный транспорт)"

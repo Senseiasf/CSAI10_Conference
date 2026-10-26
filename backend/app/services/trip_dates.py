@@ -32,7 +32,8 @@ def update_trip_dates(message: str, profile: dict) -> str | None:
         else:
             if re.search(r"\b(?:январ|феврал|март|апрел|ма[йея]|июн|июл|август|сентябр|октябр|ноябр|декабр)\w*", text):
                 return "На какую дату планируем заезд? Укажите её в формате ДД.ММ.ГГГГ."
-            if any(w in text for w in ("позже", "раньше", "сдвинь", "другие даты")):
+            is_flight_time = any(w in text for w in ("вылет", "самолет", "самолёт", "рейс", "утр", "вечер", "в 6", "в 7", "время", "попозже", "пораньше")) and not any(w in text for w in ("дату", "даты", "заезд", "выезд", "дня позже", "дней позже", "дня раньше", "дней раньше", "сдвинь поездку", "сдвинь даты"))
+            if not is_flight_time and any(w in text for w in ("позже", "раньше", "сдвинь", "другие даты")):
                 return "Укажите новую дату заезда (ДД.ММ.ГГГГ) или на сколько дней сдвинуть поездку."
             start = date.fromisoformat(profile["checkin_date"]) if profile.get("checkin_date") else None
 

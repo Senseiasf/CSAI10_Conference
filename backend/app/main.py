@@ -74,7 +74,7 @@ async def get_index(request: Request):
         name="index.html",
         context={
             "bot_username": settings.TELEGRAM_BOT_USERNAME,
-            "llm_mode": "Mock Agent" if settings.is_mock_llm else "OpenAI Compatible"
+            "llm_mode": "Mock Agent" if settings.is_mock_llm else f"DeepSeek Flash ({settings.OPENAI_MODEL})"
         }
     )
 
@@ -97,7 +97,7 @@ async def health_check():
             "status": "ok" if all_ok else "degraded",
             "postgres": pg_ok,
             "neo4j": neo_ok,
-            "llm_mode": "mock" if settings.is_mock_llm else "openai",
+            "llm_mode": "mock" if settings.is_mock_llm else settings.OPENAI_MODEL,
             "graph_stats": graph_stats
         }
     )

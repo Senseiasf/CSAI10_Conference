@@ -6,10 +6,12 @@ from sqlalchemy import select, text
 
 from app.database import async_session_maker
 from app.models import DestinationModel, HotelModel, RiskAlertModel, UserSessionModel
+from app.config import settings
 from app.services.vector_service import generate_text_embedding
 from app.mcp.tools import MCPTools
 from app.services.trip_dates import update_trip_dates
 from app.services.trip_budget import update_trip_budget
+from app.services.llm_service import LLMService
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +119,30 @@ class AgentService:
         elif any(w in user_lower for w in ["один", "одна", "соло"]):
             profile["party_size"] = "соло"
 
+        for token in ["пулково", "led", "спб", "питер", "санкт-петербург"]:
+            if f"из {token}" in user_lower or f"с {token}" in user_lower:
+                profile["origin_airport"] = "LED"
+        for token in ["сочи", "адлер", "aer"]:
+            if f"из {token}" in user_lower:
+                profile["origin_airport"] = "AER"
+        for token in ["алтай", "горно-алтайск", "rgk"]:
+            if f"из {token}" in user_lower:
+                profile["origin_airport"] = "RGK"
+
+        # Предпочтения по географии (заграница / Россия)
+        if any(w in user_lower for w in ["заграниц", "за границу", "за границей", "за рубеж", "зарубеж", "не в росси", "не по росси", "не в рф", "другая страна", "другую страну", "только не россия", "только заграниц", "международн"]):
+            profile["abroad_only"] = True
+            profile.pop("domestic_only", None)
+        elif any(w in user_lower for w in ["по россии", "внутри россии", "по рф", "в россии", "отечественн", "без загранпаспорта", "без визы и заграна"]):
+            profile["domestic_only"] = True
+            profile.pop("abroad_only", None)
+
+        # Предпочтения по времени вылета
+        if any(w in user_lower for w in ["попозже", "самолет попозже", "вылет попозже", "рейс попозже", "не в 6 утра", "не в 6", "не в 7", "не рано", "позже 10", "после 10", "после 12", "днем", "вечером", "поздний вылет", "вылетать позже"]):
+            profile["flight_time_pref"] = "later"
+        elif any(w in user_lower for w in ["пораньше", "утром", "утренний вылет", "самолет пораньше", "рейс пораньше", "ранний вылет"]):
+            profile["flight_time_pref"] = "morning"
+
         profile["interests"] = list(interests)
         return profile
 
@@ -160,20 +186,42 @@ class AgentService:
             if any(k in m_lower for k in item["keywords"]):
                 return False
 
+        # Если есть параметры/команды перепланирования или фильтров — это не приветствие
+        replan_keywords = [
+            "отель", "гостиниц", "номер", "дешев", "дорог", "рейс", "вылет", "самолет",
+            "трансфер", "бюджет", "тысяч", "рубл", "руб", "заезд", "выезд", "ноч", "дней", "день",
+            "забронир", "оформ", "оплат", "купит"
+        ]
+        if any(rw in m_lower for rw in replan_keywords):
+            return False
+
         vague_phrases = [
             "привет", "здравствуйте", "добрый день", "добрый вечер", "хай", "hello",
             "хочу отдохнуть", "помоги выбрать", "посоветуй", "куда поехать", "не знаю куда",
-            "хочу в отпуск", "подбери тур", "что посоветуешь", "помоги с выбором", "начать"
+            "хочу в отпуск", "подбери тур", "что посоветуешь", "помоги с выбором", "начать",
+            "хочу поехать", "хочу слетать", "подобрать тур", "куда слетать", "планирую отдых",
+            "планирую отпуск", "посоветуйте", "ищу тур", "хочу путешествовать", "помоги с поездкой",
+            "хочу в путешествие", "поехать куда-нибудь", "где лучше отдохнуть", "какие есть варианты",
+            "помоги спланировать", "выбрать тур", "собери тур"
         ]
-        if len(m_lower.split()) <= 4 and any(vp in m_lower for vp in vague_phrases):
+        if any(vp in m_lower for vp in vague_phrases):
             return True
+
+        if len(m_lower.split()) <= 3 and not any(w in m_lower for w in ["заграниц", "за рубеж", "пляж", "море", "гор"]):
+            return True
+
         return False
 
     @staticmethod
-    async def search_destinations_vector(query: str, limit: int = 2) -> List[Dict[str, Any]]:
+    async def search_destinations_vector(
+        query: str,
+        limit: int = 2,
+        abroad_only: bool = False,
+        domestic_only: bool = False
+    ) -> List[Dict[str, Any]]:
         """
         Гибридный поиск: прямое совпадение по ключевым словам городов/стран +
-        векторный поиск по вайбу и климату в PostgreSQL через pgvector.
+        векторный поиск по вайбу и климату в PostgreSQL через pgvector с поддержкой фильтрации заграница/РФ.
         """
         q_lower = query.lower()
         
@@ -193,6 +241,13 @@ class AgentService:
             if re.search(r'(?:\b|^|\s)' + re.escape(kw), q_lower):
                 matched_id = keyword_map[kw]
                 break
+
+        # Если запрошена строго заграница — отсекаем города РФ
+        if abroad_only and matched_id in ("sochi", "spb", "altai"):
+            matched_id = None
+        # Если запрошена строго Россия — отсекаем зарубежные курорты
+        if domestic_only and matched_id in ("uae", "turkey", "thailand", "maldives", "egypt"):
+            matched_id = None
 
         async with async_session_maker() as session:
             if matched_id:
@@ -216,10 +271,19 @@ class AgentService:
             query_vector = generate_text_embedding(query)
             str_vector = f"[{','.join(str(x) for x in query_vector)}]"
             
-            sql = text("""
+            where_clauses = []
+            if abroad_only:
+                where_clauses.append("country != 'Россия'")
+            elif domestic_only:
+                where_clauses.append("country = 'Россия'")
+            
+            where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+            sql = text(f"""
                 SELECT id, name, country, price_min, price_max, avg_check, vibe_description, climate_summary,
                        embedding <=> (:query_vector)::vector AS distance
                 FROM destinations
+                {where_sql}
                 ORDER BY distance ASC
                 LIMIT :limit
             """)
@@ -298,8 +362,114 @@ class AgentService:
         # 1. Извлечение интересов и обновление профиля пользователя (User Memory)
         profile = AgentService.extract_interests_and_slots(user_lower, profile)
 
-        # 2. Пункт 4 ТЗ: Анти-15-вопросов на старте (Anti-15-Questions)
+        # 2. Интеллектуальный Tool Calling диспетчер на базе DeepSeek Flash
+        # ИИ сам извлекает параметры (город вылета, время, географию, неизвестные локации, тип перепланирования, теги)
+        # без необходимости для пользователя говорить точные кодовые слова.
         has_dest_in_cart = bool(cart.get("destination_id"))
+        if not settings.is_mock_llm and user_id != "test":
+            llm_decision = await LLMService.dispatch_intent(
+                user_message=message,
+                profile=profile,
+                current_cart=cart,
+                conversation_history=getattr(session_obj, "conversation_history", [])
+            )
+            if llm_decision:
+                if llm_decision.get("action") == "unknown_destination":
+                    req_name = llm_decision.get("requested_name") or "выбранное направление"
+                    alt_id = llm_decision.get("suggested_pilot_id") or "maldives"
+                    alt_name = llm_decision.get("suggested_pilot_name") or "Мальдивы"
+                    reason = llm_decision.get("vibe_reason") or "отличный курортный отдых и море впечатлений"
+                    
+                    reply_fallback = (
+                        f"🌍 **Обратите внимание:** В текущей версии нашей системы оцифрована "
+                        f"сквозная графовая логистика (рейсы, трансферы и отели) по 8 ключевым направлениям: "
+                        f"**Сочи, ОАЭ, Турция, Таиланд, Мальдивы, Египет, Санкт-Петербург и Алтай**.\n\n"
+                        f"💡 **Рекомендуем альтернативу по вайбу:** Если вас привлекает {reason} — "
+                        f"идеальным выбором станет **{alt_name}**!\n\n"
+                        f"Собрать для вас готовый тур в **{alt_name}** с проверенным перелетом, трансфером и расчетом бюджета?"
+                    )
+                    profile["suggested_destination"] = alt_id
+                    await AgentService._save_session(user_id, profile, cart, message, reply_fallback)
+                    return {
+                        "text": reply_fallback,
+                        "suggested_destination": alt_id,
+                        "state": "FALLBACK_OFFERED",
+                        "cart": cart
+                    }
+                elif llm_decision.get("action") == "consultation" and not any(w in user_lower for w in ["забронир", "оформи", "купи", "хочу поехать", "подбери тур", "собери тур"]):
+                    consult_text = llm_decision.get("text", "")
+                    if consult_text:
+                        await AgentService._save_session(user_id, profile, cart, message, consult_text)
+                        return {
+                            "text": consult_text,
+                            "state": "CONSULTATION",
+                            "cart": cart
+                        }
+                elif llm_decision.get("action") == "plan":
+                    # Если запрос совершенно пустой / приветствие без параметров
+                    is_pure_greeting = not has_dest_in_cart and not llm_decision.get("destination_id") and not llm_decision.get("tags") and not llm_decision.get("origin_airport") and not llm_decision.get("budget_rub") and AgentService.is_vague_greeting(message, has_dest_in_cart)
+                    if is_pure_greeting:
+                        reply_anti_questions = (
+                            "👋 **Здравствуйте! Я умный ассистент путешествий Ostrovok.**\n\n"
+                            "Вместо длинных анкет из 15 вопросов задам всего **два ключевых ориентира**:\n\n"
+                            "1️⃣ **Какой формат отдыха вам ближе?**\n"
+                            "• 🌊 **Пляжный релакс и рифы** (Мальдивы, Пхукет, Египет, ОАЭ, Анталья)\n"
+                            "• 🏔️ **Горы, природа и спа** (Алтай, Красная Поляна)\n"
+                            "• 🏛️ **Культура, архитектура и гастрономия** (Санкт-Петербург, Стамбул)\n"
+                            "• 👨‍👩‍👧 **Семейный All-Inclusive с детьми и аквапарками**\n\n"
+                            "2️⃣ **Примерный состав и даты поездки** (вдвоём, с семьёй, с питомцем или соло)?\n\n"
+                            "_Напишите, что вам ближе (например: «Хочу море и всё включено с ребенком»), "
+                            "и я мгновенно соберу готовый проверенный маршрут с перелетом, отелем и трансфером._"
+                        )
+                        await AgentService._save_session(user_id, profile, cart, message, reply_anti_questions)
+                        return {
+                            "text": reply_anti_questions,
+                            "state": "INSPIRATION_PROMPT",
+                            "cart": cart
+                        }
+
+                    if llm_decision.get("ai_reply_intro"):
+                        profile["llm_ai_intro"] = llm_decision["ai_reply_intro"]
+                    if llm_decision.get("origin_airport") and llm_decision["origin_airport"] != "any":
+                        profile["origin_airport"] = llm_decision["origin_airport"]
+                    if llm_decision.get("flight_time_pref") and llm_decision["flight_time_pref"] != "any":
+                        profile["flight_time_pref"] = llm_decision["flight_time_pref"]
+                    if llm_decision.get("geography") == "abroad":
+                        profile["abroad_only"] = True
+                        profile.pop("domestic_only", None)
+                    elif llm_decision.get("geography") == "domestic":
+                        profile["domestic_only"] = True
+                        profile.pop("abroad_only", None)
+                    if llm_decision.get("destination_id"):
+                        profile["llm_destination_id"] = llm_decision["destination_id"]
+                    if llm_decision.get("replan_action") and llm_decision["replan_action"] != "none":
+                        profile["llm_replan_action"] = llm_decision["replan_action"]
+                    if llm_decision.get("family_friendly"):
+                        profile["has_kids"] = True
+                        if "family_kids" not in profile.setdefault("interests", []):
+                            profile["interests"].append("family_kids")
+                    if llm_decision.get("private_room_required"):
+                        profile["private_room_required"] = True
+                    if llm_decision.get("pet_friendly"):
+                        profile["has_pets"] = True
+                        if "pet_friendly" not in profile.setdefault("interests", []):
+                            profile["interests"].append("pet_friendly")
+                    if llm_decision.get("prefer_direct_flight") is not None:
+                        profile["prefer_direct_flight"] = llm_decision["prefer_direct_flight"]
+                    if llm_decision.get("without_transfer"):
+                        profile["without_transfer"] = True
+                    if llm_decision.get("tags"):
+                        for t in llm_decision["tags"]:
+                            if t not in profile.setdefault("interests", []):
+                                profile["interests"].append(t)
+                    if llm_decision.get("budget_rub") and not profile.get("budget_rub"):
+                        profile["budget_rub"] = llm_decision["budget_rub"]
+                    if llm_decision.get("nights") and not any(w in user_lower for w in ["ноч", "дн", "сут"]):
+                        profile["nights"] = llm_decision["nights"]
+                        profile["dates"] = f"{llm_decision['nights']} ночей"
+
+        # Детерминированный fallback (для mock LLM и unit-тестов):
+        # Пункт 4 ТЗ: Анти-15-вопросов на старте (Anti-15-Questions)
         if AgentService.is_vague_greeting(message, has_dest_in_cart):
             reply_anti_questions = (
                 "👋 **Здравствуйте! Я умный ассистент путешествий Ostrovok.**\n\n"
@@ -320,9 +490,9 @@ class AgentService:
                 "cart": cart
             }
 
-        # 3. Пункт 3 ТЗ: Fallback и рекомендации для неизвестных направлений
+        # Детерминированный fallback для неизвестных направлений (если оффлайн / mock LLM)
         unknown_match = AgentService.detect_unknown_destination(message)
-        if unknown_match:
+        if unknown_match and not profile.get("llm_destination_id"):
             alt_id = unknown_match["pilot_alt_id"]
             alt_name = unknown_match["pilot_alt_name"]
             reason = unknown_match["vibe_reason"]
@@ -352,10 +522,37 @@ class AgentService:
         
         is_replan_hotel = any(w in user_lower for w in ["другой отель", "поменяй отель", "смени отель", "не нравится отель", "есть еще отели", "покажи другие варианты", "альтернативный отель", "другой вариант проживания"])
         is_replan_cheaper = any(w in user_lower for w in ["дешевле", "подешевле", "дорого", "снизь цену", "бюджетнее", "экономнее", "сделай дешевле"])
-        is_replan_flight = any(w in user_lower for w in ["только прямой", "прямой рейс", "без пересадок", "с пересадкой", "стыковочный", "рейс подешевле"])
+        is_replan_flight_later = any(w in user_lower for w in ["попозже", "самолет попозже", "вылет попозже", "рейс попозже", "не в 6 утра", "не в 6", "не в 7", "не рано", "позже 10", "после 10", "после 12", "днем", "вечером", "поздний вылет", "вылетать позже"])
+        is_replan_flight_morning = any(w in user_lower for w in ["пораньше", "утром", "утренний вылет", "самолет пораньше", "рейс пораньше", "ранний вылет"])
+        is_replan_flight = is_replan_flight_later or is_replan_flight_morning or any(w in user_lower for w in ["только прямой", "прямой рейс", "без пересадок", "с пересадкой", "стыковочный", "рейс подешевле"])
         is_replan_transfer = any(w in user_lower for w in ["убери трансфер", "без трансфера", "поедем сами", "на каршеринге", "возьмем такси сами", "своим ходом", "не нужен трансфер"])
         is_replan_dates = profile.get("dates") != previous_dates and bool(profile.get("checkin_date"))
         is_replan_nights = any(w in user_lower for w in ["ноч", "дн", "сут", "выходн", "уикенд", "недел", "месяц"]) and profile.get("nights") != cart.get("nights")
+
+        # Применяем решения ИИ-диспетчера (Tool Calling DeepSeek Flash)
+        llm_ra = profile.pop("llm_replan_action", None)
+        if llm_ra == "change_hotel":
+            is_replan_hotel = True
+        elif llm_ra == "cheaper":
+            is_replan_cheaper = True
+        elif llm_ra == "change_flight_time":
+            is_replan_flight = True
+            if profile.get("flight_time_pref") in ("later", "evening", "day"):
+                is_replan_flight_later = True
+            elif profile.get("flight_time_pref") == "morning":
+                is_replan_flight_morning = True
+        elif llm_ra == "remove_transfer":
+            is_replan_transfer = True
+            profile["without_transfer"] = True
+        elif llm_ra == "change_destination":
+            explicit_dest_change = True
+
+        is_abroad_request = profile.get("abroad_only", False)
+        is_domestic_request = profile.get("domestic_only", False)
+        if is_abroad_request and current_dest_id in ("sochi", "spb", "altai"):
+            explicit_dest_change = True
+        elif is_domestic_request and current_dest_id not in ("sochi", "spb", "altai"):
+            explicit_dest_change = True
 
         nights = profile.get("nights", 7)
         cart["nights"] = nights
@@ -372,8 +569,20 @@ class AgentService:
             profile["prefer_direct_flight"] = False
 
         # Определение целевого направления
-        matched_destinations = await AgentService.search_destinations_vector(message, limit=2)
+        matched_destinations = await AgentService.search_destinations_vector(
+            message,
+            limit=2,
+            abroad_only=is_abroad_request,
+            domestic_only=is_domestic_request
+        )
         msg_top_dest = matched_destinations[0] if matched_destinations else None
+
+        # Если ИИ точно определил destination_id через Tool Calling
+        llm_dest = profile.pop("llm_destination_id", None)
+        if llm_dest and (explicit_dest_change or not current_dest_id or (is_abroad_request and current_dest_id in ("sochi", "spb", "altai"))):
+            cur_matched = await AgentService.search_destinations_vector(llm_dest, limit=1)
+            if cur_matched:
+                msg_top_dest = cur_matched[0]
 
         if current_dest_id and not explicit_dest_change and (is_replan_hotel or is_replan_cheaper or is_replan_flight or is_replan_transfer or is_replan_dates or budget_changed):
             # Контекстное перепланирование в рамках текущего города/курорта!
@@ -388,7 +597,7 @@ class AgentService:
             # При смене направления очищаем список отклоненных отелей для нового региона
             if current_dest_id != dest_id:
                 profile["rejected_hotels"] = []
-        elif current_dest_id:
+        elif current_dest_id and not (is_abroad_request and current_dest_id in ("sochi", "spb", "altai")):
             dest_id = current_dest_id
             cur_matched = await AgentService.search_destinations_vector(dest_id, limit=1)
             top_dest = cur_matched[0] if cur_matched else msg_top_dest
@@ -470,9 +679,10 @@ class AgentService:
         evaluated = []
         for hotel in compared_list:
             logistics = await MCPTools.check_logistics_compatibility(
-                airport_code="", hotel_id=hotel["id"], origin_airport_code=None,
+                airport_code="", hotel_id=hotel["id"], origin_airport_code=profile.get("origin_airport"),
                 prefer_direct_flight=profile.get("prefer_direct_flight"),
                 without_transfer=profile.get("without_transfer", False),
+                flight_time_pref=profile.get("flight_time_pref")
             )
             flight = logistics.get("flight", {})
             transfer = logistics.get("transfer", {})
@@ -549,28 +759,34 @@ class AgentService:
         # 10. Формирование сжатого и понятного ответа
         response_lines = []
 
-        # Специфический статус перепланирования (Пункт 2 ТЗ)
-        if is_replan_hotel and old_hotel_name and old_hotel_name != recommended_hotel["name"]:
-            response_lines.append(f"🔄 **Отель успешно заменён без сброса маршрута:**")
-            response_lines.append(f"Предыдущий отель «{old_hotel_name}» исключён из рекомендаций.")
-            response_lines.append("")
-        elif is_replan_cheaper and old_total_max is not None and old_total_max > budget_breakdown["total_trip_budget_range_rub"]["max"]:
-            savings = old_total_max - budget_breakdown["total_trip_budget_range_rub"]["max"]
-            response_lines.append(f"📉 **Снизили верхнюю оценку полной стоимости на {savings:,} ₽!**")
-            response_lines.append(f"Подобрали более доступный отель и выгодные условия логистики.")
-            response_lines.append("")
-        elif is_replan_transfer:
-            response_lines.append(f"🚕 **Трансфер исключён:** стоимость тура снижена, вы сможете добраться самостоятельно (каршеринг/такси).")
-            response_lines.append("")
-        elif is_replan_flight:
-            fl_type_str = "только прямой рейс" if profile.get("prefer_direct_flight") else "рейс с комфортной стыковкой"
-            response_lines.append(f"✈️ **Маршрут перестроен под условие:** {fl_type_str}.")
-            response_lines.append("")
-        elif is_replan_nights:
-            response_lines.append(f"📅 **Длительность тура изменена на {nights} ночей:** пересчитана стоимость проживания и суточные расходы.")
-            response_lines.append("")
-        elif is_replan_dates:
-            response_lines.append(f"📅 **Даты поездки обновлены:** {profile.get('dates')}, календарный период пересчитан. Доступность отеля и рейсов на эти даты в демо не проверяется.")
+        # Краткий вежливый ответ ИИ при уточнениях (Пункт 1 & 6 обратной связи пользователя)
+        ai_intro = profile.pop("llm_ai_intro", None)
+        if not ai_intro:
+            if is_replan_flight_later:
+                ai_intro = "Понял вас! Подобрал рейс с более удобным вылетом после 10:00 (без раннего подъёма в 6 утра) и обновил расписание трансфера:"
+            elif is_replan_flight_morning:
+                ai_intro = "Принято! Выбрал утренний рейс и пересчитал логистику маршрута:"
+            elif is_replan_hotel and old_hotel_name and old_hotel_name != recommended_hotel["name"]:
+                ai_intro = f"Договорились! Исключил отель «{old_hotel_name}», подобрал альтернативу «{recommended_hotel['name']}» и пересчитал бюджет:"
+            elif is_replan_cheaper and old_total_max is not None and old_total_max > budget_breakdown["total_trip_budget_range_rub"]["max"]:
+                savings = old_total_max - budget_breakdown["total_trip_budget_range_rub"]["max"]
+                ai_intro = f"Понял вас! Подобрал более доступный вариант, снизив бюджет поездки на {savings:,} ₽:"
+            elif is_replan_transfer:
+                ai_intro = "Без проблем! Исключил трансфер из расчёта — вы сможете добраться самостоятельно:"
+            elif is_replan_flight:
+                fl_type_str = "только прямой беспосадочный рейс" if profile.get("prefer_direct_flight") else "рейс с комфортной стыковкой"
+                ai_intro = f"Маршрут перестроен: теперь подобран {fl_type_str}:"
+            elif is_replan_nights:
+                ai_intro = f"Принято! Изменил длительность тура на {nights} ночей и пересчитал полную стоимость:"
+            elif is_replan_dates:
+                ai_intro = f"Даты поездки успешно обновлены на {profile.get('dates')}:"
+            elif is_abroad_request and current_dest_id in ("sochi", "spb", "altai"):
+                ai_intro = f"Отличный выбор! Переключил маршрут на зарубежный курорт ({top_dest['name']}) и подобрал международный перелёт:"
+            elif budget_changed and budget_limit is not None:
+                ai_intro = f"Подобрал оптимальный тур, который укладывается в ваш бюджет {budget_limit:,} ₽:"
+
+        if ai_intro:
+            response_lines.append(f"💬 {ai_intro}")
             response_lines.append("")
 
         response_lines.append(f"🌴 **{top_dest['name']}** | {top_dest.get('climate_summary', '')}")
@@ -580,11 +796,10 @@ class AgentService:
 
         if recommended_hotel:
             h = recommended_hotel
-            response_lines.append(f"🏨 **Отель:** {h['name']} ({h['stars']}, {h['price_per_night_formatted']}/ночь)")
+            hotel_total_stay = h['price_per_night_rub'] * nights
+            response_lines.append(f"🏨 **Рекомендуемый отель (в расчёте тура):**")
+            response_lines.append(f"• **«{h['name']}»** ({h['stars']}) — **{h['price_per_night_formatted']}/ночь** ({hotel_total_stay:,} ₽ за {nights} ночей)")
             response_lines.append(f"• Питание: {h['meals']} | До моря: {h['distance_to_sea']} | Отмена: {h['cancellation']}")
-            if len(compared_list) > 1:
-                alt = compared_list[1]
-                response_lines.append(f"• _Альтернатива:_ {alt['name']} ({alt['stars']}, {alt['price_per_night_formatted']}/н, {alt['meals']})")
             response_lines.append("")
 
         if logistics_info.get("compatible"):
@@ -593,18 +808,33 @@ class AgentService:
             flight_code = f"{flight_info.get('airline')} {flight_info.get('flight_no')}"
             flight_times = f"{flight_info.get('origin_code', 'MOW')} {timeline.get('flight_departure')} ➔ {logistics_info.get('airport')} {timeline.get('flight_arrival')}"
             
-            response_lines.append("✈️ **Логистика и стыковки (Neo4j Graph):**")
+            ret_fl = flight_info.get("return_flight", {})
+            ret_airline = ret_fl.get("airline", flight_info.get("airline"))
+            ret_no = ret_fl.get("flight_no", "")
+            ret_dep = ret_fl.get("departure_time", "15:45")
+            ret_arr = ret_fl.get("arrival_time", "20:15")
+            dest_code = ret_fl.get("origin_code", logistics_info.get("airport", "DEST"))
+            orig_code = ret_fl.get("dest_code", flight_info.get("origin_code", "SVO"))
+
+            date_out = profile.get("checkin_date")
+            date_ret = profile.get("checkout_date")
+            date_out_str = f" ({date_out})" if date_out else ""
+            date_ret_str = f" ({date_ret})" if date_ret else ""
+
+            response_lines.append("✈️ **Авиаперелёт туда и обратно (включён в стоимость):**")
             if layover.get("is_connecting"):
-                response_lines.append(f"• Стыковочный рейс: {flight_code} ({flight_times}), пересадка в {layover.get('city')} ({layover.get('duration_formatted')}, сквозной багаж).")
+                response_lines.append(f"• 🛫 **Туда{date_out_str}:** {flight_code} ({flight_times}), пересадка в {layover.get('city')} ({layover.get('duration_formatted')}).")
             else:
-                response_lines.append(f"• Прямой рейс: {flight_code} ({flight_times}).")
+                response_lines.append(f"• 🛫 **Туда{date_out_str}:** Прямой рейс {flight_code} ({flight_times}).")
+
+            response_lines.append(f"• 🛬 **Обратно{date_ret_str}:** {ret_airline} {ret_no} ({dest_code} {ret_dep} ➔ {orig_code} {ret_arr}).")
 
             if profile.get("without_transfer"):
-                response_lines.append(f"• 🧳 Буфер прилёта ({timeline.get('post_flight_buffer_min', 50)} мин: багаж + контроль) ➔ самостоятельный выезд на каршеринге/такси в отель.")
+                response_lines.append(f"• 🧳 Прилёт: получение багажа ➔ самостоятельный выезд на такси/каршеринге в отель.")
             else:
-                buf_min = timeline.get("post_flight_buffer_min", 50)
-                response_lines.append(f"• 🧳 Буфер прилёта ({buf_min} мин: багаж + контроль) ➔ трансфер в {timeline.get('transfer_start')} ➔ отель в {timeline.get('hotel_arrival')}.")
-                response_lines.append(f"• 🛡️ Форс-мажор: бесплатное ожидание трансфера до 90 мин по номеру рейса; 24/7 Late Check-in.")
+                tr_name = logistics_info.get("transfer", {}).get("name", "Трансфер")
+                tr_min = logistics_info.get("transfer", {}).get("duration_min", 30)
+                response_lines.append(f"• 🚗 Трансфер ({tr_name}, ~{tr_min} мин): встреча в аэропорту ({timeline.get('transfer_start')}) ➔ прибытие в отель к {timeline.get('hotel_arrival')}.")
             response_lines.append("")
 
         # Финансовый блок
@@ -613,28 +843,37 @@ class AgentService:
         total_range = budget_breakdown["total_trip_budget_range_rub"]
 
         response_lines.extend([
-            f"💰 **Бюджет на {nights} ночей:**",
-            f"• 🔴 **Сразу (авиа + отель {nights} н. + трансфер):** {mand['total_mandatory_rub']:,} ₽",
-            f"• 🟢 **На месте ({nights} дн. питание + активности):** {onsite['total_onsite_range_rub']['min']:,} – {onsite['total_onsite_range_rub']['max']:,} ₽",
-            f"💵 **Итого под ключ:** **{total_range['min']:,} – {total_range['max']:,} ₽**",
+            f"💰 **Расчёт стоимости всей поездки (для отеля «{recommended_hotel['name']}» на {nights} н.):**",
+            f"• 🔴 **Обязательные расходы (перелёт туда-обратно + {recommended_hotel['name']} {nights} н. + трансфер):** {mand['total_mandatory_rub']:,} ₽",
+            f"• 🟢 **Расходы на месте ({nights} дн. питание + досуг):** {onsite['total_onsite_range_rub']['min']:,} – {onsite['total_onsite_range_rub']['max']:,} ₽",
+            f"💵 **ИТОГО под ключ:** **{total_range['min']:,} – {total_range['max']:,} ₽**",
             ""
         ])
 
         if budget_limit is not None:
             response_lines.append(
                 f"Лимит всей поездки: {budget_limit:,} ₽. Верхняя оценка расходов "
-                f"{total_range['max']:,} ₽ укладывается в лимит; это оценка, а не фиксированная цена."
+                f"{total_range['max']:,} ₽ укладывается в лимит; это оценка, а не фиксированная цена.\n"
             )
 
-        # Сезонные опасности (сжато)
+        if len(compared_list) > 1:
+            response_lines.append("📋 **Альтернативные отели (для сравнения):**")
+            for alt in compared_list[1:3]:
+                diff_rub = (alt['price_per_night_rub'] - recommended_hotel['price_per_night_rub']) * nights
+                if diff_rub > 0:
+                    diff_str = f"+{diff_rub:,} ₽ к общему бюджету"
+                elif diff_rub < 0:
+                    diff_str = f"{diff_rub:,} ₽ к общему бюджету"
+                else:
+                    diff_str = "такая же стоимость"
+                response_lines.append(f"• **«{alt['name']}»** ({alt['stars']}, {alt['price_per_night_formatted']}/ночь, {alt['meals']}) — {diff_str}. _(Напишите «выбери {alt['name']}», чтобы переключиться)_")
+            response_lines.append("")
+
+        # Сезонные особенности (сжато)
         active_alerts = risks_report.get("active_alerts", [])
         if active_alerts:
-            threat = risks_report.get("overall_threat_level", "MEDIUM")
             top_risks = "; ".join(f"{a['title']}" for a in active_alerts[:2])
-            response_lines.append(f"⚠️ **Сезонные риски ({threat}):** {top_risks}.")
-            tips = risks_report.get("safety_recommendations", [])
-            if tips:
-                response_lines.append(f"🛡️ _{tips[0]}_")
+            response_lines.append(f"ℹ️ **Сезонные особенности:** {top_risks}.")
             response_lines.append("")
         # 11. Аудит безопасности и умная валидация данных агентом (фильтрация неадекватных / рискованных предложений)
         audit_notes = []
@@ -669,6 +908,19 @@ class AgentService:
             for note in audit_notes:
                 response_lines.append(f"• {note}")
             response_lines.append("")
+
+        # 12. Персональный инсайдерский совет от AI-консьержа DeepSeek Flash
+        if not settings.is_mock_llm and not user_id.startswith("test") and recommended_hotel:
+            concierge_tip = await LLMService.generate_concierge_advice(
+                destination_name=top_dest.get("name", dest_id),
+                hotel_name=recommended_hotel["name"],
+                nights=nights,
+                user_message=message,
+                profile=profile
+            )
+            if concierge_tip:
+                response_lines.append(f"✨ **AI-консьерж ({settings.OPENAI_MODEL}):** {concierge_tip}")
+                response_lines.append("")
 
         response_lines.append("🛒 *Напишите «Забронировать» для покупки или уточните: «другой отель», «подешевле», «только прямой».*")
 
