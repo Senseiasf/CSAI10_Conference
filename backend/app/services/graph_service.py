@@ -205,9 +205,36 @@ class GraphService:
         ORDER BY 
             CASE WHEN f.layover_duration_minutes > 0 AND f.layover_duration_minutes < 60 THEN 2 ELSE 0 END,
             CASE 
-                WHEN $flight_time_pref = 'later' THEN (CASE WHEN f.departure_time >= '10:00' THEN 0 ELSE 1 END)
-                WHEN $flight_time_pref = 'evening' THEN (CASE WHEN f.departure_time >= '16:00' THEN 0 ELSE 1 END)
-                WHEN $flight_time_pref = 'morning' THEN (CASE WHEN f.departure_time < '12:00' THEN 0 ELSE 1 END)
+                WHEN $flight_time_pref = 'day' THEN (
+                    CASE 
+                        WHEN f.departure_time >= '11:00' AND f.departure_time < '17:00' THEN 0 
+                        WHEN f.departure_time >= '10:00' AND f.departure_time < '19:00' THEN 1 
+                        WHEN f.departure_time >= '08:00' THEN 3
+                        ELSE 10 
+                    END
+                )
+                WHEN $flight_time_pref = 'later' THEN (
+                    CASE 
+                        WHEN f.departure_time >= '11:00' THEN 0 
+                        WHEN f.departure_time >= '09:30' THEN 1 
+                        WHEN f.departure_time >= '08:00' THEN 3
+                        ELSE 10 
+                    END
+                )
+                WHEN $flight_time_pref = 'evening' THEN (
+                    CASE 
+                        WHEN f.departure_time >= '17:00' THEN 0 
+                        WHEN f.departure_time >= '14:00' THEN 1 
+                        ELSE 10 
+                    END
+                )
+                WHEN $flight_time_pref = 'morning' THEN (
+                    CASE 
+                        WHEN f.departure_time >= '07:30' AND f.departure_time < '11:30' THEN 0 
+                        WHEN f.departure_time < '12:00' THEN 1 
+                        ELSE 10 
+                    END
+                )
                 ELSE 0
             END,
             CASE 
@@ -249,12 +276,24 @@ class GraphService:
                 if not records_fb:
                     return {"compatible": False, "reason": "Маршрут не найден в графе."}
                 best = records_fb[0]
+
+                if flight_time_pref == "day":
+                    fb_dep, fb_arr = "13:30", "18:00"
+                elif flight_time_pref == "later":
+                    fb_dep, fb_arr = "11:30", "16:00"
+                elif flight_time_pref == "evening":
+                    fb_dep, fb_arr = "18:00", "22:30"
+                elif flight_time_pref == "morning":
+                    fb_dep, fb_arr = "08:30", "13:00"
+                else:
+                    fb_dep, fb_arr = "09:00", "13:30"
+
                 flight_info = {
                     "airline": "Регулярный рейс",
                     "flight_no": "Рейс по расписанию",
                     "origin_name": "Москва (SVO/DME)",
-                    "departure_time": "10:30" if flight_time_pref == "later" else "09:00",
-                    "arrival_time": "15:00" if flight_time_pref == "later" else "13:30",
+                    "departure_time": fb_dep,
+                    "arrival_time": fb_arr,
                     "price_rub_roundtrip": 25000,
                     "flight_type": "direct",
                     "layover_airport": None,

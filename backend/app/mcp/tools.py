@@ -209,15 +209,18 @@ class MCPTools:
         preferred_hotel_id: Optional[str] = None,
         limit: Optional[int] = 3,
         private_room_required: bool = False,
+        city: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         MCP Tool: Находит и сравнивает 2-3 отеля по ключевым параметрам:
         цена, условия отмены, питание, удаленность от моря, pet-friendly, теги интересов,
         исключая ранее отклоненные отели (Point 2 Re-planning).
         """
-        logger.info(f"[MCP] Calling compare_hotels for {destination_id}, exclude={exclude_hotel_ids}, tags={preferred_tags}")
+        logger.info(f"[MCP] Calling compare_hotels for {destination_id}, city={city}, exclude={exclude_hotel_ids}, tags={preferred_tags}")
         async with async_session_maker() as session:
             stmt = select(HotelModel).where(HotelModel.destination_id == destination_id)
+            if city:
+                stmt = stmt.where(HotelModel.city.ilike(f"%{city}%"))
             if pet_friendly:
                 stmt = stmt.where(HotelModel.pet_friendly == True)
             if family_friendly:
@@ -305,6 +308,7 @@ class MCPTools:
             comparison_table.append({
                 "id": h.id,
                 "name": h.name,
+                "city": getattr(h, "city", ""),
                 "stars": f"{h.stars}★",
                 "price_per_night_rub": h.price_per_night_rub,
                 "price_per_night_formatted": f"{h.price_per_night_rub:,} ₽",
