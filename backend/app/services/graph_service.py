@@ -161,6 +161,33 @@ class GraphService:
         logger.info("Neo4j graph seeded with airports, flights, hotels, and transfers.")
 
     @staticmethod
+    async def find_intercity_logistics(origin_airport: str, dest_airport: str) -> Optional[Dict[str, Any]]:
+        """
+        Ищет в графе Neo4j прямое межгородское транспортное ребро между аэропортами/городами:
+        (a1:Airport)-[f:FLIGHT_TO]->(a2:Airport)
+        """
+        driver = get_neo4j_driver()
+        query = """
+        MATCH (a1:Airport {code: $orig})-[f:FLIGHT_TO]->(a2:Airport {code: $dest})
+        RETURN f.airline AS airline,
+               f.flight_no AS flight_no,
+               f.departure_time AS departure_time,
+               f.arrival_time AS arrival_time,
+               f.duration_minutes AS duration_minutes,
+               f.price_rub_roundtrip AS price_rub
+        LIMIT 1
+        """
+        try:
+            async with driver.session() as session:
+                result = await session.run(query, orig=origin_airport, dest=dest_airport)
+                record = await result.single()
+                if record:
+                    return dict(record)
+        except Exception as e:
+            logger.debug(f"Direct graph intercity query skipped (mock/fallback mode): {e}")
+        return None
+
+    @staticmethod
     async def validate_logistics(
         airport_code: str,
         hotel_id: str,

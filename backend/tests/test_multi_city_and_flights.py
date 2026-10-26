@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 from app.mcp.tools import MCPTools
 from app.services.agent_service import AgentService
+from app.services.graph_service import GraphService
 
 
 def sample_hotel(identifier, name, city, price):
@@ -424,6 +425,167 @@ class DaytimeFlightReplanningTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(logistics_mock.call_args.kwargs.get("flight_time_pref"), "day")
         self.assertTrue(logistics_mock.call_args.kwargs.get("prefer_direct_flight"))
         self.assertIn("12:20", result["text"])
+
+
+class DynamicMultiCityRouteSelectionTest(unittest.TestCase):
+    def test_parametric_selection_sea_and_mountains(self):
+        dest_id, cfg, rationale = AgentService.select_multi_city_route(
+            "хочу тур по городам: море и горы",
+            {}
+        )
+        self.assertEqual(dest_id, "sochi")
+        self.assertIn("Сочи (Побережье + Красная Поляна)", cfg["title"])
+        self.assertIn("сочетание теплого моря и горных панорам", rationale)
+
+    def test_parametric_selection_culture_and_beach(self):
+        dest_id, cfg, rationale = AgentService.select_multi_city_route(
+            "хочу тур по городам: культура, Босфор и пляж",
+            {}
+        )
+        self.assertEqual(dest_id, "turkey")
+        self.assertIn("Турция", cfg["title"])
+        self.assertIn("Босфор", rationale)
+
+    def test_parametric_selection_shopping_skyscrapers(self):
+        dest_id, cfg, rationale = AgentService.select_multi_city_route(
+            "хочу тур по городам: шопинг и небоскребы",
+            {}
+        )
+        self.assertEqual(dest_id, "uae")
+        self.assertIn("ОАЭ", cfg["title"])
+        self.assertIn("шопинг", rationale)
+
+    def test_parametric_selection_nature_and_rivers(self):
+        dest_id, cfg, rationale = AgentService.select_multi_city_route(
+            "комбинированный тур: дикая природа, реки и чистый воздух",
+            {}
+        )
+        self.assertEqual(dest_id, "altai")
+        self.assertIn("Алтай", cfg["title"])
+        self.assertIn("природ", rationale)
+
+    def test_parametric_selection_palaces_and_museums(self):
+        dest_id, cfg, rationale = AgentService.select_multi_city_route(
+            "тур по нескольким городам: дворцы, каналы и Эрмитаж",
+            {}
+        )
+        self.assertEqual(dest_id, "spb")
+        self.assertIn("Санкт-Петербург", cfg["title"])
+        self.assertIn("Эрмитаж", rationale)
+
+    def test_parametric_selection_corals_and_diving(self):
+        dest_id, cfg, rationale = AgentService.select_multi_city_route(
+            "тур по нескольким курортам: коралловые рифы и дайвинг",
+            {}
+        )
+        self.assertEqual(dest_id, "egypt")
+        self.assertIn("Египет", cfg["title"])
+        self.assertIn("коралл", rationale)
+
+    def test_parametric_selection_islands_and_tropics(self):
+        dest_id, cfg, rationale = AgentService.select_multi_city_route(
+            "комбинированный тур: тропические острова и экзотика",
+            {}
+        )
+        self.assertEqual(dest_id, "thailand")
+        self.assertIn("Таиланд", cfg["title"])
+        self.assertIn("экзотик", rationale)
+
+    def test_domestic_constraint_filters_foreign_destinations(self):
+        dest_id, cfg, rationale = AgentService.select_multi_city_route(
+            "тур по городам по России: культура и дворцы",
+            {"domestic_only": True}
+        )
+        self.assertEqual(dest_id, "spb")
+        self.assertEqual(cfg["country"], "Россия")
+
+
+class DynamicMultiCityProcessMessageTest(unittest.IsolatedAsyncioTestCase):
+    async def test_process_message_dynamically_selects_sochi_for_sea_and_mountains(self):
+        user = SimpleNamespace(
+            profile={"nights": 7},
+            current_cart={},
+            current_state="OFFER_PRESENTED"
+        )
+        dest_sochi = {
+            "id": "sochi",
+            "name": "Сочи и Красная Поляна",
+            "country": "Россия",
+            "climate_summary": "Субтропики",
+            "score": 1.0
+        }
+        h_sirius = sample_hotel("h_sirius", "Отель Сириус Побережье", "Сириус", 5200)
+        h_polyana = sample_hotel("h_polyana", "Гранд Поляна Спа", "Красная Поляна", 8900)
+        logistics = make_logistics(dest="AER")
+
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(AgentService, "get_or_create_session", new=AsyncMock(return_value=user)))
+            stack.enter_context(patch.object(AgentService, "search_destinations_vector", new=AsyncMock(return_value=[dest_sochi])))
+            stack.enter_context(patch.object(AgentService, "_save_session", new_callable=AsyncMock))
+
+            async def mock_compare_hotels(destination_id, city=None, **kwargs):
+                if city and ("сириус" in city.lower() or "побереж" in city.lower()):
+                    return {"compared_hotels": [h_sirius]}
+                return {"compared_hotels": [h_polyana]}
+
+            stack.enter_context(patch.object(MCPTools, "compare_hotels", side_effect=mock_compare_hotels))
+            stack.enter_context(patch.object(MCPTools, "check_logistics_compatibility", new=AsyncMock(return_value=logistics)))
+            stack.enter_context(patch.object(MCPTools, "get_destination_risks", new=AsyncMock(return_value={})))
+            stack.enter_context(patch.object(MCPTools, "get_live_weather", new=AsyncMock(return_value={})))
+
+            result = await AgentService.process_message("test-dynamic-sochi", "хочу тур по городам: море и горы на 7 ночей")
+
+        self.assertIn("Сочи (Побережье + Красная Поляна)", result["text"])
+        self.assertIn("Сириус", result["text"])
+        self.assertIn("Красная Поляна", result["text"])
+        self.assertIn("Ласточка", result["text"])
+        self.assertIn("сочетание теплого моря и горных панорам", result["text"])
+
+    async def test_assemble_multi_city_itinerary_with_graph_flight(self):
+        user = SimpleNamespace(
+            profile={"nights": 7},
+            current_cart={"destination_id": "turkey", "destination": "Турция"},
+            current_state="OFFER_PRESENTED"
+        )
+        dest_turkey = {
+            "id": "turkey",
+            "name": "Турция (Анталья + Стамбул)",
+            "country": "Турция",
+            "climate_summary": "Средиземноморье",
+            "score": 1.0
+        }
+        h_ayt = sample_hotel("h_ayt", "Antalya Beach Resort", "Анталья", 6000)
+        h_ist = sample_hotel("h_ist", "Bosphorus Palace Hotel", "Стамбул", 8500)
+        logistics = make_logistics(dest="AYT")
+        mock_graph_flight = {
+            "flight_no": "TK-2415",
+            "airline": "Turkish Airlines",
+            "departure_time": "11:30",
+            "arrival_time": "12:45",
+            "duration_minutes": 75,
+            "price_rub": 3800
+        }
+
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(AgentService, "get_or_create_session", new=AsyncMock(return_value=user)))
+            stack.enter_context(patch.object(AgentService, "search_destinations_vector", new=AsyncMock(return_value=[dest_turkey])))
+            stack.enter_context(patch.object(AgentService, "_save_session", new_callable=AsyncMock))
+
+            async def mock_compare_hotels(destination_id, city=None, **kwargs):
+                if city and "Анталь" in city:
+                    return {"compared_hotels": [h_ayt]}
+                return {"compared_hotels": [h_ist]}
+
+            stack.enter_context(patch.object(MCPTools, "compare_hotels", side_effect=mock_compare_hotels))
+            stack.enter_context(patch.object(MCPTools, "check_logistics_compatibility", new=AsyncMock(return_value=logistics)))
+            stack.enter_context(patch.object(MCPTools, "get_destination_risks", new=AsyncMock(return_value={})))
+            stack.enter_context(patch.object(MCPTools, "get_live_weather", new=AsyncMock(return_value={})))
+            stack.enter_context(patch.object(GraphService, "find_intercity_logistics", new=AsyncMock(return_value=mock_graph_flight)))
+
+            result = await AgentService.process_message("test-graph-flight", "составь тур по городам в Турцию")
+
+        self.assertIn("TK-2415", result["text"])
+        self.assertIn("подтверждён графом логистики Neo4j", result["text"])
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 import json
 import logging
 import re
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy import select, text
 
 from app.database import async_session_maker
@@ -12,6 +12,7 @@ from app.mcp.tools import MCPTools
 from app.services.trip_dates import update_trip_dates
 from app.services.trip_budget import update_trip_budget
 from app.services.llm_service import LLMService
+from app.services.graph_service import GraphService
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,8 @@ MULTI_CITY_CONFIG = {
         "title": "Турция (Анталья + Стамбул)",
         "country": "Турция",
         "climate": "Средиземноморское побережье и величие Босфора",
+        "tags": ["море", "пляж", "культура", "история", "босфор", "город у моря", "много городов у моря", "европа и азия", "архитектура", "шопинг"],
+        "selection_rationale": "По вашему запросу на тур по городам («{criteria}») идеально подходит связка Анталья + Стамбул: прямой перелёт между городами (1 ч 15 мин), объединяющий лазурные пляжи Средиземного моря и богатое культурное наследие Босфора.",
         "city_1": {
             "name": "Анталья",
             "nights_share": 0.55,
@@ -79,6 +82,8 @@ MULTI_CITY_CONFIG = {
         "title": "Сочи (Побережье + Красная Поляна)",
         "country": "Россия",
         "climate": "Субтропическое море и чистейший горный воздух Кавказа",
+        "tags": ["море", "пляж", "горы", "горный", "хайкинг", "спа", "природа", "море и горы", "горы и море", "лыжи", "активный отдых"],
+        "selection_rationale": "По вашему запросу («{criteria}») я подобрал связку Сочи (Сириус) + Красная Поляна: первые дни вы наслаждаетесь теплым морем и променадом Имеретинки, а затем за 45 минут на комфортабельной «Ласточке» перемещаетесь в горы на высоту 960–2200м для хайкинга и альпийского спа.",
         "city_1": {
             "name": "Сочи (Сириус / Побережье)",
             "nights_share": 0.55,
@@ -110,6 +115,8 @@ MULTI_CITY_CONFIG = {
         "title": "ОАЭ (Дубай + Абу-Даби)",
         "country": "ОАЭ",
         "climate": "Современные мегаполисы, Персидский залив и арабская роскошь",
+        "tags": ["небоскребы", "шопинг", "роскошь", "футуризм", "мегаполисы", "залив", "персидский залив", "парки развлечений", "лувр"],
+        "selection_rationale": "Для ценителей современного ритма и ярких впечатлений («{criteria}») идеально подходит связка Дубай + Абу-Даби: ультрасовременные небоскребы, шопинг мирового уровня, пляжи Персидского залива и шедевры Лувра Абу-Даби с комфортным экспресс-трансфером.",
         "city_1": {
             "name": "Дубай",
             "nights_share": 0.6,
@@ -141,6 +148,8 @@ MULTI_CITY_CONFIG = {
         "title": "Алтай (Горно-Алтайск + Чемал)",
         "country": "Россия",
         "climate": "Место силы, хвойные леса и бирюзовая река Катунь",
+        "tags": ["горы", "реки", "катунь", "природа", "места силы", "эко-туризм", "хвойные леса", "чистый воздух", "телецкое озеро", "чемал"],
+        "selection_rationale": "По вашему запросу на единение с природой («{criteria}») составлен живописный маршрут по Алтаю: Горно-Алтайск (Телецкое озеро) + Чемал вдоль бирюзовой Катуни с трансфером по легендарному Чуйскому тракту.",
         "city_1": {
             "name": "Горно-Алтайск / Майма",
             "nights_share": 0.45,
@@ -166,6 +175,105 @@ MULTI_CITY_CONFIG = {
             "duration": "1 ч 20 мин",
             "price_rub": 2500,
             "description": "Живописная поездка по легендарному Чуйскому тракту вдоль бурлящей реки Катунь."
+        }
+    },
+    "thailand": {
+        "title": "Таиланд (Пхукет: Патонг + Банг Тао)",
+        "country": "Таиланд",
+        "climate": "Тропическое Андаманское море, белоснежные пляжи и экзотика",
+        "tags": ["острова", "экзотика", "тропики", "джунгли", "море", "пляж", "буддизм", "дайвинг", "зимовка"],
+        "selection_rationale": "По вашему запросу на тропическую экзотику («{criteria}») составлен тур по Таиланду: яркий динамичный Патонг/Ката и уединенные белоснежные пляжи Банг Тао с панорамными закатами.",
+        "city_1": {
+            "name": "Патонг (Пхукет)",
+            "nights_share": 0.55,
+            "vibe": "активная жизнь, лазурные пляжи и катамараны на острова",
+            "activities": "пляжный отдых, морские прогулки на спидботах к островам, тайский стрит-фуд и ночные рынки",
+            "airport": "HKT",
+            "weather": "Сегодня: +31°C (море +29°C), солнце, легкий бриз."
+        },
+        "city_2": {
+            "name": "Банг Тао (Пхукет)",
+            "nights_share": 0.45,
+            "vibe": "респектабельный уединенный релакс, лагуны и спа",
+            "activities": "белоснежная песчаная коса Банг Тао, спа-центры мирового уровня, вечерний релакс в бич-клабах",
+            "airport": "HKT",
+            "weather": "Сегодня: +30°C, тропическая идиллия, штиль."
+        },
+        "intercity": {
+            "type": "transfer",
+            "name": "Премиум-трансфер по побережью Пхукета",
+            "operator": "Phuket Shuttle Express",
+            "departure": "11:00",
+            "arrival": "11:50",
+            "duration": "50 мин",
+            "price_rub": 2200,
+            "description": "Комфортный трансфер на кондиционированном авто вдоль живописного побережья острова."
+        }
+    },
+    "spb": {
+        "title": "Санкт-Петербург (Исторический центр + Петергоф)",
+        "country": "Россия",
+        "climate": "Северная Венеция, парадные набережные и царские резиденции",
+        "tags": ["культура", "архитектура", "музеи", "эрмитаж", "дворцы", "фонтаны", "каналы", "театры", "северная столица", "европейская классика"],
+        "selection_rationale": "По вашему запросу на культурное путешествие («{criteria}») составлен классический маршрут: исторический центр Петербурга (каналы, театры, Эрмитаж) и царский Петергоф со скоростным «Метеором» по Финскому заливу.",
+        "city_1": {
+            "name": "Санкт-Петербург (Центр)",
+            "nights_share": 0.6,
+            "vibe": "Эрмитаж, набережные Невы, Мариинский театр и крыши",
+            "activities": "прогулка на катере по рекам и каналам, экскурсия в Эрмитаж и Спас на Крови, авторские гастробары",
+            "airport": "LED",
+            "weather": "Сегодня: +11°C, лёгкий морской бриз, переменная облачность."
+        },
+        "city_2": {
+            "name": "Петергоф",
+            "nights_share": 0.4,
+            "vibe": "фонтаны, царские парки и дворцовый шик",
+            "activities": "Большой Петергофский каскад, парк Александрия, дворец Монплезир и прогулки вдоль залива",
+            "airport": "LED",
+            "weather": "Сегодня: +12°C, свежий морской воздух, ясно."
+        },
+        "intercity": {
+            "type": "boat",
+            "name": "Скоростной теплоход «Метеор» по Финскому заливу",
+            "operator": "Петергоф Экспресс",
+            "departure": "10:30",
+            "arrival": "11:05",
+            "duration": "35 мин",
+            "price_rub": 1400,
+            "description": "Захватывающая поездка на подводных крыльях из самого центра Петербурга (причал у Эрмитажа) прямо к Нижнему парку Петергофа."
+        }
+    },
+    "egypt": {
+        "title": "Египет (Шарм-эль-Шейх: Наама Бей + Хадаба)",
+        "country": "Египет",
+        "climate": "Круглогодичное Красное море, коралловые сады и Синайская пустыня",
+        "tags": ["море", "пляж", "кораллы", "рифы", "дайвинг", "снорклинг", "рыбки", "красное море", "пустыня", "all-inclusive"],
+        "selection_rationale": "По вашему запросу на теплое море и кораллы («{criteria}») подобран комбинированный отдых в Египте: пляжный отдых и променад в Наама Бей + лучшие рифы Хадабы для снорклинга.",
+        "city_1": {
+            "name": "Шарм-эль-Шейх (Наама Бей)",
+            "nights_share": 0.5,
+            "vibe": "променад, восточные базары и пляжи с песчаным заходом",
+            "activities": "вечерний променад Наама Бей, кальяны и бедуинский чай, шоппинг и рестораны морепродуктов",
+            "airport": "SSH",
+            "weather": "Сегодня: +29°C (вода +27°C), солнечно, штиль."
+        },
+        "city_2": {
+            "name": "Шарм (Хадаба)",
+            "nights_share": 0.5,
+            "vibe": "заповедные коралловые рифы Рас-Мохаммед и дайвинг",
+            "activities": "снорклинг прямо у отельного рифа, дайв-сафари к затонувшим кораблям, сафари на квадроциклах на закате",
+            "airport": "SSH",
+            "weather": "Сегодня: +28°C (вода +27°C), кристальная видимость в море."
+        },
+        "intercity": {
+            "type": "transfer",
+            "name": "Видовой экспресс-трансфер по Синайскому побережью",
+            "operator": "Red Sea Express",
+            "departure": "11:30",
+            "arrival": "12:00",
+            "duration": "30 мин",
+            "price_rub": 1200,
+            "description": "Быстрый кондиционированный трансфер между районами с панорамой Синайских гор."
         }
     }
 }
@@ -286,7 +394,12 @@ class AgentService:
             ("сочи" in user_lower and ("полян" in user_lower or "сириус" in user_lower)) or
             ("дуба" in user_lower and ("абу-даби" in user_lower or "абу даби" in user_lower)) or
             ("алтай" in user_lower and ("чемал" in user_lower or "манжерок" in user_lower)) or
-            ("гор" in user_lower and ("побереж" in user_lower or "море" in user_lower or "морск" in user_lower or "пляж" in user_lower))
+            ("пхукет" in user_lower and ("краби" in user_lower or "банг тао" in user_lower or "остров" in user_lower)) or
+            ("петербург" in user_lower and "петергоф" in user_lower) or
+            ("шарм" in user_lower and ("дахаб" in user_lower or "хадаб" in user_lower)) or
+            ("гор" in user_lower and ("побереж" in user_lower or "море" in user_lower or "морск" in user_lower or "пляж" in user_lower)) or
+            ("море" in user_lower and ("культур" in user_lower or "босфор" in user_lower or "истори" in user_lower)) or
+            ("шопинг" in user_lower and "небоскреб" in user_lower)
         )
         is_multi_city_regex = bool(re.search(
             r"(?:по\s+(?:нескольк\w*\s+)?город\w*|нескольк\w*\s+(?:город\w*|курорт\w*)|мног\w*\s+город\w*|разн\w*\s+город\w*|комбинир\w*|составн\w*\s+(?:тур\w*|маршрут\w*)|комбо[- ]тур\w*)",
@@ -458,6 +571,107 @@ class AgentService:
             ]
 
     @staticmethod
+    def select_multi_city_route(
+        user_message: str,
+        profile: Dict[str, Any],
+        current_dest_id: Optional[str] = None
+    ) -> Tuple[Optional[str], Optional[Dict[str, Any]], Optional[str]]:
+        """
+        Интеллектуальный параметрический подбор связки городов и маршрута мульти-городского тура.
+        Анализирует параметры запроса (климат, пляж/горы, культура/шопинг, природа, ограничения),
+        проверяет связки и генерирует персональное обоснование выбора.
+        """
+        user_lower = user_message.lower()
+        interests = [str(x).lower() for x in profile.get("interests", [])]
+        budget_limit = profile.get("budget_limit")
+        domestic_only = profile.get("domestic_only", False) or any(w in user_lower for w in ["росси", "по рф", "без загран", "внутри страны"])
+
+        scores: Dict[str, float] = {k: 0.0 for k in MULTI_CITY_CONFIG}
+        matched_reasons: Dict[str, str] = {}
+
+        # 1. Прямые упоминания городов или стран (наивысший приоритет)
+        geo_keywords = {
+            "turkey": ["турци", "анталь", "стамбул", "босфор"],
+            "sochi": ["сочи", "сириус", "полян", "адлер", "имеретинк"],
+            "uae": ["дуба", "абу-даби", "абу даби", "оаэ", "эмират"],
+            "altai": ["алтай", "чемал", "манжерок", "катунь", "майма", "горно-алтайск"],
+            "thailand": ["тайланд", "таиланд", "пхукет", "краби", "патонг", "банг тао"],
+            "spb": ["петербург", "питер", "спб", "петергоф", "эрмитаж", "царское село"],
+            "egypt": ["египет", "шарм", "дахаб", "наама", "хадаб"]
+        }
+        for dest_key, kws in geo_keywords.items():
+            if any(kw in user_lower for kw in kws):
+                scores[dest_key] += 60.0
+                matched_reasons[dest_key] = "указанный вами маршрут"
+
+        # 2. Параметрический анализ связок (вайб, специфика сочетания городов)
+        has_sea = any(w in user_lower for w in ["море", "пляж", "морск", "побереж", "купат"]) or any("sea" in i or "beach" in i for i in interests)
+        has_mountains = any(w in user_lower for w in ["гор", "хайкинг", "канатк", "лыж", "полян", "вершин", "альпийск"]) or any("mountain" in i for i in interests)
+        if has_sea and has_mountains:
+            scores["sochi"] += 45.0
+            matched_reasons["sochi"] = "сочетание теплого моря и горных панорам"
+
+        has_culture = any(w in user_lower for w in ["культур", "истори", "архитектур", "босфор", "старый город", "достопримечательн", "экскурси"]) or any("culture" in i for i in interests)
+        if has_sea and has_culture:
+            scores["turkey"] += 40.0
+            matched_reasons["turkey"] = "сочетание средиземноморского пляжа и богатейшей культуры"
+        if any(w in user_lower for w in ["много городов у моря", "города у моря", "несколько городов у моря"]):
+            scores["turkey"] += 35.0
+            matched_reasons["turkey"] = "маршрут по приморским городам"
+
+        has_shopping = any(w in user_lower for w in ["шопинг", "шоппинг", "небоскреб", "молл", "роскош", "футуризм", "мегаполис"]) or any("shopping" in i for i in interests)
+        if has_shopping:
+            scores["uae"] += 40.0
+            matched_reasons["uae"] = "футуристические мегаполисы, шопинг и роскошный отдых"
+
+        has_nature_wild = any(w in user_lower for w in ["природ", "река", "реки", "катунь", "кедр", "места силы", "эко", "чистый воздух", "озер"]) or any("nature" in i for i in interests)
+        if has_nature_wild and not has_sea:
+            scores["altai"] += 40.0
+            matched_reasons["altai"] = "первозданная природа, бирюзовые реки и хвойный воздух"
+
+        has_palaces = any(w in user_lower for w in ["дворц", "музе", "эрмитаж", "фонтан", "канал", "театр", "северная столица"])
+        if has_palaces:
+            scores["spb"] += 40.0
+            matched_reasons["spb"] = "классическая архитектура, шедевры Эрмитажа и дворцовые парки"
+
+        has_corals = any(w in user_lower for w in ["коралл", "риф", "дайвинг", "снорклинг", "рыбк", "подводн", "красное море"])
+        if has_corals:
+            scores["egypt"] += 45.0
+            matched_reasons["egypt"] = "живые коралловые рифы и теплейшее Красное море"
+
+        has_exotic = any(w in user_lower for w in ["остров", "острова", "экзотик", "джунгл", "тропик", "спидбот", "буддизм"])
+        if has_exotic:
+            scores["thailand"] += 40.0
+            matched_reasons["thailand"] = "тропические пляжи, острова и экзотическая атмосфера"
+
+        # 3. Фильтрация и веса ограничений (Бюджет и Domestic)
+        if domestic_only:
+            for foreign_key in ["turkey", "uae", "thailand", "egypt"]:
+                scores[foreign_key] -= 100.0
+
+        if budget_limit and budget_limit < 90000:
+            scores["sochi"] += 15.0
+            scores["spb"] += 15.0
+            scores["altai"] += 10.0
+            scores["thailand"] -= 20.0
+            scores["uae"] -= 20.0
+
+        # Преемственность текущего региона, если он уже был выбран
+        if current_dest_id and current_dest_id in scores:
+            scores[current_dest_id] += 5.0
+
+        best_dest = max(scores, key=scores.get)
+        if scores[best_dest] <= 0 and not current_dest_id:
+            best_dest = "turkey"
+
+        best_cfg = MULTI_CITY_CONFIG.get(best_dest, MULTI_CITY_CONFIG["turkey"])
+        criteria_reason = matched_reasons.get(best_dest, "ваши пожелания к комбинированному маршруту")
+        template = best_cfg.get("selection_rationale", "Собрал для вас готовый комбинированный тур «{title}» под ключ с логистикой между городами, отелями и расчётом полной стоимости:")
+        rationale = template.format(criteria=criteria_reason, title=best_cfg["title"])
+
+        return best_dest, best_cfg, rationale
+
+    @staticmethod
     async def assemble_multi_city_itinerary(
         dest_id: str,
         top_dest: Dict[str, Any],
@@ -469,12 +683,13 @@ class AgentService:
         message: str,
         is_replan_flight_day: bool,
         is_replan_flight_later: bool,
-        session_obj: Any
+        session_obj: Any,
+        selection_rationale: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Формирует полноценный комбинированный маршрут тура по нескольким городам (Multi-City Tour).
         Подбирает проживание в обоих ключевых городах региона, рассчитывает межгородскую логистику
-        (внутренний авиарейс, поезд «Ласточка» или комфорт-трансфер) и международные авиаперелёты.
+        (внутренний авиарейс через Neo4j, поезд «Ласточка» или комфорт-трансфер) и международные авиаперелёты.
         """
         cfg = MULTI_CITY_CONFIG.get(dest_id, MULTI_CITY_CONFIG["turkey"])
         nights_1 = max(1, int(round(nights * cfg["city_1"]["nights_share"])))
@@ -541,7 +756,25 @@ class AgentService:
             flight_time_pref=profile.get("flight_time_pref")
         )
         outbound_flight = logistics_1.get("flight", {})
-        intercity = cfg["intercity"]
+
+        # Проверяем в графе Neo4j наличие прямого межгородского транспортного ребра
+        graph_intercity = await GraphService.find_intercity_logistics(
+            cfg["city_1"]["airport"],
+            cfg["city_2"]["airport"]
+        )
+        if graph_intercity:
+            intercity = {
+                "type": "flight",
+                "name": f"Внутренний авиарейс {graph_intercity.get('flight_no', 'TK-2415')} {cfg['city_1']['airport']} ➔ {cfg['city_2']['airport']}",
+                "operator": graph_intercity.get("airline", "Turkish Airlines"),
+                "departure": graph_intercity.get("departure_time", "11:30"),
+                "arrival": graph_intercity.get("arrival_time", "12:45"),
+                "duration": f"{graph_intercity.get('duration_minutes', 75)} мин",
+                "price_rub": graph_intercity.get("price_rub", 3800),
+                "description": f"Прямой авиаперелёт {graph_intercity.get('airline')} ({graph_intercity.get('flight_no')}) между городами подтверждён графом логистики Neo4j."
+            }
+        else:
+            intercity = cfg["intercity"]
 
         ret_fl = outbound_flight.get("return_flight", {})
         ret_airline = ret_fl.get("airline", outbound_flight.get("airline", "Аэрофлот"))
@@ -566,7 +799,7 @@ class AgentService:
 
         # 4. Формирование ответа
         response_lines = []
-        ai_intro = profile.pop("llm_ai_intro", None)
+        ai_intro = profile.pop("llm_ai_intro", None) or selection_rationale
         out_dep = outbound_flight.get("departure_time", "13:40")
         if not ai_intro:
             if is_replan_flight_day:
@@ -958,7 +1191,7 @@ class AgentService:
             if cur_matched:
                 msg_top_dest = cur_matched[0]
 
-        if current_dest_id and not explicit_dest_change and (is_replan_hotel or is_replan_cheaper or is_replan_flight or is_replan_transfer or is_replan_dates or budget_changed or profile.get("is_multi_city")):
+        if current_dest_id and not explicit_dest_change and not profile.get("is_multi_city") and (is_replan_hotel or is_replan_cheaper or is_replan_flight or is_replan_transfer or is_replan_dates or budget_changed):
             # Контекстное перепланирование в рамках текущего города/курорта!
             dest_id = current_dest_id
             cur_matched = await AgentService.search_destinations_vector(dest_id, limit=1)
@@ -990,8 +1223,21 @@ class AgentService:
         cart["destination_id"] = dest_id
         cart["destination"] = dest_name
 
-        # Пункт: Мульти-городской тур (Multi-City Itinerary)
+        # Пункт: Мульти-городской тур (Multi-City Itinerary с динамическим подбором связок городов)
         if profile.get("is_multi_city"):
+            selected_dest, selected_cfg, rationale = AgentService.select_multi_city_route(
+                user_message=message,
+                profile=profile,
+                current_dest_id=current_dest_id or dest_id
+            )
+            if selected_dest:
+                dest_id = selected_dest
+                dest_name = selected_cfg["title"]
+                cart["destination_id"] = dest_id
+                cart["destination"] = dest_name
+                cur_matched = await AgentService.search_destinations_vector(dest_id, limit=1)
+                top_dest = cur_matched[0] if cur_matched else {"id": dest_id, "name": dest_name, "climate_summary": ""}
+
             return await AgentService.assemble_multi_city_itinerary(
                 dest_id=dest_id,
                 top_dest=top_dest,
@@ -1003,7 +1249,8 @@ class AgentService:
                 message=message,
                 is_replan_flight_day=is_replan_flight_day,
                 is_replan_flight_later=is_replan_flight_later,
-                session_obj=session_obj
+                session_obj=session_obj,
+                selection_rationale=rationale
             )
 
         # 5. Обработка смены отеля (Добавление текущего в rejected_hotels)
