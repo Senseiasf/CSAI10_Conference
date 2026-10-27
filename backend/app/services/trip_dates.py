@@ -71,6 +71,8 @@ def update_trip_dates(message: str, profile: dict, cart: dict | None = None) -> 
             y_num = int(y_str) if y_str else date.today().year
             try:
                 start = date(y_num, m_num, int(d1))
+                if y_str is None and start < date.today():
+                    start = date(y_num + 1, m_num, int(d1))
                 end_day = int(d2)
                 if end_day > int(d1):
                     profile["nights"] = end_day - int(d1)
@@ -96,12 +98,35 @@ def update_trip_dates(message: str, profile: dict, cart: dict | None = None) -> 
             except ValueError:
                 return "Такой даты нет в календаре. Укажите дату заезда в формате ДД.ММ.ГГГГ."
         else:
-            if re.search(r"\b(?:январ|феврал|март|апрел|ма[йея]|июн|июл|август|сентябр|октябр|ноябр|декабр)\w*", text):
-                return "На какую дату планируем заезд? Укажите её в формате ДД.ММ.ГГГГ."
-            is_flight_time = any(w in text for w in ("вылет", "самолет", "самолёт", "рейс", "утр", "вечер", "в 6", "в 7", "время", "попозже", "пораньше")) and not any(w in text for w in ("дату", "даты", "заезд", "выезд", "дня позже", "дней позже", "дня раньше", "дней раньше", "сдвинь поездку", "сдвинь даты"))
-            if not is_flight_time and any(w in text for w in ("позже", "раньше", "сдвинь", "другие даты")):
-                return "Укажите новую дату заезда (ДД.ММ.ГГГГ) или на сколько дней сдвинуть поездку."
-            start = date.fromisoformat(profile["checkin_date"]) if profile.get("checkin_date") else None
+            month_match = re.search(r"\b(январ|феврал|март|апрел|ма[йея]|июн|июл|август|сентябр|октябр|ноябр|декабр)\w*", text)
+            if month_match:
+                # Если сообщение является коротким вопросом-уточнением к уже собранному туру
+                is_short_clarification = (
+                    len(text.split()) <= 5
+                    and profile.get("checkin_date") is not None
+                    and not any(k in text.lower() for k in ["тур", "отель", "сочи", "турци", "пхукет", "тай", "оаэ", "египет", "мальдив", "питер", "алтай", "грузи"])
+                    and not re.search(r"\b\d+\s*(?:ноч|дн)", text)
+                )
+                if is_short_clarification:
+                    return "На какую дату планируем заезд? Укажите её в формате ДД.ММ.ГГГГ."
+                else:
+                    m_prefix = month_match.group(1)
+                    m_num = next((v for k, v in RU_MONTHS.items() if m_prefix.startswith(k)), None)
+                    if m_num:
+                        y_num = date.today().year
+                        try:
+                            start = date(y_num, m_num, 15)
+                            if start < date.today():
+                                start = date(y_num + 1, m_num, 15)
+                        except ValueError:
+                            return "Такой даты нет в календаре. Укажите дату заезда в формате ДД.ММ.ГГГГ."
+                    else:
+                        return "На какую дату планируем заезд? Укажите её в формате ДД.ММ.ГГГГ."
+            else:
+                is_flight_time = any(w in text for w in ("вылет", "самолет", "самолёт", "рейс", "утр", "вечер", "в 6", "в 7", "время", "попозже", "пораньше")) and not any(w in text for w in ("дату", "даты", "заезд", "выезд", "дня позже", "дней позже", "дня раньше", "дней раньше", "сдвинь поездку", "сдвинь даты"))
+                if not is_flight_time and any(w in text for w in ("позже", "раньше", "сдвинь", "другие даты")):
+                    return "Укажите новую дату заезда (ДД.ММ.ГГГГ) или на сколько дней сдвинуть поездку."
+                start = date.fromisoformat(profile["checkin_date"]) if profile.get("checkin_date") else None
 
     # A relative date shift must not change the length of the stay.
     if not shift:

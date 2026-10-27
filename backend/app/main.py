@@ -200,6 +200,33 @@ async def api_chat_stream(req: ChatRequest, request: Request, response: Response
     )
 
 
+@app.post("/api/session/reset")
+async def api_session_reset(request: Request, response: Response):
+    """Сброс сессии пользователя, корзины и профиля к начальному состоянию."""
+    cookie = request.cookies.get("ostrovok_session", "")
+    try:
+        session_id = str(UUID(cookie))
+    except ValueError:
+        session_id = str(uuid4())
+    user_id = f"web:{session_id}"
+    response.set_cookie(
+        "ostrovok_session", session_id, httponly=True, samesite="lax",
+        secure=request.url.scheme == "https", max_age=60 * 60 * 24 * 30,
+    )
+    async with async_session_maker() as session:
+        res = await session.execute(
+            select(UserSessionModel).where(UserSessionModel.user_id == user_id)
+        )
+        user_session = res.scalar_one_or_none()
+        if user_session:
+            user_session.profile_json = {}
+            user_session.current_cart_json = {}
+            user_session.current_state = "INSPIRATION"
+            user_session.conversation_history = []
+            await session.commit()
+    return {"status": "ok", "message": "Сессия успешно сброшена"}
+
+
 class ExportCalendarRequest(BaseModel):
     cart: Optional[Dict[str, Any]] = None
     booking_id: Optional[str] = None

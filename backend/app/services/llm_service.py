@@ -18,17 +18,17 @@ LLM_TOOLS = [
                 "properties": {
                     "destination_id": {
                         "type": "string",
-                        "enum": ["sochi", "uae", "turkey", "thailand", "maldives", "egypt", "spb", "altai"],
-                        "description": "ID направления из базы: sochi (Сочи, Красная Поляна), uae (ОАЭ, Дубай), turkey (Турция, Анталья, Стамбул), thailand (Таиланд, Пхукет), maldives (Мальдивы), egypt (Египет, Шарм), spb (Санкт-Петербург), altai (Алтай). Если пользователь просит заграницу — выбирай из uae, turkey, thailand, maldives, egypt!"
+                        "enum": ["sochi", "uae", "turkey", "thailand", "maldives", "egypt", "spb", "altai", "georgia"],
+                        "description": "ID направления из базы: sochi (Сочи, Красная Поляна), uae (ОАЭ, Дубай), turkey (Турция, Анталья, Стамбул), thailand (Таиланд, Пхукет), maldives (Мальдивы), egypt (Египет, Шарм), spb (Санкт-Петербург), altai (Алтай), georgia (Грузия, Тбилиси, Гудаури, Казбеги). Если пользователь просит заграницу — выбирай из uae, turkey, thailand, maldives, egypt, georgia!"
                     },
                     "destination_query": {
                         "type": "string",
-                        "description": "Текстовое название направления или желаемый вайб (напр: 'Сочи', 'Дубай', 'Анталья', 'Стамбул', 'Пхукет', 'Мальдивы', 'Египет', 'Санкт-Петербург', 'Алтай', 'море с кораллами', 'горы и спа')"
+                        "description": "Текстовое название направления или желаемый вайб (напр: 'Сочи', 'Дубай', 'Анталья', 'Стамбул', 'Пхукет', 'Мальдивы', 'Египет', 'Санкт-Петербург', 'Алтай', 'Грузия', 'Тбилиси', 'Гудаури', 'море с кораллами', 'горы и спа')"
                     },
                     "origin_airport": {
                         "type": "string",
-                        "enum": ["SVO", "VKO", "DME", "LED", "AER", "RGK", "DXB", "IST", "AYT", "MLE", "SSH"],
-                        "description": "IATA-код аэропорта вылета. Модель определяет автоматически: из Питера/Пулково -> LED, из Сочи/Адлера -> AER, из Москвы -> SVO, с Алтая/Горно-Алтайска -> RGK, из Дубая -> DXB, из Стамбула -> IST."
+                        "enum": ["SVO", "VKO", "DME", "LED", "AER", "RGK", "DXB", "DWC", "AUH", "IST", "AYT", "GZP", "DLM", "HKT", "BKK", "USM", "URT", "MLE", "SSH", "HRG", "TBS", "BUS"],
+                        "description": "IATA-код аэропорта вылета. Модель определяет автоматически: из Питера/Пулково -> LED, из Сочи/Адлера -> AER, из Москвы -> SVO, с Алтая/Горно-Алтайска -> RGK, из Дубая -> DXB/DWC, из Стамбула -> IST, из Тбилиси -> TBS, из Батуми -> BUS."
                     },
                     "flight_time_pref": {
                         "type": "string",
@@ -87,10 +87,10 @@ LLM_TOOLS = [
                     },
                     "unknown_destination": {
                         "type": "object",
-                        "description": "Заполняй, если пользователь запрашивает направление вне нашей пилотной базы из 8 городов (например: Бали, Париж, Рим, Куба, Кипр, Греция, Токио, Занзибар, Грузия и т.д.). Предложи лучшее направление из нашего каталога (sochi, uae, turkey, thailand, maldives, egypt, spb, altai).",
+                        "description": "Заполняй, если пользователь запрашивает направление вне нашей пилотной базы из 9 направлений (например: Бали, Париж, Рим, Куба, Кипр, Греция, Токио, Занзибар и т.д.). Предложи лучшее направление из нашего каталога (sochi, uae, turkey, thailand, maldives, egypt, spb, altai, georgia).",
                         "properties": {
                             "requested_name": {"type": "string", "description": "Название запрошенного места"},
-                            "suggested_pilot_id": {"type": "string", "enum": ["sochi", "uae", "turkey", "thailand", "maldives", "egypt", "spb", "altai"]},
+                            "suggested_pilot_id": {"type": "string", "enum": ["sochi", "uae", "turkey", "thailand", "maldives", "egypt", "spb", "altai", "georgia"]},
                             "suggested_pilot_name": {"type": "string", "description": "Название альтернативного направления из базы"},
                             "vibe_reason": {"type": "string", "description": "Почему это направление отлично подходит по атмосфере и впечатлениям"}
                         }
@@ -121,7 +121,7 @@ LLM_TOOLS = [
                     },
                     "suggested_destination": {
                         "type": "string",
-                        "description": "Рекомендуемое направление из нашего каталога (sochi, uae, turkey, thailand, maldives, egypt, spb, altai), если применимо"
+                        "description": "Рекомендуемое направление из нашего каталога (sochi, uae, turkey, thailand, maldives, egypt, spb, altai, georgia), если применимо"
                     }
                 },
                 "required": ["answer"]
@@ -156,14 +156,34 @@ def resolve_origin_airport(origin_str: Optional[str]) -> Optional[str]:
         return "AER"
     if any(k in s for k in ["алтай", "горно-алтайск", "rgk"]):
         return "RGK"
+    if any(k in s for k in ["аль-мактум", "dwc"]):
+        return "DWC"
+    if any(k in s for k in ["абу-даби", "абу даби", "auh"]):
+        return "AUH"
     if any(k in s for k in ["дубай", "оаэ", "dxb"]):
         return "DXB"
     if any(k in s for k in ["стамбул", "ist"]):
         return "IST"
+    if any(k in s for k in ["газипаш", "алань", "gzp"]):
+        return "GZP"
+    if any(k in s for k in ["даламан", "каш", "dlm"]):
+        return "DLM"
     if any(k in s for k in ["анталья", "ayt"]):
         return "AYT"
+    if any(k in s for k in ["бангкок", "суварнабхуми", "bkk"]):
+        return "BKK"
+    if any(k in s for k in ["самуи", "usm"]):
+        return "USM"
+    if any(k in s for k in ["сураттхани", "urt"]):
+        return "URT"
+    if any(k in s for k in ["тбилиси", "tbs"]):
+        return "TBS"
+    if any(k in s for k in ["батуми", "bus"]):
+        return "BUS"
     if any(k in s for k in ["мале", "мальдив", "mle"]):
         return "MLE"
+    if any(k in s for k in ["хургад", "hrg"]):
+        return "HRG"
     if any(k in s for k in ["шарм", "египет", "ssh"]):
         return "SSH"
     if any(k in s for k in ["шереметьево", "svo"]):
@@ -244,12 +264,12 @@ class LLMService:
             "   - Определяй время вылета: 'днем', 'в обед', 'не в 6 утра, а днем' -> flight_time_pref='day'; 'не ни свет ни заря', 'попозже', 'выспаться', 'не в 6 утра' -> flight_time_pref='later'; 'утром' -> 'morning'; 'вечером' -> 'evening'.\n"
             "   - Определяй комбинированный тур: 'тур по городам', 'много городов у моря', 'несколько городов', 'комбинированный тур', 'Анталья и Стамбул', 'Сочи и Красная Поляна' -> is_multi_city=True. Для обычных туров — строго False!\n"
             "   - Определяй географию: 'за границу', 'за бугор', 'за рубеж', 'не в РФ' -> geography='abroad'; 'по России' -> 'domestic'.\n"
-            "   - Если турист называет город/страну вне нашего каталога (Бали, Рим, Париж, Кипр, Греция, Токио, Занзибар, Грузия, Норвегия и т.д.) — обязательно заполни 'unknown_destination' с лучшей альтернативой из наших 8 направлений (sochi, uae, turkey, thailand, maldives, egypt, spb, altai) и кратким обоснованием vibe_reason.\n"
+            "   - Если турист называет город/страну вне нашего каталога (Бали, Рим, Париж, Кипр, Греция, Токио, Занзибар, Норвегия и т.д.) — обязательно заполни 'unknown_destination' с лучшей альтернативой из наших 9 направлений (sochi, uae, turkey, thailand, maldives, egypt, spb, altai, georgia) и кратким обоснованием vibe_reason.\n"
             "   - budget_rub: заполняй ТОЛЬКО если пользователь прямо назвал цифру или сумму бюджета. Если нет — ставь null!\n"
             "   - ai_reply_intro: 1-2 кратких живых предложения подтверждения пожеланий туриста. Должно строго соответствовать выбранному destination_id!\n"
             "2. 'consult_travel_inquiry' — если пользователь задает познавательный вопрос о визах, валюте, достопримечательностях, погоде или правилах, либо пишет широкий неопределенный запрос.\n"
             "3. 'confirm_cart_checkout' — если пользователь хочет забронировать / купить / подтвердить заказ.\n"
-            "Наш каталог направлений: Сочи (sochi), ОАЭ (uae), Турция (turkey), Таиланд (thailand), Мальдивы (maldives), Египет (egypt), Санкт-Петербург (spb), Алтай (altai)."
+            "Наш каталог направлений: Сочи (sochi), ОАЭ (uae), Турция (turkey), Таиланд (thailand), Мальдивы (maldives), Египет (egypt), Санкт-Петербург (spb), Алтай (altai), Грузия (georgia)."
         )
 
         messages: List[Dict[str, Any]] = [{"role": "system", "content": system_prompt}]
@@ -293,7 +313,7 @@ class LLMService:
                         orig_code = resolve_origin_airport(fn_args.get("origin_city_or_airport"))
 
                     dest_id = fn_args.get("destination_id")
-                    if dest_id and dest_id not in ("sochi", "uae", "turkey", "thailand", "maldives", "egypt", "spb", "altai"):
+                    if dest_id and dest_id not in ("sochi", "uae", "turkey", "thailand", "maldives", "egypt", "spb", "altai", "georgia"):
                         dest_id = None
 
                     return {
@@ -404,7 +424,7 @@ class LLMService:
     ) -> Optional[str]:
         """
         Отвечает на свободный вопрос туриста о путешествиях, визах, погоде, культуре или достопримечательностях,
-        аккуратно связывая ответ с нашими 8 ключевыми направлениями (Сочи, ОАЭ, Турция, Таиланд, Мальдивы, Египет, СПб, Алтай).
+        аккуратно связывая ответ с нашими 9 ключевыми направлениями (Сочи, ОАЭ, Турция, Таиланд, Мальдивы, Египет, СПб, Алтай, Грузия).
         """
         client = cls.get_client()
         if not client:
@@ -413,8 +433,8 @@ class LLMService:
         system_prompt = (
             "Ты — умный AI-консультант по туризму сервиса Ostrovok. "
             "Отвечай на вопросы пользователя вежливо, экспертно и лаконично. "
-            "Наш сервис умеет мгновенно бронировать под ключ 8 направлений: "
-            "Сочи, ОАЭ (Дубай), Турция (Анталья/Стамбул), Таиланд (Пхукет), Мальдивы, Египет, Санкт-Петербург и Алтай. "
+            "Наш сервис умеет мгновенно бронировать под ключ 9 направлений: "
+            "Сочи, ОАЭ (Дубай), Турция (Анталья/Стамбул), Таиланд (Пхукет), Мальдивы, Египет, Санкт-Петербург, Алтай и Грузия (Тбилиси/Гудаури/Казбеги). "
             "Дай точный ответ на вопрос и в конце ненавязчиво предложи рассчитать поездку с отелем, перелетом и трансфером."
         )
 

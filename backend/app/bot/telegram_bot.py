@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.enums import ParseMode
@@ -24,7 +25,10 @@ async def handle_start(message: types.Message):
         "Просто напишите мне, чего вам хочется. Например:\n"
         "_«Хочу к теплому морю в ноябре с ребенком и собакой, без долгого перелета»_"
     )
-    await message.answer(greeting, parse_mode=ParseMode.MARKDOWN)
+    try:
+        await message.answer(greeting, parse_mode=ParseMode.MARKDOWN)
+    except Exception:
+        await message.answer(greeting)
 
 
 @dp.message()
@@ -33,7 +37,16 @@ async def handle_user_query(message: types.Message):
     await message.bot.send_chat_action(chat_id=message.chat.id, action="typing")
     try:
         result = await AgentService.process_message(user_id=user_id, message=message.text)
-        await message.answer(result["text"], parse_mode=ParseMode.MARKDOWN)
+        raw_text = result.get("text", "")
+        # Вырезаем блок reasoning details из вывода
+        clean_text = re.sub(r"<details class=\"agent-reasoning\">[\s\S]*?</details>", "", raw_text).strip()
+        if len(clean_text) > 4000:
+            clean_text = clean_text[:3990] + "..."
+        try:
+            await message.answer(clean_text, parse_mode=ParseMode.MARKDOWN)
+        except Exception as parse_err:
+            logger.warning(f"Telegram parse_mode=MARKDOWN error: {parse_err}. Sending as plain text.")
+            await message.answer(clean_text)
     except Exception as e:
         logger.error(f"Error handling Telegram message: {e}", exc_info=True)
         await message.answer("Произошла ошибка при обработке запроса. Пожалуйста, попробуйте еще раз.")

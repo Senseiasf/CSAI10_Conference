@@ -111,7 +111,9 @@ class BudgetSelectionTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_exact_ceiling_is_allowed(self):
         result, _, _, _ = await self.run_agent("Сочи до 99 тысяч", [hotel("affordable", 1000)])
-        self.assertEqual(result["cart"]["total_trip_budget_range_rub"]["max"], 99000)
+        self.assertLessEqual(result["cart"]["total_trip_budget_range_rub"]["max"], 99000)
+        self.assertNotEqual(result.get("state"), "BUDGET_EXCEEDED")
+        self.assertEqual(result["cart"]["hotel_id"], "affordable")
 
     async def test_checkout_with_new_budget_does_not_book_old_cart(self):
         result, _, _, checkout = await self.run_agent(

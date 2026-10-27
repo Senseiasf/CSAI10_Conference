@@ -113,3 +113,88 @@ class AgentFixesTest(unittest.IsolatedAsyncioTestCase):
         result, _ = await self.run_agent("Сочи, готов раскошелиться, пятизвездочный люкс", hotels)
         self.assertEqual(result["cart"]["hotel_id"], "luxury")
         self.assertEqual(result["cart"]["hotel"], "Radisson Collection Luxury Palace")
+
+    def test_destinations_json_no_duplicate_ids_and_full_transfer_coverage(self):
+        """Block 1 & 6: destinations.json has 9 unique IDs, all hotels have airport transfers."""
+        import json
+        import os
+        dest_path = os.path.join(os.path.dirname(__file__), "..", "app", "data", "destinations.json")
+        with open(dest_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        destinations = data.get("destinations", [])
+        ids = [d["id"] for d in destinations]
+        self.assertEqual(len(ids), 9)
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertIn("georgia", ids)
+
+        for dest in destinations:
+            airport_codes = {a["code"] if isinstance(a, dict) else a for a in dest.get("airports", [])}
+            hotels = dest.get("hotels", [])
+            transfers = dest.get("transfers", [])
+
+            covered_hotels = {
+                t["to"] for t in transfers if t.get("from") in airport_codes
+            }
+            for hotel in hotels:
+                self.assertIn(
+                    hotel["id"],
+                    covered_hotels,
+                    f"Hotel {hotel['id']} in {dest['id']} lacks an airport transfer"
+                )
+
+    async def test_vague_greeting_sea_returns_inspiration_prompt_without_multi_city(self):
+        """Block 3 & 6: 'Хочу на море' returns INSPIRATION / clarification prompt without launching Multi-City."""
+        cart = {"destination_id": "turkey", "destination": "Турция (Анталья и Стамбул)", "is_multi_city": True}
+        profile = {"interests": ["mountains", "beach"], "is_multi_city": True}
+        user = SimpleNamespace(
+            profile=profile,
+            current_cart=cart,
+            current_state="PLANNED"
+        )
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(AgentService, "get_or_create_session", new=AsyncMock(return_value=user)))
+            stack.enter_context(patch.object(AgentService, "_save_session", new_callable=AsyncMock))
+            result = await AgentService.process_message("test_sea", "Хочу на море")
+
+        self.assertEqual(result["state"], "INSPIRATION_PROMPT")
+        self.assertFalse(result.get("cart", {}).get("is_multi_city", False))
+        self.assertFalse(user.profile.get("is_multi_city", False))
+        self.assertNotIn("Стамбул", result.get("text", ""))
+        self.assertNotIn("Красная Поляна", result.get("text", ""))
+
+    def test_month_without_day_plans_tour_on_15th(self):
+        """Block 4 & 6: 'Хочу в Турцию в ноябре на 7 ночей' sets checkin to 15th without blocking."""
+        from app.services.trip_dates import update_trip_dates
+        profile = {}
+        err = update_trip_dates("Хочу в Турцию в ноябре на 7 ночей", profile, {})
+        self.assertIsNone(err)
+        self.assertTrue(profile.get("checkin_date", "").endswith("-11-15"))
+        self.assertEqual(profile.get("nights"), 7)
+
+    def test_unified_pricing_math_between_base_and_flexible_dates(self):
+        """Block 4 & 6: calculate_real_trip_cost_by_date matches calculate_flexible_dates_options savings exactly."""
+        from datetime import date
+        from app.services.agent_service import AgentService
+        base_d_in = date(2026, 11, 14)
+        nights = 7
+        raw_flight_rt = 20000
+        hotel_base_price = 5000
+        fixed_costs = 2000
+
+        cur_calc = AgentService.calculate_real_trip_cost_by_date(
+            base_d_in, nights, raw_flight_rt, hotel_base_price, fixed_costs
+        )
+        flex_options = AgentService.calculate_flexible_dates_options(
+            dest_id="turkey",
+            base_mandatory_rub=cur_calc["total_mandatory"],
+            checkin_date_str=base_d_in.isoformat(),
+            nights=nights,
+            base_flight_price=raw_flight_rt,
+            base_hotel_price=hotel_base_price,
+            fixed_costs=fixed_costs
+        )
+        best_opt = flex_options[0]
+        expected_diff = cur_calc["total_mandatory"] - best_opt["target_mandatory_rub"]
+        self.assertEqual(expected_diff, best_opt["savings_rub"])
+

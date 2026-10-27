@@ -70,7 +70,8 @@ class GraphService:
                     await session.run(
                         """
                         MERGE (a:Airport {code: $code})
-                        SET a.name = $name, a.is_origin = false
+                        ON CREATE SET a.is_origin = false
+                        SET a.name = $name
                         WITH a
                         MATCH (c:City {id: $dest_id})
                         MERGE (a)-[:LOCATED_IN]->(c)
@@ -165,8 +166,10 @@ class GraphService:
                     )
 
                 # Связи трансферов (батчевая вставка через UNWIND)
-                transfers_batch = [
-                    {
+                airport_transfers_batch = []
+                interhotel_transfers_batch = []
+                for tr in dest.get("transfers", []):
+                    tr_item = {
                         "from_code": tr["from"],
                         "to_id": tr["to"],
                         "type": tr["type"],
@@ -174,9 +177,12 @@ class GraphService:
                         "duration": tr["duration_minutes"],
                         "price": tr["price_rub"]
                     }
-                    for tr in dest.get("transfers", [])
-                ]
-                if transfers_batch:
+                    if len(tr.get("from", "")) == 3 and tr["from"].isupper():
+                        airport_transfers_batch.append(tr_item)
+                    else:
+                        interhotel_transfers_batch.append(tr_item)
+
+                if airport_transfers_batch:
                     await session.run(
                         """
                         UNWIND $batch AS item
@@ -186,7 +192,20 @@ class GraphService:
                         SET r.duration_minutes = item.duration,
                             r.price_rub = item.price
                         """,
-                        batch=transfers_batch
+                        batch=airport_transfers_batch
+                    )
+
+                if interhotel_transfers_batch:
+                    await session.run(
+                        """
+                        UNWIND $batch AS item
+                        MATCH (h1:Hotel {id: item.from_code})
+                        MATCH (h2:Hotel {id: item.to_id})
+                        MERGE (h1)-[r:INTERHOTEL_TRANSFER_TO {type: item.type, name: item.name}]->(h2)
+                        SET r.duration_minutes = item.duration,
+                            r.price_rub = item.price
+                        """,
+                        batch=interhotel_transfers_batch
                     )
 
         logger.info("Neo4j graph seeded with airports, flights, hotels, and transfers.")
@@ -478,7 +497,7 @@ class GraphService:
 
             try:
                 dest_code = best.get("dest_code", "")
-                is_international = dest_code in ("DXB", "DWC", "AYT", "IST", "HKT", "MLE", "SSH")
+                is_international = dest_code in ("DXB", "DWC", "AUH", "AYT", "IST", "GZP", "DLM", "HKT", "BKK", "USM", "URT", "MLE", "SSH", "HRG", "TBS", "BUS")
                 
                 # Детализированный буфер после прилёта: высадка, паспортный контроль, выдача багажа на ленте, таможня
                 if is_international:
