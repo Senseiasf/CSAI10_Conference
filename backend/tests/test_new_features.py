@@ -111,6 +111,40 @@ class NewFeaturesTest(unittest.IsolatedAsyncioTestCase):
             self.assertIn("label", opt)
             self.assertIn("checkin_date", opt)
 
+    def test_flexible_dates_optimal_tuesday(self):
+        # 17 Nov 2026 is a Tuesday (cheapest day-of-week factor 0.88)
+        options = AgentService.calculate_flexible_dates_options(
+            dest_id="sochi",
+            base_mandatory_rub=70000,
+            checkin_date_str="2026-11-17",
+            nights=7
+        )
+        # On Tuesday, all candidate shifts (-2 Sun, -1 Mon, +1 Wed, +2 Thu) have higher tariffs, so savings <= 0
+        best_opt = options[0]
+        self.assertLessEqual(best_opt["savings_rub"], 0)
+
+    def test_answer_dates_comparison_grid(self):
+        cart = {
+            "destination_id": "sochi",
+            "destination": "Сочи",
+            "checkin_date": "2026-11-15",
+            "nights": 7,
+            "total_mandatory_rub": 68500
+        }
+        profile = {"destination_id": "sochi", "nights": 7, "checkin_date": "2026-11-15"}
+        
+        # Test trigger: 'реальные цены на соседние даты'
+        ans1 = AgentService.answer_dates_comparison("покажи реальные цены на соседние даты", profile, cart)
+        self.assertIsNotNone(ans1)
+        self.assertIn("Сравнение реальных тарифов на соседние даты", ans1)
+        self.assertIn("самый выгодный тариф", ans1)
+        self.assertIn("вторник", ans1)
+
+        # Test trigger: 'проверь самую дешевую поездку'
+        ans2 = AgentService.answer_dates_comparison("проверь самую дешевую поездку", profile, cart)
+        self.assertIsNotNone(ans2)
+        self.assertIn("Сравнение реальных тарифов на соседние даты", ans2)
+
     def test_api_compliance_endpoint(self):
         resp = self.client.get("/api/compliance/thailand")
         self.assertEqual(resp.status_code, 200)

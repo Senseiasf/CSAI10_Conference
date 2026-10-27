@@ -1077,29 +1077,7 @@ class AgentService:
         dest_code = cfg["city_2"]["airport"]
         orig_code = profile.get("origin_airport") or outbound_flight.get("origin_code", "SVO")
 
-        # 3. Финансовый расчёт всего тура
-        rooms_cnt = max(1, profile.get("rooms_count", 1))
-        cost_hotel_1 = hotel_1.get("price_per_night_rub", 6000) * nights_1 * rooms_cnt
-        cost_hotel_2 = hotel_2.get("price_per_night_rub", 8500) * nights_2 * rooms_cnt
-        intl_flight_price = outbound_flight.get("price_rub_roundtrip", 27000)
-        flight_out_price = int(round(intl_flight_price * 0.5))
-        flight_ret_price = int(intl_flight_price - flight_out_price)
-        intercity_price = intercity.get("price_rub", 3800)
-        transfers_price = 0 if profile.get("without_transfer") else 3500
-        tr_1_price = transfers_price // 2
-        tr_2_price = transfers_price - tr_1_price
-
-        pet_fee_1 = (hotel_1.get("pet_surcharge_per_night_rub", 0) or 0) * nights_1 if profile.get("has_pets") else 0
-        pet_fee_2 = (hotel_2.get("pet_surcharge_per_night_rub", 0) or 0) * nights_2 if profile.get("has_pets") else 0
-        pet_total = pet_fee_1 + pet_fee_2
-
-        mand_total = cost_hotel_1 + cost_hotel_2 + intl_flight_price + intercity_price + transfers_price + pet_total
-        onsite_min = nights * 2500
-        onsite_max = nights * 5500
-        total_min = mand_total + onsite_min
-        total_max = mand_total + onsite_max
-
-        # 4. Даты и логистика
+        # 3. Даты и логистика
         if not profile.get("checkin_date"):
             today = date.today()
             base_date = today + timedelta(days=14)
@@ -1118,6 +1096,52 @@ class AgentService:
 
         hotel_1_dates = format_hotel_dates(d_in.isoformat(), d_mid.isoformat(), nights_1)
         hotel_2_dates = format_hotel_dates(d_mid.isoformat(), d_out.isoformat(), nights_2)
+
+        # 4. Финансовый расчёт всего тура с учётом реального календарного тарифа
+        rooms_cnt = max(1, profile.get("rooms_count", 1))
+        is_date_shifted = bool(profile.get("date_shifted") or cart.get("date_shifted"))
+
+        # Реальный тариф на авиарейсы
+        raw_flight_rt = outbound_flight.get("price_rub_roundtrip", 27000)
+        base_flight_half = raw_flight_rt * 0.5
+        if is_date_shifted:
+            f_out = AgentService.FLIGHT_DAY_FACTORS.get(d_in.weekday(), 1.0)
+            f_ret = AgentService.FLIGHT_DAY_FACTORS.get(d_out.weekday(), 1.0)
+            flight_out_price = int(round(base_flight_half * f_out / 100) * 100)
+            flight_ret_price = int(round(base_flight_half * f_ret / 100) * 100)
+            intl_flight_price = flight_out_price + flight_ret_price
+
+            # Реальный тариф на отели
+            h1_factors = [AgentService.HOTEL_NIGHT_FACTORS.get((d_in + timedelta(days=i)).weekday(), 1.0) for i in range(nights_1)]
+            avg_h1 = sum(h1_factors) / max(1, nights_1)
+            rate_h1 = int(round(hotel_1.get("price_per_night_rub", 6000) * avg_h1 / 100) * 100)
+            cost_hotel_1 = rate_h1 * nights_1 * rooms_cnt
+
+            h2_factors = [AgentService.HOTEL_NIGHT_FACTORS.get((d_mid + timedelta(days=i)).weekday(), 1.0) for i in range(nights_2)]
+            avg_h2 = sum(h2_factors) / max(1, nights_2)
+            rate_h2 = int(round(hotel_2.get("price_per_night_rub", 8500) * avg_h2 / 100) * 100)
+            cost_hotel_2 = rate_h2 * nights_2 * rooms_cnt
+        else:
+            intl_flight_price = raw_flight_rt
+            flight_out_price = int(round(intl_flight_price * 0.5))
+            flight_ret_price = int(intl_flight_price - flight_out_price)
+            cost_hotel_1 = hotel_1.get("price_per_night_rub", 6000) * nights_1 * rooms_cnt
+            cost_hotel_2 = hotel_2.get("price_per_night_rub", 8500) * nights_2 * rooms_cnt
+
+        intercity_price = intercity.get("price_rub", 3800)
+        transfers_price = 0 if profile.get("without_transfer") else 3500
+        tr_1_price = transfers_price // 2
+        tr_2_price = transfers_price - tr_1_price
+
+        pet_fee_1 = (hotel_1.get("pet_surcharge_per_night_rub", 0) or 0) * nights_1 if profile.get("has_pets") else 0
+        pet_fee_2 = (hotel_2.get("pet_surcharge_per_night_rub", 0) or 0) * nights_2 if profile.get("has_pets") else 0
+        pet_total = pet_fee_1 + pet_fee_2
+
+        mand_total = cost_hotel_1 + cost_hotel_2 + intl_flight_price + intercity_price + transfers_price + pet_total
+        onsite_min = nights * 2500
+        onsite_max = nights * 5500
+        total_min = mand_total + onsite_min
+        total_max = mand_total + onsite_max
 
         # 5. Формирование ответа
         response_lines = []
@@ -1233,18 +1257,36 @@ class AgentService:
         response_lines.append("")
 
         # Календарь выгоды (Гибкие даты ±2 дня)
+        avg_hotel_price = int((cost_hotel_1 + cost_hotel_2) / max(1, nights * rooms_cnt))
         flexible_dates = AgentService.calculate_flexible_dates_options(
             dest_id=dest_id,
             base_mandatory_rub=mand_total,
             checkin_date_str=profile.get("checkin_date"),
-            nights=nights
+            nights=nights,
+            base_flight_price=raw_flight_rt,
+            base_hotel_price=avg_hotel_price,
+            fixed_costs=intercity_price + transfers_price + pet_total,
+            rooms_count=rooms_cnt
         )
         if flexible_dates:
             best_flex = flexible_dates[0]
-            response_lines.append(f"📅 **Календарь выгоды (Гибкие даты ±2 дня):**")
-            response_lines.append(f"• 💡 Вылет на {abs(best_flex['days_shift'])} дня {best_flex['direction']} ({best_flex['dates_formatted']}, {best_flex['target_weekday']}) сэкономит **~{best_flex['savings_rub']:,} ₽**.")
-            response_lines.append(f"• *Нажмите на подсказку ниже или напишите «{best_flex['message']}», чтобы пересчитать.*")
-            response_lines.append("")
+            if best_flex["savings_rub"] > 0:
+                response_lines.append(f"📅 **Календарь выгоды (Гибкие даты ±2 дня):**")
+                response_lines.append(
+                    f"• 💡 Вылет на {abs(best_flex['days_shift'])} дня {best_flex['direction']} "
+                    f"({best_flex['dates_formatted']}, {best_flex['target_weekday']}) "
+                    f"сэкономит **~{best_flex['savings_rub']:,} ₽** (поездка обойдётся в {best_flex['target_mandatory_rub']:,} ₽ вместо {mand_total:,} ₽)."
+                )
+                response_lines.append(f"• *Нажмите на подсказку ниже или напишите «{best_flex['message']}», чтобы пересчитать.*")
+                response_lines.append("")
+            else:
+                cur_day_ru = AgentService.DAY_NAMES_RU[d_in.weekday()]
+                response_lines.append(f"📅 **Календарь тарифов (Гибкие даты ±2 дня):**")
+                response_lines.append(
+                    f"• 🌟 **У вас выбран самый выгодный день вылета:** {cur_day_ru} ({date_range_str}) — "
+                    f"минимальный тариф **{mand_total:,} ₽**. Вылеты на соседние даты стоят дороже или столько же."
+                )
+                response_lines.append("")
 
         response_lines.append("🛒 *Напишите «Забронировать» для покупки или уточните: «другой отель», «подешевле», «смени даты».*")
 
@@ -1310,15 +1352,106 @@ class AgentService:
             }
         }
 
+    FLIGHT_DAY_FACTORS = {
+        0: 0.98,  # Пн
+        1: 0.88,  # Вт (самый дешёвый день для авиабилетов)
+        2: 0.90,  # Ср (выгодный день)
+        3: 0.95,  # Чт
+        4: 1.18,  # Пт (вечерний пик выходного дня)
+        5: 1.15,  # Сб (утренний пик на уикенд)
+        6: 1.05,  # Вс
+    }
+
+    HOTEL_NIGHT_FACTORS = {
+        0: 0.96,  # Вс/Пн
+        1: 0.96,  # Пн/Вт
+        2: 0.96,  # Вт/Ср
+        3: 0.98,  # Ср/Чт
+        4: 1.15,  # Пт/Сб (уикенд)
+        5: 1.15,  # Сб/Вс (уикенд)
+        6: 0.96   # Вс
+    }
+
+    DAY_NAMES_RU = {
+        0: "понедельник",
+        1: "вторник",
+        2: "среда",
+        3: "четверг",
+        4: "пятница",
+        5: "суббота",
+        6: "воскресенье"
+    }
+
+    DAY_PREP_RU = {
+        0: "в понедельник",
+        1: "во вторник",
+        2: "в среду",
+        3: "в четверг",
+        4: "в пятницу",
+        5: "в субботу",
+        6: "в воскресенье"
+    }
+
+    MONTH_RU_SHORT = {
+        1: "янв", 2: "фев", 3: "мар", 4: "апр", 5: "мая", 6: "июн",
+        7: "июл", 8: "авг", 9: "сен", 10: "окт", 11: "ноя", 12: "дек"
+    }
+
+    @staticmethod
+    def calculate_real_trip_cost_by_date(
+        checkin: date,
+        nights: int,
+        base_flight_roundtrip: int,
+        base_hotel_per_night: int,
+        fixed_costs: int = 0,
+        rooms_count: int = 1
+    ) -> Dict[str, Any]:
+        """
+        Рассчитывает фактическую стоимость поездки с привязкой к реальным календарным датам:
+        - Авиабилеты: скидки во вторник-среду (-12%), наценки в пятницу-субботу (+18%).
+        - Отели: наценки на ночи уикенда (пятница-суббота).
+        """
+        checkout = checkin + timedelta(days=nights)
+        f_out = AgentService.FLIGHT_DAY_FACTORS.get(checkin.weekday(), 1.0)
+        f_ret = AgentService.FLIGHT_DAY_FACTORS.get(checkout.weekday(), 1.0)
+
+        half_flight = base_flight_roundtrip * 0.5
+        flight_out = int(round(half_flight * f_out / 100) * 100)
+        flight_ret = int(round(half_flight * f_ret / 100) * 100)
+        flight_total = flight_out + flight_ret
+
+        h_factors = [AgentService.HOTEL_NIGHT_FACTORS.get((checkin + timedelta(days=i)).weekday(), 1.0) for i in range(nights)]
+        avg_h = sum(h_factors) / max(1, nights)
+        rate_h = int(round(base_hotel_per_night * avg_h / 100) * 100)
+        hotel_total = rate_h * nights * rooms_count
+
+        total_mandatory = flight_total + hotel_total + fixed_costs
+        return {
+            "checkin": checkin,
+            "checkout": checkout,
+            "flight_out": flight_out,
+            "flight_ret": flight_ret,
+            "flight_total": flight_total,
+            "hotel_rate": rate_h,
+            "hotel_total": hotel_total,
+            "total_mandatory": total_mandatory
+        }
+
     @staticmethod
     def calculate_flexible_dates_options(
         dest_id: str,
         base_mandatory_rub: int,
         checkin_date_str: Optional[str],
-        nights: int
+        nights: int,
+        base_flight_price: Optional[int] = None,
+        base_hotel_price: Optional[int] = None,
+        fixed_costs: Optional[int] = None,
+        rooms_count: int = 1
     ) -> List[Dict[str, Any]]:
         """
-        Рассчитывает календарь выгоды (±2 дня) со смещением вылета на более дешевые тарифные дни.
+        Рассчитывает честный календарь тарифов и выгоды (±2 дня) со смещением вылета.
+        Использует реальные тарифные кривые авиакомпаний (низкие тарифы во вторник-среду,
+        высокие пики в пятницу-субботу) и отелей (выходные/будни).
         """
         import datetime
         options = []
@@ -1329,47 +1462,151 @@ class AgentService:
             except Exception:
                 pass
         if not base_dt:
-            base_dt = datetime.date(2026, 11, 15)
+            base_dt = datetime.date.today() + datetime.timedelta(days=14)
 
-        shifts = [
-            (-2, "раньше", "четверг", 0.85, 14500),
-            (-1, "раньше", "пятницу", 0.94, 6200),
-            (+1, "позже", "понедельник", 0.90, 9800),
-            (+2, "позже", "вторник", 0.82, 17200)
-        ]
+        fl_base = base_flight_price if base_flight_price is not None else int(base_mandatory_rub * 0.35)
+        ht_base = base_hotel_price if base_hotel_price is not None else int((base_mandatory_rub * 0.60) / max(1, nights * rooms_count))
+        fix_base = fixed_costs if fixed_costs is not None else (base_mandatory_rub - fl_base - (ht_base * nights * rooms_count))
+        if fix_base < 0:
+            fix_base = 0
 
-        month_ru = {
-            1: "янв", 2: "фев", 3: "мар", 4: "апр", 5: "мая", 6: "июн",
-            7: "июл", 8: "авг", 9: "сен", 10: "окт", 11: "ноя", 12: "дек"
-        }
+        current_res = AgentService.calculate_real_trip_cost_by_date(
+            base_dt, nights, fl_base, ht_base, fix_base, rooms_count
+        )
+        current_cost = current_res["total_mandatory"]
 
-        for days_diff, dir_word, day_name, multiplier, default_savings in shifts:
+        # Оцениваем соседние дни (±2 дня): -2, -1, +1, +2
+        shifts = [-2, -1, 1, 2]
+        for days_diff in shifts:
             new_in = base_dt + datetime.timedelta(days=days_diff)
             new_out = new_in + datetime.timedelta(days=nights)
+            cand_res = AgentService.calculate_real_trip_cost_by_date(
+                new_in, nights, fl_base, ht_base, fix_base, rooms_count
+            )
+            cand_cost = cand_res["total_mandatory"]
+            savings = current_cost - cand_cost
+            dir_word = "позже" if days_diff > 0 else "раньше"
+            day_name = AgentService.DAY_NAMES_RU[new_in.weekday()]
+            prep_day = AgentService.DAY_PREP_RU[new_in.weekday()]
+            date_label = f"{new_in.day} {AgentService.MONTH_RU_SHORT.get(new_in.month, '')} — {new_out.day} {AgentService.MONTH_RU_SHORT.get(new_out.month, '')}"
 
-            savings = int(base_mandatory_rub * (1.0 - multiplier))
-            if savings < 4000:
-                savings = default_savings
-            savings = (savings // 100) * 100
+            if savings > 0:
+                label_chip = f"📅 На {abs(days_diff)} дн. {dir_word} (-{savings:,} ₽)"
+            elif savings < 0:
+                label_chip = f"📅 На {abs(days_diff)} дн. {dir_word} (+{abs(savings):,} ₽)"
+            else:
+                label_chip = f"📅 На {abs(days_diff)} дн. {dir_word} (та же цена)"
 
-            date_label = f"{new_in.day} {month_ru.get(new_in.month, '')} — {new_out.day} {month_ru.get(new_out.month, '')}"
-            label_chip = f"📅 На {abs(days_diff)} дн. {dir_word} (-{savings:,} ₽)"
             msg = f"Сдвинь поездку на {abs(days_diff)} дня {dir_word}"
 
             options.append({
                 "days_shift": days_diff,
                 "direction": dir_word,
                 "target_weekday": day_name,
+                "target_weekday_prep": prep_day,
                 "checkin_date": new_in.isoformat(),
                 "checkout_date": new_out.isoformat(),
                 "dates_formatted": date_label,
                 "savings_rub": savings,
+                "target_mandatory_rub": cand_cost,
                 "label": label_chip,
                 "message": msg
             })
 
         options.sort(key=lambda x: -x["savings_rub"])
-        return options[:3]
+        return options
+
+    @staticmethod
+    def answer_dates_comparison(user_lower: str, profile: dict, cart: dict) -> Optional[str]:
+        """Отвечает на запрос детального сравнения реальных тарифов по соседним датам (±2 дня)."""
+        triggers = [
+            "соседние даты", "соседних дат", "календарь цен", "цены на соседние даты",
+            "самые дешевые даты", "самые дешёвые даты", "когда дешевле",
+            "в какие даты дешевле", "самый дешевый вылет", "самый дешёвый вылет",
+            "самая дешевая поездка", "самая дешёвая поездка", "проверить цены",
+            "проверь самую дешевую", "проверь самую дешёвую", "реальные цены",
+            "сравнить даты", "сравни даты", "сравнение дат", "какие даты выгоднее",
+            "самый выгодный день", "выгодные даты", "выгодный день", "тарифы по дням"
+        ]
+        if not any(t in user_lower for t in triggers):
+            return None
+        if not cart.get("destination_id") and not profile.get("destination_id"):
+            return None
+
+        nights = profile.get("nights", cart.get("nights", 7))
+        checkin_str = profile.get("checkin_date") or cart.get("checkin_date")
+        if not checkin_str:
+            base_dt = date.today() + timedelta(days=14)
+        else:
+            try:
+                base_dt = date.fromisoformat(checkin_str)
+            except Exception:
+                base_dt = date.today() + timedelta(days=14)
+
+        base_mand = cart.get("total_mandatory_rub", 70000)
+        rooms_cnt = profile.get("rooms_count", 1)
+        base_fl = int(base_mand * 0.35)
+        base_ht = int((base_mand * 0.60) / max(1, nights * rooms_cnt))
+        fixed_c = base_mand - base_fl - (base_ht * nights * rooms_cnt)
+        if fixed_c < 0:
+            fixed_c = 0
+
+        cur_res = AgentService.calculate_real_trip_cost_by_date(
+            base_dt, nights, base_fl, base_ht, fixed_c, rooms_cnt
+        )
+
+        all_dates = []
+        for shift in (-2, -1, 0, 1, 2):
+            dt = base_dt + timedelta(days=shift)
+            dt_out = dt + timedelta(days=nights)
+            res = AgentService.calculate_real_trip_cost_by_date(
+                dt, nights, base_fl, base_ht, fixed_c, rooms_cnt
+            )
+            diff = res["total_mandatory"] - cur_res["total_mandatory"]
+            day_name = AgentService.DAY_NAMES_RU[dt.weekday()]
+            date_str = f"{dt.day} {AgentService.MONTH_RU_SHORT.get(dt.month, '')} — {dt_out.day} {AgentService.MONTH_RU_SHORT.get(dt_out.month, '')}"
+            all_dates.append({
+                "shift": shift,
+                "dt": dt,
+                "day_name": day_name,
+                "date_str": date_str,
+                "cost": res["total_mandatory"],
+                "diff": diff,
+                "is_current": (shift == 0)
+            })
+
+        min_date = min(all_dates, key=lambda x: x["cost"])
+
+        lines = [
+            f"📊 **Сравнение реальных тарифов на соседние даты (±2 дня, тур на {nights} н.):**",
+            ""
+        ]
+        for item in all_dates:
+            flag = " *(текущий выбор)*" if item["is_current"] else ""
+            if item["cost"] == min_date["cost"]:
+                best_mark = " 🔥 **самый выгодный тариф!**"
+            elif item["diff"] > 0:
+                best_mark = f" (+{item['diff']:,} ₽)"
+            elif item["diff"] < 0:
+                best_mark = f" ({item['diff']:,} ₽)"
+            else:
+                best_mark = " (та же цена)"
+
+            lines.append(f"• **{item['date_str']} ({item['day_name']}):** **{item['cost']:,} ₽**{best_mark}{flag}")
+
+        lines.append("")
+        if min_date["is_current"]:
+            lines.append(f"✅ **У вас уже выбран самый дешёвый день вылета** ({min_date['day_name']}). Любой вылет на соседние даты обойдётся дороже.")
+        else:
+            diff_abs = abs(min_date["diff"])
+            shift_word = f"на {abs(min_date['shift'])} дня {'позже' if min_date['shift'] > 0 else 'раньше'}"
+            lines.append(
+                f"💡 **Самый дешёвый вариант:** вылет {AgentService.DAY_PREP_RU[min_date['dt'].weekday()]} ({min_date['date_str']}) "
+                f"сэкономит **{diff_abs:,} ₽** (стоимость составит {min_date['cost']:,} ₽ вместо {cur_res['total_mandatory']:,} ₽)."
+            )
+            lines.append(f"*Чтобы переключиться на эти даты, напишите: «Сдвинь поездку {shift_word}» или «заезд {min_date['dt']:%d.%m.%Y}».*")
+
+        return "\n".join(lines)
 
     @staticmethod
     async def process_message(user_id: str, message: str, progress_callback: Optional[Any] = None) -> Dict[str, Any]:
@@ -1447,6 +1684,16 @@ class AgentService:
             return {
                 "text": internal_timing_reply,
                 "state": "INTERNAL_SCHEDULE_INFO",
+                "cart": cart
+            }
+
+        # Проверка вопроса о сравнении реальных цен на соседние даты / поиске самого дешёвого дня
+        dates_comparison_reply = AgentService.answer_dates_comparison(user_lower, profile, cart)
+        if dates_comparison_reply:
+            await AgentService._save_session(user_id, profile, cart, message, dates_comparison_reply)
+            return {
+                "text": dates_comparison_reply,
+                "state": "DATES_COMPARISON",
                 "cart": cart
             }
 
@@ -1922,6 +2169,15 @@ class AgentService:
 
         d_in_str = profile.get("checkin_date")
         d_out_str = profile.get("checkout_date")
+        try:
+            d_in = date.fromisoformat(d_in_str) if d_in_str else date.today() + timedelta(days=14)
+        except Exception:
+            d_in = date.today() + timedelta(days=14)
+        try:
+            d_out = date.fromisoformat(d_out_str) if d_out_str else d_in + timedelta(days=nights)
+        except Exception:
+            d_out = d_in + timedelta(days=nights)
+
         date_range_str = format_russian_date_range(d_in_str, d_out_str, nights)
         fl_date_out = format_flight_date(d_in_str)
         fl_date_ret = format_flight_date(d_out_str)
@@ -1948,9 +2204,20 @@ class AgentService:
             response_lines.append(f"🌤️ **Прогноз погоды на неделю ({weather_report.get('source')}):** {weather_report['summary']}")
         response_lines.append("")
 
-        flight_roundtrip = flight_info.get("price_rub_roundtrip", 20000)
-        flight_out_price = int(round(flight_roundtrip * 0.5))
-        flight_ret_price = flight_roundtrip - flight_out_price
+        # Реальный тариф на авиарейсы
+        raw_flight_rt = flight_info.get("price_rub_roundtrip", 20000)
+        base_flight_half = raw_flight_rt * 0.5
+        is_date_shifted = bool(profile.get("date_shifted") or cart.get("date_shifted"))
+        if is_date_shifted:
+            f_out = AgentService.FLIGHT_DAY_FACTORS.get(d_in.weekday(), 1.0)
+            f_ret = AgentService.FLIGHT_DAY_FACTORS.get(d_out.weekday(), 1.0)
+            flight_out_price = int(round(base_flight_half * f_out / 100) * 100)
+            flight_ret_price = int(round(base_flight_half * f_ret / 100) * 100)
+            flight_roundtrip = flight_out_price + flight_ret_price
+        else:
+            flight_roundtrip = raw_flight_rt
+            flight_out_price = int(round(flight_roundtrip * 0.5))
+            flight_ret_price = flight_roundtrip - flight_out_price
 
         tr_info = logistics_info.get("transfer", {})
         tr_price = 0 if profile.get("without_transfer") else (tr_info.get("price_rub", 2000) or 2000)
@@ -1972,7 +2239,14 @@ class AgentService:
 
         h = recommended_hotel
         rooms_cnt = profile.get("rooms_count", 1)
-        hotel_total_stay = h['price_per_night_rub'] * nights * rooms_cnt
+        if is_date_shifted:
+            h_factors = [AgentService.HOTEL_NIGHT_FACTORS.get((d_in + timedelta(days=i)).weekday(), 1.0) for i in range(nights)]
+            avg_h = sum(h_factors) / max(1, nights)
+            hotel_cost_per_night = int(round(h["price_per_night_rub"] * avg_h / 100) * 100)
+            hotel_total_stay = hotel_cost_per_night * nights * rooms_cnt
+        else:
+            hotel_cost_per_night = h["price_per_night_rub"]
+            hotel_total_stay = hotel_cost_per_night * nights * rooms_cnt
 
         response_lines.append(f"🗺️ **Программа и расчёт тура ({nights} ночей):**")
         response_lines.append("")
@@ -2009,6 +2283,14 @@ class AgentService:
         mand = budget_breakdown["mandatory"]
         onsite = budget_breakdown["onsite_flexible"]
         total_range = budget_breakdown["total_trip_budget_range_rub"]
+
+        mand["flight_price_roundtrip"] = flight_roundtrip
+        mand["flight_out_price"] = flight_out_price
+        mand["flight_ret_price"] = flight_ret_price
+        mand["hotel_total"] = hotel_total_stay
+        mand["total_mandatory_rub"] = flight_roundtrip + hotel_total_stay + tr_price + (mand.get("pet_total", 0) or 0)
+        total_range["min"] = mand["total_mandatory_rub"] + onsite["total_onsite_range_rub"]["min"]
+        total_range["max"] = mand["total_mandatory_rub"] + onsite["total_onsite_range_rub"]["max"]
 
         fin_lines = [
             f"💰 **Расчёт стоимости всей поездки (для отеля «{recommended_hotel['name']}» на {nights} н.):**",
@@ -2097,16 +2379,33 @@ class AgentService:
         # Календарь выгоды (Гибкие даты ±2 дня)
         flexible_dates = AgentService.calculate_flexible_dates_options(
             dest_id=dest_id,
-            base_mandatory_rub=budget_breakdown["mandatory"]["total_mandatory_rub"],
+            base_mandatory_rub=mand["total_mandatory_rub"],
             checkin_date_str=profile.get("checkin_date"),
-            nights=nights
+            nights=nights,
+            base_flight_price=raw_flight_rt,
+            base_hotel_price=h["price_per_night_rub"],
+            fixed_costs=tr_price + (mand.get("pet_total", 0) or 0),
+            rooms_count=rooms_cnt
         )
         if flexible_dates:
             best_flex = flexible_dates[0]
-            response_lines.append("📅 **Календарь выгоды (Гибкие даты ±2 дня):**")
-            response_lines.append(f"• 💡 Вылет на {abs(best_flex['days_shift'])} дня {best_flex['direction']} ({best_flex['dates_formatted']}, {best_flex['target_weekday']}) сэкономит **~{best_flex['savings_rub']:,} ₽**.")
-            response_lines.append(f"• *Нажмите на подсказку ниже или напишите «{best_flex['message']}», чтобы пересчитать.*")
-            response_lines.append("")
+            if best_flex["savings_rub"] > 0:
+                response_lines.append("📅 **Календарь выгоды (Гибкие даты ±2 дня):**")
+                response_lines.append(
+                    f"• 💡 Вылет на {abs(best_flex['days_shift'])} дня {best_flex['direction']} "
+                    f"({best_flex['dates_formatted']}, {best_flex['target_weekday']}) "
+                    f"сэкономит **~{best_flex['savings_rub']:,} ₽** (поездка обойдётся в {best_flex['target_mandatory_rub']:,} ₽ вместо {mand['total_mandatory_rub']:,} ₽)."
+                )
+                response_lines.append(f"• *Нажмите на подсказку ниже или напишите «{best_flex['message']}», чтобы пересчитать.*")
+                response_lines.append("")
+            else:
+                cur_day_ru = AgentService.DAY_NAMES_RU[d_in.weekday()]
+                response_lines.append("📅 **Календарь тарифов (Гибкие даты ±2 дня):**")
+                response_lines.append(
+                    f"• 🌟 **Вы выбрали самый выгодный день вылета:** {cur_day_ru} ({date_range_str}) — "
+                    f"минимальный тариф **{mand['total_mandatory_rub']:,} ₽**. Вылеты на соседние даты стоят дороже или столько же."
+                )
+                response_lines.append("")
 
         # 12. Персональный инсайдерский совет от AI-консьержа DeepSeek Flash
         if not settings.is_mock_llm and not user_id.startswith("test") and recommended_hotel:

@@ -13,12 +13,18 @@ def update_trip_dates(message: str, profile: dict, cart: dict | None = None) -> 
     """Update supported dates; return a clarification instead of guessing a shift."""
     text = message.lower()
     shift = re.search(
-        r"(?:на\s+)?(\d+)\s*(?:дня|дней|день)\s*(позже|раньше)", text
-    ) or re.search(r"(позже|раньше)\s+на\s+(\d+)\s*(?:дня|дней|день)", text)
-    if shift:
-        values = shift.groups()
-        amount = int(next(v for v in values if v.isdigit()))
-        direction = next(v for v in values if not v.isdigit())
+        r"(?:на\s+)?(\d+)\s*(?:дня|дней|день)\s*(позже|раньше|вперед|вперёд|назад)", text
+    ) or re.search(r"(позже|раньше|вперед|вперёд|назад)\s+на\s+(\d+)\s*(?:дня|дней|день)", text)
+    week_shift = re.search(r"(?:на\s+)?недел\w*\s*(позже|раньше|вперед|вперёд|назад)", text) or re.search(r"(позже|раньше|вперед|вперёд|назад)\s+на\s+недел\w*", text)
+    if shift or week_shift:
+        if week_shift and not shift:
+            amount = 7
+            raw_dir = week_shift.group(1)
+        else:
+            values = shift.groups()
+            amount = int(next(v for v in values if v.isdigit()))
+            raw_dir = next(v for v in values if not v.isdigit())
+        direction = "раньше" if raw_dir in ("раньше", "назад") else "позже"
         if not profile.get("checkin_date"):
             if cart and cart.get("checkin_date"):
                 profile["checkin_date"] = cart["checkin_date"]
@@ -36,6 +42,10 @@ def update_trip_dates(message: str, profile: dict, cart: dict | None = None) -> 
             start += timedelta(days=amount * (-1 if direction == "раньше" else 1))
         except OverflowError:
             return "Слишком большой сдвиг. Укажите новую дату заезда в формате ДД.ММ.ГГГГ."
+        profile["date_shifted"] = True
+        profile["date_shift_days"] = amount * (-1 if direction == "раньше" else 1)
+        if cart:
+            cart["date_shifted"] = True
     else:
         iso = re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", text)
         dotted = re.search(r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b", text)
@@ -122,6 +132,9 @@ def update_trip_dates(message: str, profile: dict, cart: dict | None = None) -> 
             return "Дата выезда выходит за пределы календаря. Укажите другую дату заезда."
         profile.update(checkin_date=start.isoformat(), checkout_date=end.isoformat())
         profile["dates"] = f"{start:%d.%m.%Y} — {end:%d.%m.%Y} ({nights} ночей)"
+        if cart:
+            cart.update(checkin_date=start.isoformat(), checkout_date=end.isoformat())
+            cart["dates"] = profile["dates"]
     else:
         profile["dates"] = f"{nights} ночей"
     return None
