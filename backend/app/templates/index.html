@@ -51,8 +51,9 @@
           <button class="prompt-chip" onclick="fillPrompt('Хочу на Мальдивы на лазурные пляжи')">🇲🇻 Мальдивы</button>
           <button class="prompt-chip" onclick="fillPrompt('Едем на Алтай с собакой в горы')">🌲 Алтай с питомцем</button>
           <button class="prompt-chip" onclick="fillPrompt('Хочу в Питер посмотреть музеи и Эрмитаж')">🏛️ Санкт-Петербург</button>
-          <button class="prompt-chip" onclick="fillPrompt('Найди самый дешевый эконом хостел в Сочи')">📉 Хостел (750 ₽/н)</button>
-          <button class="prompt-chip" onclick="fillPrompt('Хочу самый роскошный отель люкс дворец в Дубае')">👑 Дворец в Дубае</button>
+          <button class="prompt-chip" onclick="fillPrompt('Едем в Сочи 4 взрослых, подбери отель на 5 ночей')">👨‍👩‍👧 4 взрослых (2 номера)</button>
+          <button class="prompt-chip" onclick="fillPrompt('Какие правила въезда и документы на Мальдивы?')">🛂 Правила въезда (Мальдивы)</button>
+          <button class="prompt-chip" onclick="fillPrompt('Составь тур по городам в Турции (Анталья и Стамбул)')">🇹🇷 Тур по городам</button>
           <button class="prompt-chip" onclick="fillPrompt('Покажи другой отель')">🏨 Сменить отель</button>
           <button class="prompt-chip" onclick="fillPrompt('Сделай подешевле')">📉 Сделать дешевле</button>
           <button class="prompt-chip" onclick="fillPrompt('Убери трансфер, поедем сами')">🚕 Убрать трансфер</button>
@@ -63,7 +64,7 @@
           <div class="msg msg-agent">
             <div class="msg-avatar">🤖</div>
             <div class="msg-body">
-              <p>Здравствуйте! Я тестовый интерфейс AI-агента Островка. Напишите свои пожелания, и я подберу направление, проведу валидацию логистики через <strong>Neo4j</strong>, выполню семантический поиск через <strong>pgvector</strong> и предупрежу о рисках.</p>
+              <p>Здравствуйте! Я умный ассистент путешествий Островка. Подберу готовый тур «под ключ», проверю стыковки в графе <strong>Neo4j</strong>, выполню семантический поиск по вайбу в <strong>pgvector</strong>, проверю визовый комплаенс и рассчитаю календарь выгоды.</p>
             </div>
           </div>
         </div>
@@ -150,6 +151,10 @@
             <span class="dest-tag">🇦🇪 ОАЭ (Дубай)</span>
             <span class="dest-tag">🇹🇷 Турция (Анталья/Стамбул)</span>
             <span class="dest-tag">🇹🇭 Таиланд (Пхукет)</span>
+            <span class="dest-tag">🇲🇻 Мальдивы</span>
+            <span class="dest-tag">🇪🇬 Египет</span>
+            <span class="dest-tag">🏛️ Санкт-Петербург</span>
+            <span class="dest-tag">🏔️ Алтай</span>
           </div>
         </div>
 
@@ -163,14 +168,18 @@
           </div>
           <p class="info-text">
             • <strong>Не 15 вопросов:</strong> Агент выявляет параметры из контекста.<br>
-            • <strong>Объяснение компромиссов:</strong> Честно указывает на риски и минусы отелей.<br>
-            • <strong>Точность стыковок:</strong> Neo4j гарантирует совпадение времени прибытия и заселения.<br>
-            • <strong>Пересборка:</strong> Возможность менять параметры («с собакой», «на 2 дня позже»).
+            • <strong>Мульти-номера:</strong> Автоматическое масштабирование для 3+ взрослых и семей.<br>
+            • <strong>Комплаенс въезда:</strong> Проверка загранпаспортов, виз и деклараций (IMUGA).<br>
+            • <strong>Календарь выгоды:</strong> Интерактивные чипы экономии при сдвиге дат на ±2 дня.<br>
+            • <strong>Экспорт в календарь:</strong> Генерация событий RFC 5545 (.ics).<br>
+            • <strong>Real-time Reasoning:</strong> Потоковый вывод этапов анализа и генерации.
           </p>
         </div>
       </aside>
     </main>
   </div>
+
+  <div id="toastNotice" class="toast-notice"></div>
 
   <script>
     async function checkHealth() {
@@ -188,10 +197,10 @@
         }
 
         if (data.graph_stats) {
-          document.getElementById('numCities').textContent = data.graph_stats.cities || 4;
-          document.getElementById('numAirports').textContent = data.graph_stats.airports || 6;
-          document.getElementById('numHotels').textContent = data.graph_stats.hotels || 16;
-          document.getElementById('numTransfers').textContent = data.graph_stats.transfers || 20;
+          document.getElementById('numCities').textContent = data.graph_stats.cities || 8;
+          document.getElementById('numAirports').textContent = data.graph_stats.airports || 10;
+          document.getElementById('numHotels').textContent = data.graph_stats.hotels || 32;
+          document.getElementById('numTransfers').textContent = data.graph_stats.transfers || 40;
         }
 
         if (data.llm_mode) {
@@ -211,26 +220,72 @@
     }
 
     function escapeHtml(str) {
+      if (!str) return '';
       const div = document.createElement('div');
       div.textContent = str;
       return div.innerHTML;
     }
 
     function formatMarkdown(text) {
-      let safe = escapeHtml(text);
+      if (!text) return '';
+      // Preserve accordion HTML if present
+      const detailsMatch = text.match(/<details class="agent-reasoning">[\s\S]*?<\/details>/i);
+      let detailsHtml = '';
+      let restText = text;
+      if (detailsMatch) {
+        detailsHtml = detailsMatch[0];
+        restText = text.replace(detailsMatch[0], '');
+      }
+
+      let safe = restText
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
       safe = safe.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
       safe = safe.replace(/_(.*?)_/g, '<em>$1</em>');
+      safe = safe.replace(/• /g, '&bull; ');
       safe = safe.replace(/\n/g, '<br>');
-      return safe;
+
+      return (detailsHtml ? detailsHtml + '<br>' : '') + safe;
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toastNotice');
+      if (!toast) return;
+      toast.textContent = msg;
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3500);
+    }
+
+    function shareTrip(destination, hotel, price) {
+      const shareText = `🌴 Мы подобрали тур в ${destination}!\n🏨 Отель: ${hotel}\n💰 Бюджет: ${price}\nПодробнее в Островке!`;
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(shareText);
+        showToast('📋 Сводка тура скопирована в буфер обмена!');
+      }
+      const tgUrl = `https://t.me/share/url?url=${encodeURIComponent(window.location.href)}&text=${encodeURIComponent(shareText)}`;
+      window.open(tgUrl, '_blank');
+    }
+
+    function downloadCalendar() {
+      showToast('📅 Загружаю события тура в календарь (.ics)...');
+      window.location.href = '/api/cart/export-calendar';
     }
 
     async function sendMessage(e) {
-      e.preventDefault();
+      if (e) e.preventDefault();
       const input = document.getElementById('userInput');
       const message = input.value.trim();
       if (!message) return;
+      await sendMessageWithText(message);
+    }
 
+    async function sendMessageWithText(message) {
       const chatMessages = document.getElementById('chatMessages');
+      const input = document.getElementById('userInput');
 
       // Add user message
       const userDiv = document.createElement('div');
@@ -240,36 +295,157 @@
       input.value = '';
       chatMessages.scrollTop = chatMessages.scrollHeight;
 
-      // Loading indicator
-      const loaderDiv = document.createElement('div');
-      loaderDiv.className = 'msg msg-agent msg-typing';
-      loaderDiv.id = 'typingIndicator';
-      loaderDiv.innerHTML = `<div class="msg-avatar">🤖</div><div class="msg-body"><div class="dots"><span></span><span></span><span></span></div></div>`;
-      chatMessages.appendChild(loaderDiv);
+      // Agent message container
+      const agentDiv = document.createElement('div');
+      agentDiv.className = 'msg msg-agent';
+      agentDiv.innerHTML = `
+        <div class="msg-avatar">🤖</div>
+        <div class="msg-body">
+          <div class="stream-live-pill" id="currentStreamStatus">
+            <span>🧠</span> <span>Анализирую параметры запроса...</span>
+          </div>
+          <div class="agent-text-stream" id="agentStreamContent"></div>
+          <div class="msg-extras" id="agentExtras"></div>
+        </div>
+      `;
+      chatMessages.appendChild(agentDiv);
       chatMessages.scrollTop = chatMessages.scrollHeight;
 
+      const statusEl = agentDiv.querySelector('#currentStreamStatus');
+      const streamEl = agentDiv.querySelector('#agentStreamContent');
+      const extrasEl = agentDiv.querySelector('#agentExtras');
+
+      let accumulatedText = '';
+      let finalResult = null;
+
       try {
-        const res = await fetch('/api/chat', {
+        const response = await fetch('/api/chat/stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: message })
         });
-        const data = await res.json();
-        
-        loaderDiv.remove();
 
-        const agentDiv = document.createElement('div');
-        agentDiv.className = 'msg msg-agent';
-        agentDiv.innerHTML = `<div class="msg-avatar">🤖</div><div class="msg-body">${formatMarkdown(data.text)}</div>`;
-        chatMessages.appendChild(agentDiv);
+        if (!response.ok) {
+          throw new Error('HTTP ' + response.status);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop() || '';
+
+          for (const part of parts) {
+            const lines = part.split('\n');
+            let eventType = 'message';
+            let dataStr = '';
+
+            for (const line of lines) {
+              if (line.startsWith('event: ')) {
+                eventType = line.slice(7).trim();
+              } else if (line.startsWith('data: ')) {
+                dataStr = line.slice(6).trim();
+              }
+            }
+
+            if (!dataStr) continue;
+
+            try {
+              const parsed = JSON.parse(dataStr);
+              if (eventType === 'status') {
+                if (statusEl && parsed.message) {
+                  statusEl.innerHTML = `<span>⚡</span> <span>${escapeHtml(parsed.message)}</span>`;
+                }
+              } else if (eventType === 'token') {
+                accumulatedText += (parsed.token || '');
+                streamEl.innerHTML = formatMarkdown(accumulatedText);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+              } else if (eventType === 'result') {
+                finalResult = parsed;
+              }
+            } catch (err) {
+              console.warn('JSON parse err in stream:', err);
+            }
+          }
+        }
+
+        if (statusEl) statusEl.remove();
+
+        if (finalResult) {
+          if (finalResult.text) {
+            streamEl.innerHTML = formatMarkdown(finalResult.text);
+          }
+          renderExtras(extrasEl, finalResult);
+        } else if (accumulatedText) {
+          streamEl.innerHTML = formatMarkdown(accumulatedText);
+        }
+
         chatMessages.scrollTop = chatMessages.scrollHeight;
+
       } catch (err) {
-        loaderDiv.remove();
-        const errDiv = document.createElement('div');
-        errDiv.className = 'msg msg-agent';
-        errDiv.innerHTML = `<div class="msg-avatar">⚠️</div><div class="msg-body"><p>Ошибка соединения с агентом. Пожалуйста, проверьте статус контейнеров.</p></div>`;
-        chatMessages.appendChild(errDiv);
+        console.warn('Streaming error, falling back to /api/chat:', err);
+        if (statusEl) statusEl.remove();
+        // Fallback to regular chat
+        try {
+          const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: message })
+          });
+          const data = await res.json();
+          streamEl.innerHTML = formatMarkdown(data.text);
+          renderExtras(extrasEl, data);
+          chatMessages.scrollTop = chatMessages.scrollHeight;
+        } catch (e2) {
+          streamEl.innerHTML = `<p>⚠️ Ошибка соединения с агентом. Пожалуйста, проверьте статус бэкенда.</p>`;
+        }
       }
+    }
+
+    function renderExtras(container, data) {
+      if (!container || !data) return;
+      let html = '';
+
+      // Flexible Dates Chips
+      if (data.flexible_dates && data.flexible_dates.length > 0) {
+        html += `
+          <div class="flex-dates-section">
+            <div class="flex-dates-header">📅 Календарь выгоды (±2 дня):</div>
+            <div class="flex-chips-row">
+        `;
+        data.flexible_dates.forEach(opt => {
+          const escMsg = escapeHtml(opt.message);
+          html += `<button type="button" class="flex-chip" onclick="sendMessageWithText('${escMsg}')">${escapeHtml(opt.label)}</button>`;
+        });
+        html += `
+            </div>
+          </div>
+        `;
+      }
+
+      // Actions: Export Calendar & Share Trip
+      const destName = (data.destination && data.destination.name) || (data.cart && data.cart.destination) || 'Тур';
+      const hotelName = (data.cart && data.cart.hotel) || 'Рекомендуемый отель';
+      const priceStr = (data.cart && data.cart.total_mandatory_rub) ? `${data.cart.total_mandatory_rub.toLocaleString('ru-RU')} ₽` : '';
+
+      html += `
+        <div class="tour-actions-bar">
+          <button type="button" class="tour-action-btn btn-calendar" onclick="downloadCalendar()">
+            📅 Скачать в календарь (.ics)
+          </button>
+          <button type="button" class="tour-action-btn btn-share" onclick="shareTrip('${escapeHtml(destName)}', '${escapeHtml(hotelName)}', '${escapeHtml(priceStr)}')">
+            📤 Поделиться с попутчиком
+          </button>
+        </div>
+      `;
+
+      container.innerHTML = html;
     }
 
     checkHealth();

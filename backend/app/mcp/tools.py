@@ -390,11 +390,12 @@ class MCPTools:
         transfer_price: int,
         meals_type: str = "Завтрак включен",
         nights: int = 7,
-        pet_surcharge_per_night: int = 0
+        pet_surcharge_per_night: int = 0,
+        rooms_count: int = 1
     ) -> Dict[str, Any]:
         """
         MCP Tool / Calculator: Рассчитывает детальную структуру расходов:
-        1. Обязательные платежи (сразу под ключ): перелет туда-обратно + проживание + трансфер + доплата за питомца.
+        1. Обязательные платежи (сразу под ключ): перелет туда-обратно + проживание (с учетом количества номеров) + трансфер + доплата за питомца.
         2. Траты не сразу (карманные расходы на месте): питание (с учетом типа питания в отеле) + развлечения.
         3. Итоговый ориентир общего бюджета поездки.
         """
@@ -427,7 +428,8 @@ class MCPTools:
         ent_min = max(2000, int(ent_tour.get("min", 10000) / 7.0 * nights))
         ent_max = max(5000, int(ent_tour.get("max", 25000) / 7.0 * nights))
 
-        hotel_total = hotel_price_per_night * nights
+        actual_rooms = max(1, rooms_count or 1)
+        hotel_total = hotel_price_per_night * nights * actual_rooms
         pet_total = (pet_surcharge_per_night or 0) * nights
         mandatory_total = flight_price_roundtrip + hotel_total + transfer_price + pet_total
 
@@ -441,6 +443,7 @@ class MCPTools:
             "nights": nights,
             "mandatory": {
                 "flight_roundtrip": flight_price_roundtrip,
+                "rooms_count": actual_rooms,
                 "hotel_total": hotel_total,
                 "hotel_per_night": hotel_price_per_night,
                 "transfer": transfer_price,

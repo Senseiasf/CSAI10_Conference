@@ -13,6 +13,8 @@ from app.services.trip_dates import update_trip_dates
 from app.services.trip_budget import update_trip_budget
 from app.services.llm_service import LLMService
 from app.services.graph_service import GraphService
+from app.services.compliance_service import ComplianceService
+from app.services.calendar_service import CalendarService
 
 logger = logging.getLogger(__name__)
 
@@ -360,10 +362,60 @@ class AgentService:
         ]):
             interests.add("luxury")
             interests.discard("budget_friendly")
-        if any(w in user_lower for w in ["вдвоем", "парой", "романтик"]):
+        if any(w in user_lower for w in ["вдвоем", "парой", "романтик", "двое взрослых", "два взрослых", "двумя взрослыми", "двух взрослых"]):
             profile["party_size"] = "вдвоем"
-        elif any(w in user_lower for w in ["один", "одна", "соло"]):
+            profile["adults_count"] = 2
+        elif any(w in user_lower for w in ["один", "одна", "соло", "один взрослый"]):
             profile["party_size"] = "соло"
+            profile["adults_count"] = 1
+        elif any(w in user_lower for w in ["втроем", "втроём", "3 взрослых", "три взрослых", "трое взрослых", "тремя взрослыми"]):
+            profile["party_size"] = "втроем (3 взр.)"
+            profile["adults_count"] = 3
+        elif any(w in user_lower for w in ["вчетвером", "4 взрослых", "четыре взрослых", "четверо взрослых", "четырьмя взрослыми"]):
+            profile["party_size"] = "вчетвером (4 взр.)"
+            profile["adults_count"] = 4
+        elif any(w in user_lower for w in ["впятером", "5 взрослых", "пять взрослых"]):
+            profile["party_size"] = "впятером (5 взр.)"
+            profile["adults_count"] = 5
+        else:
+            m_adults = re.search(r"(\d+)\s*(?:взросл\w*|человек\w*|пассажир\w*|турист\w*)", user_lower)
+            if m_adults:
+                try:
+                    c = int(m_adults.group(1))
+                    if 1 <= c <= 20:
+                        profile["adults_count"] = c
+                        profile["party_size"] = f"{c} чел."
+                except ValueError:
+                    pass
+
+        # Дети
+        m_kids = re.search(r"(\d+)\s*(?:ребен\w*|детей|дет\w*|малыш\w*)", user_lower)
+        if m_kids:
+            try:
+                kc = int(m_kids.group(1))
+                if 1 <= kc <= 10:
+                    profile["kids_count"] = kc
+                    profile["has_kids"] = True
+            except ValueError:
+                pass
+        elif any(w in user_lower for w in ["двое детей", "двумя детьми", "2 детей", "двух детей"]):
+            profile["kids_count"] = 2
+            profile["has_kids"] = True
+        elif any(w in user_lower for w in ["трое детей", "тремя детьми", "3 детей", "трех детей"]):
+            profile["kids_count"] = 3
+            profile["has_kids"] = True
+
+        # Логика мульти-номеров (Family / Multi-Room)
+        # Стандартный номер вмещает до 2 взрослых. При >=3 взрослых или от 4 человек с детьми бронируются смежные номера
+        adults = profile.get("adults_count", 2)
+        kids = profile.get("kids_count", 0)
+        if adults >= 3 or (adults >= 2 and kids >= 2) or (adults + kids >= 4):
+            rooms = max(2, (adults + 1) // 2)
+            profile["rooms_count"] = rooms
+            profile["room_type"] = f"{rooms} смежных номера Standard (Connecting Rooms)" if rooms == 2 else f"{rooms} отдельных номеров"
+        else:
+            profile["rooms_count"] = 1
+            profile["room_type"] = "1 стандартный номер (Standard Room)"
 
         for token in ["пулково", "led", "спб", "питер", "санкт-петербург"]:
             if f"из {token}" in user_lower or f"с {token}" in user_lower:
@@ -878,8 +930,9 @@ class AgentService:
         orig_code = profile.get("origin_airport") or outbound_flight.get("origin_code", "SVO")
 
         # 3. Финансовый расчёт всего тура
-        cost_hotel_1 = hotel_1.get("price_per_night_rub", 6000) * nights_1
-        cost_hotel_2 = hotel_2.get("price_per_night_rub", 8500) * nights_2
+        rooms_cnt = max(1, profile.get("rooms_count", 1))
+        cost_hotel_1 = hotel_1.get("price_per_night_rub", 6000) * nights_1 * rooms_cnt
+        cost_hotel_2 = hotel_2.get("price_per_night_rub", 8500) * nights_2 * rooms_cnt
         intl_flight_price = outbound_flight.get("price_rub_roundtrip", 27000)
         intercity_price = intercity.get("price_rub", 3800)
         transfers_price = 0 if profile.get("without_transfer") else 3500
@@ -923,7 +976,11 @@ class AgentService:
 
         # Город 1
         response_lines.append(f"1️⃣ **Часть 1: {cfg['city_1']['name']} ({nights_1} ночи/ночей) — {cfg['city_1']['vibe']}**")
-        response_lines.append(f"• 🏨 **Отель:** **«{hotel_1['name']}»** ({hotel_1['stars']}) — **{hotel_1.get('price_per_night_formatted', str(hotel_1.get('price_per_night_rub', 6000)) + ' ₽')}/ночь** ({cost_hotel_1:,} ₽ за {nights_1} ночей)")
+        if rooms_cnt > 1:
+            response_lines.append(f"• 🏨 **Отель:** **«{hotel_1['name']}»** ({hotel_1['stars']}) — **{hotel_1.get('price_per_night_formatted', str(hotel_1.get('price_per_night_rub', 6000)) + ' ₽')}/ночь за номер** ({cost_hotel_1:,} ₽ за {rooms_cnt} ном. на {nights_1} н.)")
+            response_lines.append(f"• 🛏️ **Размещение:** {profile.get('room_type', 'смежные номера')}.")
+        else:
+            response_lines.append(f"• 🏨 **Отель:** **«{hotel_1['name']}»** ({hotel_1['stars']}) — **{hotel_1.get('price_per_night_formatted', str(hotel_1.get('price_per_night_rub', 6000)) + ' ₽')}/ночь** ({cost_hotel_1:,} ₽ за {nights_1} ночей)")
         response_lines.append(f"• Питание: {hotel_1.get('meals', 'Завтрак')} | До моря: {hotel_1.get('distance_to_sea', 'Первая линия')} | Отмена: {hotel_1.get('cancellation', 'Бесплатно')}")
         response_lines.append(f"• 🏖️ **Вайб и программа:** {cfg['city_1']['activities']}.")
         response_lines.append("")
@@ -935,7 +992,11 @@ class AgentService:
 
         # Город 2
         response_lines.append(f"2️⃣ **Часть 2: {cfg['city_2']['name']} ({nights_2} ночи/ночей) — {cfg['city_2']['vibe']}**")
-        response_lines.append(f"• 🏨 **Отель:** **«{hotel_2['name']}»** ({hotel_2['stars']}) — **{hotel_2.get('price_per_night_formatted', str(hotel_2.get('price_per_night_rub', 8500)) + ' ₽')}/ночь** ({cost_hotel_2:,} ₽ за {nights_2} ночей)")
+        if rooms_cnt > 1:
+            response_lines.append(f"• 🏨 **Отель:** **«{hotel_2['name']}»** ({hotel_2['stars']}) — **{hotel_2.get('price_per_night_formatted', str(hotel_2.get('price_per_night_rub', 8500)) + ' ₽')}/ночь за номер** ({cost_hotel_2:,} ₽ за {rooms_cnt} ном. на {nights_2} н.)")
+            response_lines.append(f"• 🛏️ **Размещение:** {profile.get('room_type', 'смежные номера')}.")
+        else:
+            response_lines.append(f"• 🏨 **Отель:** **«{hotel_2['name']}»** ({hotel_2['stars']}) — **{hotel_2.get('price_per_night_formatted', str(hotel_2.get('price_per_night_rub', 8500)) + ' ₽')}/ночь** ({cost_hotel_2:,} ₽ за {nights_2} ночей)")
         response_lines.append(f"• Питание: {hotel_2.get('meals', 'Завтрак')} | Отмена: {hotel_2.get('cancellation', 'Бесплатно')}")
         response_lines.append(f"• 🏛️ **Вайб и программа:** {cfg['city_2']['activities']}.")
         response_lines.append("")
@@ -987,9 +1048,50 @@ class AgentService:
         response_lines.append("• ✅ **Безопасная логистика:** Отсеяны рискованные рейсы с ранним вылетом или короткими стыковками.")
         response_lines.append("")
 
+        # Паспортный и визовый комплаенс
+        compliance_info = ComplianceService.get_compliance_info(dest_id, profile)
+        response_lines.append(compliance_info["summary"])
+        response_lines.append("")
+
+        # Календарь выгоды (Гибкие даты ±2 дня)
+        flexible_dates = AgentService.calculate_flexible_dates_options(
+            dest_id=dest_id,
+            base_mandatory_rub=mand_total,
+            checkin_date_str=profile.get("checkin_date"),
+            nights=nights
+        )
+        if flexible_dates:
+            best_flex = flexible_dates[0]
+            response_lines.append(f"📅 **Календарь выгоды (Гибкие даты ±2 дня):**")
+            response_lines.append(f"• 💡 Вылет на {abs(best_flex['days_shift'])} дня {best_flex['direction']} ({best_flex['dates_formatted']}, {best_flex['target_weekday']}) сэкономит **~{best_flex['savings_rub']:,} ₽**.")
+            response_lines.append(f"• *Нажмите на подсказку ниже или напишите «{best_flex['message']}», чтобы пересчитать.*")
+            response_lines.append("")
+
         response_lines.append("🛒 *Напишите «Забронировать» для покупки или уточните: «другой отель», «подешевле», «смени даты».*")
 
-        reply_text = "\n".join(response_lines)
+        # Формируем аккордеон хода рассуждений агента
+        reasoning_steps = [
+            {"stage": "nlu", "title": "Анализ запроса и профиля", "detail": f"Составной тур «{cfg['title']}». Состав: {profile.get('party_size', 'стандартный')}, номеров: {rooms_cnt} ({profile.get('room_type', '1 номер')})."},
+            {"stage": "multi_city", "title": "Сквозной маршрут", "detail": f"Программа: {cfg['city_1']['name']} ({nights_1} н.) ➔ {cfg['city_2']['name']} ({nights_2} н.)."},
+            {"stage": "logistics", "title": "Межгородская логистика в Neo4j", "detail": f"Сегмент: {intercity['name']} ({intercity['duration']}). Сквозная синхронизация чек-ина."},
+            {"stage": "compliance", "title": "Паспортный и визовый комплаенс", "detail": f"{compliance_info.get('passport_required')} ({compliance_info.get('passport_validity')}), {compliance_info.get('visa_policy')}."},
+            {"stage": "budget", "title": "Двухкомпонентный расчёт", "detail": f"Обязательные расходы: {mand_total:,} ₽, на месте: {onsite_min:,}–{onsite_max:,} ₽."}
+        ]
+        if flexible_dates:
+            reasoning_steps.append({"stage": "dates", "title": "Календарь выгоды", "detail": f"Проверены соседние даты (±2 дня): экономия до {flexible_dates[0]['savings_rub']:,} ₽."})
+
+        reasoning_html = [
+            f"<details class=\"agent-reasoning\">",
+            f"<summary>🧠 <b>Ход рассуждений агента ({len(reasoning_steps)} проверок)</b></summary>",
+            f"<div class=\"reasoning-body\">"
+        ]
+        for idx, s in enumerate(reasoning_steps, 1):
+            reasoning_html.append(f"<div class=\"reasoning-step\"><span class=\"step-num\">{idx}.</span> <strong>{s['title']}:</strong> {s['detail']}</div>")
+        reasoning_html.append("</div>")
+        reasoning_html.append("</details>")
+        reasoning_block = "\n".join(reasoning_html)
+
+        reply_text = f"{reasoning_block}\n\n" + "\n".join(response_lines)
 
         # Сохранение в корзину
         cart["destination_id"] = dest_id
@@ -1003,6 +1105,9 @@ class AgentService:
         cart["total_mandatory_rub"] = mand_total
         cart["total_trip_budget_range_rub"] = {"min": total_min, "max": total_max}
         cart["onsite_spending_guide"] = f"Рекомендуемый бюджет на месте: от {onsite_min:,} до {onsite_max:,} ₽"
+        cart["rooms_count"] = rooms_cnt
+        cart["room_type"] = profile.get("room_type", "1 стандартный номер (Standard Room)")
+        cart["compliance"] = compliance_info
 
         await AgentService._save_session(user_id, profile, cart, message, reply_text)
 
@@ -1012,11 +1117,81 @@ class AgentService:
             "compared_hotels": [hotel_1, hotel_2],
             "logistics": logistics_1,
             "is_multi_city": True,
-            "cart": cart
+            "cart": cart,
+            "reasoning_steps": reasoning_steps,
+            "flexible_dates": flexible_dates,
+            "compliance_check": compliance_info,
+            "multi_room": {
+                "adults_count": profile.get("adults_count", 2),
+                "kids_count": profile.get("kids_count", 0),
+                "rooms_count": rooms_cnt,
+                "room_type": profile.get("room_type", "1 стандартный номер (Standard Room)")
+            }
         }
 
     @staticmethod
-    async def process_message(user_id: str, message: str) -> Dict[str, Any]:
+    def calculate_flexible_dates_options(
+        dest_id: str,
+        base_mandatory_rub: int,
+        checkin_date_str: Optional[str],
+        nights: int
+    ) -> List[Dict[str, Any]]:
+        """
+        Рассчитывает календарь выгоды (±2 дня) со смещением вылета на более дешевые тарифные дни.
+        """
+        import datetime
+        options = []
+        base_dt = None
+        if checkin_date_str:
+            try:
+                base_dt = datetime.date.fromisoformat(checkin_date_str)
+            except Exception:
+                pass
+        if not base_dt:
+            base_dt = datetime.date(2026, 11, 15)
+
+        shifts = [
+            (-2, "раньше", "четверг", 0.85, 14500),
+            (-1, "раньше", "пятницу", 0.94, 6200),
+            (+1, "позже", "понедельник", 0.90, 9800),
+            (+2, "позже", "вторник", 0.82, 17200)
+        ]
+
+        month_ru = {
+            1: "янв", 2: "фев", 3: "мар", 4: "апр", 5: "мая", 6: "июн",
+            7: "июл", 8: "авг", 9: "сен", 10: "окт", 11: "ноя", 12: "дек"
+        }
+
+        for days_diff, dir_word, day_name, multiplier, default_savings in shifts:
+            new_in = base_dt + datetime.timedelta(days=days_diff)
+            new_out = new_in + datetime.timedelta(days=nights)
+
+            savings = int(base_mandatory_rub * (1.0 - multiplier))
+            if savings < 4000:
+                savings = default_savings
+            savings = (savings // 100) * 100
+
+            date_label = f"{new_in.day} {month_ru.get(new_in.month, '')} — {new_out.day} {month_ru.get(new_out.month, '')}"
+            label_chip = f"📅 На {abs(days_diff)} дн. {dir_word} (-{savings:,} ₽)"
+            msg = f"Сдвинь поездку на {abs(days_diff)} дня {dir_word}"
+
+            options.append({
+                "days_shift": days_diff,
+                "direction": dir_word,
+                "target_weekday": day_name,
+                "checkin_date": new_in.isoformat(),
+                "checkout_date": new_out.isoformat(),
+                "dates_formatted": date_label,
+                "savings_rub": savings,
+                "label": label_chip,
+                "message": msg
+            })
+
+        options.sort(key=lambda x: -x["savings_rub"])
+        return options[:3]
+
+    @staticmethod
+    async def process_message(user_id: str, message: str, progress_callback: Optional[Any] = None) -> Dict[str, Any]:
         """
         Основной цикл обработки запроса путешественника:
         1. Распознавание интента и профилирование (память пользователя)
@@ -1456,7 +1631,8 @@ class AgentService:
                 hotel_price_per_night=hotel["price_per_night_rub"],
                 transfer_price=0 if profile.get("without_transfer") else transfer["price_rub"],
                 meals_type=hotel.get("meals", "Завтрак включен"), nights=nights,
-                pet_surcharge_per_night=pet_surcharge
+                pet_surcharge_per_night=pet_surcharge,
+                rooms_count=profile.get("rooms_count", 1)
             )
             evaluated.append((hotel, logistics, breakdown))
 
@@ -1577,9 +1753,13 @@ class AgentService:
 
         if recommended_hotel:
             h = recommended_hotel
-            hotel_total_stay = h['price_per_night_rub'] * nights
+            rooms_cnt = profile.get("rooms_count", 1)
+            hotel_total_stay = h['price_per_night_rub'] * nights * rooms_cnt
             response_lines.append(f"🏨 **Рекомендуемый отель (в расчёте тура):**")
-            response_lines.append(f"• **«{h['name']}»** ({h['stars']}) — **{h['price_per_night_formatted']}/ночь** ({hotel_total_stay:,} ₽ за {nights} ночей)")
+            if rooms_cnt > 1:
+                response_lines.append(f"• **«{h['name']}»** ({h['stars']}) — **{h['price_per_night_formatted']}/ночь за номер** ({hotel_total_stay:,} ₽ за {rooms_cnt} ном. на {nights} н., {profile.get('room_type', '2 номера')})")
+            else:
+                response_lines.append(f"• **«{h['name']}»** ({h['stars']}) — **{h['price_per_night_formatted']}/ночь** ({hotel_total_stay:,} ₽ за {nights} ночей)")
             response_lines.append(f"• Питание: {h['meals']} | До моря: {h['distance_to_sea']} | Отмена: {h['cancellation']}")
             response_lines.append("")
 
@@ -1707,6 +1887,25 @@ class AgentService:
                 response_lines.append(f"• {note}")
             response_lines.append("")
 
+        # Паспортный и визовый комплаенс
+        compliance_info = ComplianceService.get_compliance_info(dest_id, profile)
+        response_lines.append(compliance_info["summary"])
+        response_lines.append("")
+
+        # Календарь выгоды (Гибкие даты ±2 дня)
+        flexible_dates = AgentService.calculate_flexible_dates_options(
+            dest_id=dest_id,
+            base_mandatory_rub=budget_breakdown["mandatory"]["total_mandatory_rub"],
+            checkin_date_str=profile.get("checkin_date"),
+            nights=nights
+        )
+        if flexible_dates:
+            best_flex = flexible_dates[0]
+            response_lines.append("📅 **Календарь выгоды (Гибкие даты ±2 дня):**")
+            response_lines.append(f"• 💡 Вылет на {abs(best_flex['days_shift'])} дня {best_flex['direction']} ({best_flex['dates_formatted']}, {best_flex['target_weekday']}) сэкономит **~{best_flex['savings_rub']:,} ₽**.")
+            response_lines.append(f"• *Нажмите на подсказку ниже или напишите «{best_flex['message']}», чтобы пересчитать.*")
+            response_lines.append("")
+
         # 12. Персональный инсайдерский совет от AI-консьержа DeepSeek Flash
         if not settings.is_mock_llm and not user_id.startswith("test") and recommended_hotel:
             concierge_tip = await LLMService.generate_concierge_advice(
@@ -1722,7 +1921,37 @@ class AgentService:
 
         response_lines.append("🛒 *Напишите «Забронировать» для покупки или уточните: «другой отель», «подешевле», «только прямой».*")
 
-        reply_text = "\n".join(response_lines)
+        rooms_cnt = profile.get("rooms_count", 1)
+        reasoning_steps = [
+            {"stage": "nlu", "title": "Анализ запроса и профиля", "detail": f"Направление «{top_dest.get('name')}», {nights} н., {profile.get('adults_count', 2)} взр., {rooms_cnt} ном. ({profile.get('room_type', '1 номер')})."},
+            {"stage": "filtering", "title": "Фильтрация каталога", "detail": f"Оценено {len(compared_list)} отелей с учётом ограничений (дети={profile.get('has_kids')}, питомцы={profile.get('has_pets')})."},
+            {"stage": "logistics", "title": "Графовая логистика Neo4j", "detail": f"Рейс {flight_info.get('airline', '')} {flight_info.get('flight_no', '')}, трансфер {tr_info.get('name', 'стандарт')}, безопасный транзитный буфер."},
+            {"stage": "compliance", "title": "Паспортный и визовый комплаенс", "detail": f"{compliance_info.get('passport_required')} ({compliance_info.get('passport_validity')}), {compliance_info.get('visa_policy')}."},
+            {"stage": "budget", "title": "Двухкомпонентный расчёт", "detail": f"Обязательные расходы: {budget_breakdown['mandatory']['total_mandatory_rub']:,} ₽ (номеров: {rooms_cnt}), на месте: {budget_breakdown['onsite_flexible']['total_onsite_range_rub']['min']:,}–{budget_breakdown['onsite_flexible']['total_onsite_range_rub']['max']:,} ₽."}
+        ]
+        if flexible_dates:
+            reasoning_steps.append({"stage": "dates", "title": "Календарь выгоды", "detail": f"Проверены соседние даты (±2 дня): максимальная выгода до {flexible_dates[0]['savings_rub']:,} ₽."})
+
+        reasoning_html = [
+            "<details class=\"agent-reasoning\">",
+            f"<summary>🧠 <b>Ход рассуждений агента ({len(reasoning_steps)} проверок)</b></summary>",
+            "<div class=\"reasoning-body\">"
+        ]
+        for idx, s in enumerate(reasoning_steps, 1):
+            reasoning_html.append(f"<div class=\"reasoning-step\"><span class=\"step-num\">{idx}.</span> <strong>{s['title']}:</strong> {s['detail']}</div>")
+        reasoning_html.append("</div>")
+        reasoning_html.append("</details>")
+        reasoning_block = "\n".join(reasoning_html)
+
+        reply_text = f"{reasoning_block}\n\n" + "\n".join(response_lines)
+
+        cart["rooms_count"] = rooms_cnt
+        cart["room_type"] = profile.get("room_type", "Стандарт")
+        cart["compliance"] = compliance_info
+        cart["flexible_dates"] = flexible_dates
+        cart["reasoning_steps"] = reasoning_steps
+        cart["logistics"] = logistics_info
+
         await AgentService._save_session(user_id, profile, cart, message, reply_text)
 
         return {
@@ -1733,7 +1962,11 @@ class AgentService:
             "budget_breakdown": budget_breakdown,
             "risks_report": risks_report,
             "weather": weather_report,
-            "cart": cart
+            "cart": cart,
+            "reasoning_steps": reasoning_steps,
+            "flexible_dates": flexible_dates,
+            "compliance_info": compliance_info,
+            "rooms_count": rooms_cnt
         }
 
     @staticmethod

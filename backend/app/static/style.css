@@ -463,3 +463,200 @@ body {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Agent Reasoning Accordion */
+details.agent-reasoning {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-left: 3px solid var(--accent-cyan);
+  border-radius: var(--radius-md);
+  margin-bottom: 14px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+details.agent-reasoning[open] {
+  background: rgba(15, 23, 42, 0.95);
+  border-color: rgba(6, 182, 212, 0.45);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+}
+
+details.agent-reasoning summary {
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-cyan);
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.15s ease;
+}
+
+details.agent-reasoning summary:hover {
+  background: rgba(59, 130, 246, 0.12);
+}
+
+details.agent-reasoning .reasoning-body {
+  padding: 10px 14px 14px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reasoning-step {
+  font-size: 12px;
+  color: #CBD5E1;
+  line-height: 1.5;
+  padding-left: 4px;
+}
+
+.reasoning-step .step-num {
+  color: var(--accent-blue);
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+/* Tour Actions Bar (Calendar, Share) */
+.tour-actions-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tour-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  text-decoration: none;
+}
+
+.btn-calendar {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #34D399;
+}
+
+.btn-calendar:hover {
+  background: rgba(16, 185, 129, 0.28);
+  border-color: #34D399;
+  transform: translateY(-1px);
+}
+
+.btn-share {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.35);
+  color: #60A5FA;
+}
+
+.btn-share:hover {
+  background: rgba(59, 130, 246, 0.28);
+  border-color: #60A5FA;
+  transform: translateY(-1px);
+}
+
+/* Flexible Dates Chips */
+.flex-dates-section {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: var(--radius-md);
+}
+
+.flex-dates-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: #FBBF24;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.flex-chips-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.flex-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #FDE68A;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.flex-chip:hover {
+  background: rgba(245, 158, 11, 0.22);
+  border-color: #FBBF24;
+  transform: translateY(-1px);
+  color: #FFF;
+}
+
+/* Live Streaming Indicator */
+.stream-live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(6, 182, 212, 0.12);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  color: var(--accent-cyan);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  animation: pulseGlow 1.8s infinite;
+}
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 5px rgba(6, 182, 212, 0.2); }
+  50% { box-shadow: 0 0 15px rgba(6, 182, 212, 0.5); }
+}
+
+/* Toast */
+.toast-notice {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: #1E293B;
+  color: #F8FAFC;
+  border: 1px solid #3B82F6;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+  padding: 12px 20px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+
+.toast-notice.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
