@@ -3,7 +3,13 @@ import re
 from datetime import date, timedelta
 
 
-def update_trip_dates(message: str, profile: dict) -> str | None:
+RU_MONTHS = {
+    "янв": 1, "фев": 2, "мар": 3, "апр": 4, "ма": 5, "июн": 6,
+    "июл": 7, "авг": 8, "сен": 9, "окт": 10, "ноя": 11, "дек": 12
+}
+
+
+def update_trip_dates(message: str, profile: dict, cart: dict | None = None) -> str | None:
     """Update supported dates; return a clarification instead of guessing a shift."""
     text = message.lower()
     shift = re.search(
@@ -14,6 +20,16 @@ def update_trip_dates(message: str, profile: dict) -> str | None:
         amount = int(next(v for v in values if v.isdigit()))
         direction = next(v for v in values if not v.isdigit())
         if not profile.get("checkin_date"):
+            if cart and cart.get("checkin_date"):
+                profile["checkin_date"] = cart["checkin_date"]
+                profile["checkout_date"] = cart.get("checkout_date")
+            elif cart and (cart.get("destination") or cart.get("hotel") or cart.get("dates")):
+                base_dt = date.today() + timedelta(days=14)
+                nights_cnt = profile.get("nights", cart.get("nights", 7))
+                profile["checkin_date"] = base_dt.isoformat()
+                profile["checkout_date"] = (base_dt + timedelta(days=nights_cnt)).isoformat()
+                profile["dates"] = f"{base_dt:%d.%m.%Y} — {base_dt + timedelta(days=nights_cnt):%d.%m.%Y} ({nights_cnt} ночей)"
+        if not profile.get("checkin_date"):
             return "С какой даты сдвигаем поездку? Укажите дату заезда в формате ДД.ММ.ГГГГ."
         start = date.fromisoformat(profile["checkin_date"])
         try:
@@ -23,10 +39,50 @@ def update_trip_dates(message: str, profile: dict) -> str | None:
     else:
         iso = re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", text)
         dotted = re.search(r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b", text)
+        ru_range = re.search(
+            r"(?:с\s+)?(\d{1,2})\s*(?:-|по|до)\s*(\d{1,2})\s*(янв\w*|фев\w*|мар\w*|апр\w*|ма[йея]\w*|июн\w*|июл\w*|авг\w*|сен\w*|окт\w*|ноя\w*|дек\w*)(?:\s*(\d{4}))?",
+            text
+        )
+        ru_single = re.search(
+            r"(?:заезд\s+|с\s+|на\s+)?(\d{1,2})\s*(янв\w*|фев\w*|мар\w*|апр\w*|ма[йея]\w*|июн\w*|июл\w*|авг\w*|сен\w*|окт\w*|ноя\w*|дек\w*)(?:\s*(\d{4}))?",
+            text
+        ) if not ru_range else None
+        dotted_short = re.search(r"\b(\d{1,2})\.(\d{1,2})\b", text) if (not dotted and not iso and not ru_range and not ru_single) else None
+
         if iso or dotted:
             parts = [int(x) for x in (iso or dotted).groups()]
             try:
                 start = date(*parts) if iso else date(parts[2], parts[1], parts[0])
+            except ValueError:
+                return "Такой даты нет в календаре. Укажите дату заезда в формате ДД.ММ.ГГГГ."
+        elif ru_range:
+            d1, d2, m_str, y_str = ru_range.groups()
+            m_num = next((v for k, v in RU_MONTHS.items() if m_str.startswith(k)), None)
+            y_num = int(y_str) if y_str else date.today().year
+            try:
+                start = date(y_num, m_num, int(d1))
+                end_day = int(d2)
+                if end_day > int(d1):
+                    profile["nights"] = end_day - int(d1)
+            except ValueError:
+                return "Такой даты нет в календаре. Укажите дату заезда в формате ДД.ММ.ГГГГ."
+        elif ru_single:
+            d1, m_str, y_str = ru_single.groups()
+            m_num = next((v for k, v in RU_MONTHS.items() if m_str.startswith(k)), None)
+            y_num = int(y_str) if y_str else date.today().year
+            try:
+                start = date(y_num, m_num, int(d1))
+                if y_str is None and start < date.today():
+                    start = date(y_num + 1, m_num, int(d1))
+            except ValueError:
+                return "Такой даты нет в календаре. Укажите дату заезда в формате ДД.ММ.ГГГГ."
+        elif dotted_short:
+            d1, m1 = [int(x) for x in dotted_short.groups()]
+            y_num = date.today().year
+            try:
+                start = date(y_num, m1, d1)
+                if start < date.today():
+                    start = date(y_num + 1, m1, d1)
             except ValueError:
                 return "Такой даты нет в календаре. Укажите дату заезда в формате ДД.ММ.ГГГГ."
         else:

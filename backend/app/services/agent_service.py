@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+from datetime import date, timedelta
 from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy import select, text
 
@@ -17,6 +18,51 @@ from app.services.compliance_service import ComplianceService
 from app.services.calendar_service import CalendarService
 
 logger = logging.getLogger(__name__)
+
+MONTH_NAMES_RU = {
+    1: "января", 2: "февраля", 3: "марта", 4: "апреля", 5: "мая", 6: "июня",
+    7: "июля", 8: "августа", 9: "сентября", 10: "октября", 11: "ноября", 12: "декабря"
+}
+MONTH_SHORT_RU = {
+    1: "янв", 2: "фев", 3: "мар", 4: "апр", 5: "мая", 6: "июн",
+    7: "июл", 8: "авг", 9: "сен", 10: "окт", 11: "ноя", 12: "дек"
+}
+DAY_OF_WEEK_RU = {
+    0: "пн", 1: "вт", 2: "ср", 3: "чт", 4: "пт", 5: "сб", 6: "вс"
+}
+
+
+def format_russian_date_range(d_in_str: Optional[str], d_out_str: Optional[str], nights: int) -> str:
+    if not d_in_str or not d_out_str:
+        return f"{nights} ночей"
+    try:
+        d1 = date.fromisoformat(d_in_str)
+        d2 = date.fromisoformat(d_out_str)
+        return f"{d1.day} {MONTH_NAMES_RU[d1.month]} — {d2.day} {MONTH_NAMES_RU[d2.month]} {d2.year} г. ({nights} ночей)"
+    except Exception:
+        return f"{d_in_str} — {d_out_str} ({nights} ночей)"
+
+
+def format_flight_date(d_str: Optional[str]) -> str:
+    if not d_str:
+        return ""
+    try:
+        d = date.fromisoformat(d_str)
+        return f" ({d.day} {MONTH_SHORT_RU[d.month]}, {DAY_OF_WEEK_RU[d.weekday()]})"
+    except Exception:
+        return f" ({d_str})"
+
+
+def format_hotel_dates(d_in_str: Optional[str], d_out_str: Optional[str], nights: int) -> str:
+    if not d_in_str or not d_out_str:
+        return f"на {nights} ночей"
+    try:
+        d1 = date.fromisoformat(d_in_str)
+        d2 = date.fromisoformat(d_out_str)
+        return f"{d1.day} {MONTH_SHORT_RU[d1.month]} — {d2.day} {MONTH_SHORT_RU[d2.month]}, {nights} ночей"
+    except Exception:
+        return f"{d_in_str} — {d_out_str}, {nights} ночей"
+
 
 # Маппинг внешних направлений в наши 8 расширенных регионов (Пункт 3 ТЗ)
 UNKNOWN_DESTINATIONS_MAP = [
@@ -488,6 +534,103 @@ class AgentService:
         return None
 
     @staticmethod
+    def get_clarification_prompt(message: str) -> str:
+        """
+        Формирует лаконичные ориентирующие вопросы (Анти-15-вопросов)
+        в зависимости от общего направления мысли пользователя (море/пляж, горы/природа или общий отпуск).
+        """
+        m_lower = message.lower()
+        if any(w in m_lower for w in ["море", "пляж", "морск", "побереж", "купат", "в тепло", "теплое море"]):
+            return (
+                "🌊 **Отличная идея — пляжный отдых!**\n\n"
+                "Чтобы подобрать идеальный тур под ключ с проверенным перелётом, отелем и трансфером, уточните пару моментов:\n\n"
+                "1️⃣ **Какое направление вам ближе?**\n"
+                "• 🌴 **Турция (Анталья / Кемер / Белек)** — Тёплое море, любимый All-Inclusive, прямые рейсы без виз\n"
+                "• 🌊 **Сочи / Сириус** — Родное побережье, быстрый перелёт по паспорту РФ, развитая инфраструктура\n"
+                "• ✨ **ОАЭ (Дубай / Абу-Даби)** — Футуристичные пляжи, шопинг и первоклассный сервис\n"
+                "• 🐠 **Египет (Шарм-эль-Шейх)** — Тёплое Красное море и живые коралловые рифы\n"
+                "• 🏝️ **Мальдивы или Пхукет (Таиланд)** — Белоснежные пляжи, бирюзовые лагуны и экзотика\n\n"
+                "2️⃣ **Когда и на сколько дней планируете поездку?** (например: «в ноябре на 7 ночей» или точные даты)\n"
+                "3️⃣ **Кто едет и есть ли пожелания по бюджету?** (вдвоём, с семьёй/детьми, соло, комфортный или люкс)\n\n"
+                "_Напишите ваши пожелания (например: «В Турцию на двоих в ноябре, всё включено»), и я сразу соберу готовый тур!_"
+            )
+        elif any(w in m_lower for w in ["гор", "лыж", "хайкинг", "канатк", "альп"]):
+            return (
+                "🏔️ **Прекрасный выбор — горы, чистый воздух и альпийские панорамы!**\n\n"
+                "Чтобы подобрать лучший тур, уточните пару деталей:\n\n"
+                "1️⃣ **Какой формат горного отдыха вам ближе?**\n"
+                "• 🌲 **Красная Поляна (Сочи)** — Канатные дороги, пик 2200м, альпийские спа-отели и горный воздух\n"
+                "• 🏞️ **Алтай (Манжерок / Чемал)** — Первозданная природа, бирюзовая Катунь, кедровые леса и места силы\n\n"
+                "2️⃣ **Когда и на сколько дней планируете поездку?**\n"
+                "3️⃣ **Состав путешественников и пожелания по бюджету?**\n\n"
+                "_Напишите, что вам ближе, и я мгновенно составлю маршрут под ключ!_"
+            )
+        else:
+            return (
+                "👋 **Здравствуйте! Я умный ассистент путешествий Ostrovok.**\n\n"
+                "Вместо длинных анкет из 15 вопросов задам всего **два ключевых ориентира**:\n\n"
+                "1️⃣ **Какой формат отдыха вам ближе?**\n"
+                "• 🌊 **Пляжный релакс и рифы** (Мальдивы, Пхукет, Египет, ОАЭ, Анталья)\n"
+                "• 🏔️ **Горы, природа и спа** (Алтай, Красная Поляна)\n"
+                "• 🏛️ **Культура, архитектура и гастрономия** (Санкт-Петербург, Стамбул)\n"
+                "• 👨‍👩‍👧 **Семейный All-Inclusive с детьми и аквапарками**\n\n"
+                "2️⃣ **Примерный состав и даты поездки** (вдвоём, с семьёй, с питомцем или соло)?\n\n"
+                "_Напишите, что вам ближе (например: «Хочу море и всё включено с ребенком»), "
+                "и я мгновенно соберу готовый проверенный маршрут с перелетом, отелем и трансфером._"
+            )
+
+    @staticmethod
+    def is_explicit_multi_city_request(message: str) -> bool:
+        """
+        Проверяет, запрашивал ли пользователь явно мульти-городской/комбинированный тур.
+        Исключает ложные срабатывания на одиночные запросы вроде «Хочу на море».
+        """
+        m = message.lower()
+        explicit_keywords = [
+            "тур по городам", "комбинированн", "несколько городов", "два города", "двум городам",
+            "города у моря", "маршрут по городам", "совместить города", "маршрут из двух",
+            "много городов"
+        ]
+        if any(k in m for k in explicit_keywords):
+            return True
+        city_pairs = [
+            ("сочи", "полян"), ("сириус", "полян"),
+            ("анталь", "стамбул"), ("стамбул", "анталь"),
+            ("дубай", "абу-даби"), ("абу-даби", "дубай"),
+            ("манжерок", "чемал"), ("чемал", "манжерок"),
+            ("горно-алтайск", "чемал"), ("чемал", "горно-алтайск"),
+            ("пхукет", "краби"), ("краби", "пхукет"),
+            ("питер", "петергоф"), ("петербург", "петергоф"),
+            ("шарм", "дахаб"), ("дахаб", "шарм")
+        ]
+        return any(c1 in m and c2 in m for c1, c2 in city_pairs)
+
+    @staticmethod
+    def sanitize_ai_intro(intro: Optional[str], dest_id: str, default_intro: str) -> str:
+        """
+        Проверяет, не противоречит ли реплика ИИ выбранному региону тура
+        (например, когда модель упоминает Турцию при туре в Сочи).
+        При обнаружении несоответствия заменяет реплику на проверенную системную.
+        """
+        if not intro:
+            return default_intro
+        intro_lower = intro.lower()
+        forbidden_map = {
+            "sochi": ["турци", "стамбул", "анталь", "оаэ", "дуба", "египет", "мальдив", "тайланд", "таиланд", "пхукет", "питер", "алтай"],
+            "turkey": ["сочи", "сириус", "полян", "адлер", "оаэ", "дуба", "египет", "мальдив", "тайланд", "таиланд", "пхукет", "питер", "алтай"],
+            "uae": ["сочи", "сириус", "полян", "турци", "анталь", "стамбул", "египет", "мальдив", "тайланд", "таиланд", "пхукет", "питер", "алтай"],
+            "egypt": ["сочи", "сириус", "полян", "турци", "анталь", "стамбул", "оаэ", "дуба", "мальдив", "тайланд", "таиланд", "пхукет", "питер", "алтай"],
+            "maldives": ["сочи", "сириус", "полян", "турци", "анталь", "стамбул", "оаэ", "дуба", "египет", "тайланд", "таиланд", "пхукет", "питер", "алтай"],
+            "thailand": ["сочи", "сириус", "полян", "турци", "анталь", "стамбул", "оаэ", "дуба", "египет", "мальдив", "питер", "алтай"],
+            "spb": ["сочи", "сириус", "полян", "турци", "анталь", "стамбул", "оаэ", "дуба", "египет", "мальдив", "тайланд", "таиланд", "пхукет", "алтай"],
+            "altai": ["сочи", "сириус", "полян", "турци", "анталь", "стамбул", "оаэ", "дуба", "египет", "мальдив", "тайланд", "таиланд", "пхукет", "питер"]
+        }
+        forbidden = forbidden_map.get(dest_id, [])
+        if any(fw in intro_lower for fw in forbidden):
+            return default_intro
+        return intro
+
+    @staticmethod
     def is_vague_greeting(message: str, has_cart_destination: bool) -> bool:
         """
         Проверяет, является ли сообщение пользователя неопределенным приветствием/стартовым запросом
@@ -516,11 +659,14 @@ class AgentService:
 
         # Если есть параметры/команды перепланирования или фильтров — это не приветствие
         replan_keywords = [
-            "отель", "гостиниц", "номер", "дешев", "дорог", "рейс", "вылет", "самолет",
-            "трансфер", "бюджет", "тысяч", "рубл", "руб", "заезд", "выезд", "ноч", "дней", "день",
-            "забронир", "оформ", "оплат", "купит"
+            "другой отель", "смени отель", "поменяй отель", "дешев", "дорог", "попозже", "пораньше",
+            "убери трансфер", "без трансфера", "забронир", "оформ", "оплат", "купит"
         ]
         if any(rw in m_lower for rw in replan_keywords):
+            return False
+
+        # Если указаны конкретные календарные даты
+        if re.search(r"\b\d{1,2}\.\d{1,2}\b", m_lower) or re.search(r"\b\d{4}-\d{2}-\d{2}\b", m_lower):
             return False
 
         vague_phrases = [
@@ -530,12 +676,14 @@ class AgentService:
             "хочу поехать", "хочу слетать", "подобрать тур", "куда слетать", "планирую отдых",
             "планирую отпуск", "посоветуйте", "ищу тур", "хочу путешествовать", "помоги с поездкой",
             "хочу в путешествие", "поехать куда-нибудь", "где лучше отдохнуть", "какие есть варианты",
-            "помоги спланировать", "выбрать тур", "собери тур"
+            "помоги спланировать", "выбрать тур", "собери тур",
+            "хочу на море", "на море", "к морю", "хочу на пляж", "на пляж", "пляжный отдых", "хочу искупаться",
+            "хочу в тепло", "в тепло", "хочу в горы", "в горы", "горный отдых", "покататься на лыжах"
         ]
         if any(vp in m_lower for vp in vague_phrases):
             return True
 
-        if len(m_lower.split()) <= 3 and not any(w in m_lower for w in ["заграниц", "за рубеж", "пляж", "море", "гор"]):
+        if len(m_lower.split()) <= 4 and not any(k in m_lower for k in known_kws):
             return True
 
         return False
@@ -934,8 +1082,12 @@ class AgentService:
         cost_hotel_1 = hotel_1.get("price_per_night_rub", 6000) * nights_1 * rooms_cnt
         cost_hotel_2 = hotel_2.get("price_per_night_rub", 8500) * nights_2 * rooms_cnt
         intl_flight_price = outbound_flight.get("price_rub_roundtrip", 27000)
+        flight_out_price = int(round(intl_flight_price * 0.5))
+        flight_ret_price = int(intl_flight_price - flight_out_price)
         intercity_price = intercity.get("price_rub", 3800)
         transfers_price = 0 if profile.get("without_transfer") else 3500
+        tr_1_price = transfers_price // 2
+        tr_2_price = transfers_price - tr_1_price
 
         pet_fee_1 = (hotel_1.get("pet_surcharge_per_night_rub", 0) or 0) * nights_1 if profile.get("has_pets") else 0
         pet_fee_2 = (hotel_2.get("pet_surcharge_per_night_rub", 0) or 0) * nights_2 if profile.get("has_pets") else 0
@@ -947,78 +1099,105 @@ class AgentService:
         total_min = mand_total + onsite_min
         total_max = mand_total + onsite_max
 
-        # 4. Формирование ответа
+        # 4. Даты и логистика
+        if not profile.get("checkin_date"):
+            today = date.today()
+            base_date = today + timedelta(days=14)
+            profile["checkin_date"] = base_date.isoformat()
+            profile["checkout_date"] = (base_date + timedelta(days=nights)).isoformat()
+            profile["dates"] = f"{base_date:%d.%m.%Y} — {base_date + timedelta(days=nights):%d.%m.%Y} ({nights} ночей)"
+
+        d_in = date.fromisoformat(profile["checkin_date"])
+        d_mid = d_in + timedelta(days=nights_1)
+        d_out = date.fromisoformat(profile["checkout_date"])
+
+        date_out_fmt = format_flight_date(d_in.isoformat())
+        date_mid_fmt = format_flight_date(d_mid.isoformat())
+        date_ret_fmt = format_flight_date(d_out.isoformat())
+        date_range_str = format_russian_date_range(d_in.isoformat(), d_out.isoformat(), nights)
+
+        hotel_1_dates = format_hotel_dates(d_in.isoformat(), d_mid.isoformat(), nights_1)
+        hotel_2_dates = format_hotel_dates(d_mid.isoformat(), d_out.isoformat(), nights_2)
+
+        # 5. Формирование ответа
         response_lines = []
-        ai_intro = profile.pop("llm_ai_intro", None) or selection_rationale
+        raw_intro = profile.pop("llm_ai_intro", None) or selection_rationale
         out_dep = outbound_flight.get("departure_time", "13:40")
-        if not ai_intro:
+        if not raw_intro:
             if budget_limit is not None and total_max > budget_limit:
-                ai_intro = (
+                raw_intro = (
                     f"⚠️ К сожалению, с бюджетом {budget_limit:,} ₽ составить комбинированный тур невозможно. "
                     f"Ближайший доступный вариант — {total_max:,} ₽ (на {total_max - budget_limit:,} ₽ выше лимита). "
                     f"Ниже подобран самый экономичный вариант под ключ:"
                 )
             elif is_replan_flight_day:
-                ai_intro = f"Понял вас — никаких подъёмов в 6 утра: подобрал дневной рейс в {out_dep}, чтобы можно было выспаться. Собрал полноценный комбинированный тур по обоим городам:"
+                raw_intro = f"Понял вас — никаких подъёмов в 6 утра: подобрал дневной рейс в {out_dep}, чтобы можно было выспаться. Собрал полноценный комбинированный тур по обоим городам:"
             elif is_replan_flight_later:
-                ai_intro = f"Принято! Обновил время вылета на комфортное дневное ({out_dep}) и пересчитал программу тура по городам:"
+                raw_intro = f"Принято! Обновил время вылета на комфортное дневное ({out_dep}) и пересчитал программу тура по городам:"
             else:
-                ai_intro = f"Собрал для вас готовый комбинированный тур «{cfg['title']}» под ключ с логистикой между городами, отелями и расчётом полной стоимости:"
+                raw_intro = f"Собрал для вас готовый комбинированный тур «{cfg['title']}» под ключ с логистикой между городами, отелями и расчётом полной стоимости:"
+
+        ai_intro = AgentService.sanitize_ai_intro(
+            intro=raw_intro,
+            dest_id=dest_id,
+            default_intro=f"Собрал для вас готовый комбинированный тур «{cfg['title']}» под ключ с логистикой между городами, отелями и расчётом полной стоимости:"
+        )
 
         response_lines.append(f"💬 {ai_intro}")
         response_lines.append("")
         response_lines.append(f"🌴 **Комбинированный тур: {cfg['title']}** | {cfg['climate']}")
+        response_lines.append(f"📅 **Даты поездки:** {date_range_str} *(даты можно изменить: напишите «смени даты на ...»)*")
         response_lines.append(f"🌤️ **Прогноз погоды по маршруту:** {cfg['city_1']['name']}: {cfg['city_1']['weather']} | {cfg['city_2']['name']}: {cfg['city_2']['weather']}")
         response_lines.append("")
 
         response_lines.append(f"🗺️ **Программа и маршрут тура по городам ({nights} ночей):**")
         response_lines.append("")
 
-        # Город 1
-        response_lines.append(f"1️⃣ **Часть 1: {cfg['city_1']['name']} ({nights_1} ночи/ночей) — {cfg['city_1']['vibe']}**")
-        if rooms_cnt > 1:
-            response_lines.append(f"• 🏨 **Отель:** **«{hotel_1['name']}»** ({hotel_1['stars']}) — **{hotel_1.get('price_per_night_formatted', str(hotel_1.get('price_per_night_rub', 6000)) + ' ₽')}/ночь за номер** ({cost_hotel_1:,} ₽ за {rooms_cnt} ном. на {nights_1} н.)")
-            response_lines.append(f"• 🛏️ **Размещение:** {profile.get('room_type', 'смежные номера')}.")
-        else:
-            response_lines.append(f"• 🏨 **Отель:** **«{hotel_1['name']}»** ({hotel_1['stars']}) — **{hotel_1.get('price_per_night_formatted', str(hotel_1.get('price_per_night_rub', 6000)) + ' ₽')}/ночь** ({cost_hotel_1:,} ₽ за {nights_1} ночей)")
-        response_lines.append(f"• Питание: {hotel_1.get('meals', 'Завтрак')} | До моря: {hotel_1.get('distance_to_sea', 'Первая линия')} | Отмена: {hotel_1.get('cancellation', 'Бесплатно')}")
-        response_lines.append(f"• 🏖️ **Вайб и программа:** {cfg['city_1']['activities']}.")
-        response_lines.append("")
-
-        # Переезд
-        response_lines.append(f"🚄 / ✈️ **Переезд между городами:**")
-        response_lines.append(f"• **{intercity['name']}** ({intercity['duration']}, {intercity['price_rub']:,} ₽): {intercity['description']}")
-        response_lines.append("")
-
-        # Город 2
-        response_lines.append(f"2️⃣ **Часть 2: {cfg['city_2']['name']} ({nights_2} ночи/ночей) — {cfg['city_2']['vibe']}**")
-        if rooms_cnt > 1:
-            response_lines.append(f"• 🏨 **Отель:** **«{hotel_2['name']}»** ({hotel_2['stars']}) — **{hotel_2.get('price_per_night_formatted', str(hotel_2.get('price_per_night_rub', 8500)) + ' ₽')}/ночь за номер** ({cost_hotel_2:,} ₽ за {rooms_cnt} ном. на {nights_2} н.)")
-            response_lines.append(f"• 🛏️ **Размещение:** {profile.get('room_type', 'смежные номера')}.")
-        else:
-            response_lines.append(f"• 🏨 **Отель:** **«{hotel_2['name']}»** ({hotel_2['stars']}) — **{hotel_2.get('price_per_night_formatted', str(hotel_2.get('price_per_night_rub', 8500)) + ' ₽')}/ночь** ({cost_hotel_2:,} ₽ за {nights_2} ночей)")
-        response_lines.append(f"• Питание: {hotel_2.get('meals', 'Завтрак')} | Отмена: {hotel_2.get('cancellation', 'Бесплатно')}")
-        response_lines.append(f"• 🏛️ **Вайб и программа:** {cfg['city_2']['activities']}.")
-        response_lines.append("")
-
-        # Авиаперелёты
         fl_code_out = f"{outbound_flight.get('airline', 'Авиа')} {outbound_flight.get('flight_no', '')}"
         times_out = f"{outbound_flight.get('origin_code', 'MOW')} {outbound_flight.get('departure_time', '13:40')} ➔ {cfg['city_1']['airport']} {outbound_flight.get('arrival_time', '18:35')}"
         fl_code_ret = f"{ret_airline} {ret_no}"
         times_ret = f"{dest_code} {ret_dep} ➔ {orig_code} {ret_arr}"
 
-        date_out = profile.get("checkin_date")
-        date_ret = profile.get("checkout_date")
-        date_out_str = f" ({date_out})" if date_out else ""
-        date_ret_str = f" ({date_ret})" if date_ret else ""
+        # 1. Перелет туда
+        response_lines.append(f"1️⃣ 🛫 **Перелёт туда в {cfg['city_1']['name']}{date_out_fmt}:** Прямой рейс {fl_code_out} ({times_out}) — **{flight_out_price:,} ₽**")
 
-        response_lines.append("✈️ **Международные авиаперелёты (включены в стоимость):**")
-        response_lines.append(f"• 🛫 **Туда{date_out_str}:** Прямой рейс {fl_code_out} ({times_out}) прямо в {cfg['city_1']['name']}.")
-        response_lines.append(f"• 🛬 **Обратно{date_ret_str}:** {fl_code_ret} ({times_ret}) вылет из {cfg['city_2']['name']}.")
+        # 2. Трансфер в отель 1
         if profile.get("without_transfer"):
-            response_lines.append("• 🧳 Трансферы исключены по вашему запросу (самостоятельно на такси).")
+            response_lines.append(f"2️⃣ 🧳 **Трансфер в отель 1:** Самостоятельно на такси (Трансферы исключены по вашему запросу) — **0 ₽**")
         else:
-            response_lines.append("• 🚗 Трансферы аэропорт ➔ отель включены по всему маршруту.")
+            response_lines.append(f"2️⃣ 🚗 **Трансфер в отель 1:** Аэропорт {cfg['city_1']['airport']} ➔ отель (~30 мин) — **{tr_1_price:,} ₽**")
+
+        # 3. Отель 1
+        h1_formatted = hotel_1.get('price_per_night_formatted', f"{hotel_1.get('price_per_night_rub', 6000):,} ₽")
+        if rooms_cnt > 1:
+            response_lines.append(f"3️⃣ 🏨 **Часть 1: Отель в {cfg['city_1']['name']} ({nights_1} ночи/ночей, {hotel_1_dates}):** **«{hotel_1['name']}»** ({hotel_1['stars']}) — **{h1_formatted}/ночь за номер** ({cost_hotel_1:,} ₽ за {rooms_cnt} ном. на {nights_1} н.) — **{cost_hotel_1:,} ₽**")
+            response_lines.append(f"• 🛏️ **Размещение:** {profile.get('room_type', 'смежные номера')}.")
+        else:
+            response_lines.append(f"3️⃣ 🏨 **Часть 1: Отель в {cfg['city_1']['name']} ({nights_1} ночи/ночей, {hotel_1_dates}):** **«{hotel_1['name']}»** ({hotel_1['stars']}) — **{h1_formatted}/ночь** ({cost_hotel_1:,} ₽ за {nights_1} ночей) — **{cost_hotel_1:,} ₽**")
+        response_lines.append(f"• Питание: {hotel_1.get('meals', 'Завтрак')} | До моря: {hotel_1.get('distance_to_sea', 'Первая линия')} | Отмена: {hotel_1.get('cancellation', 'Бесплатно')}")
+        response_lines.append(f"• 🏖️ **Вайб и программа:** {cfg['city_1']['activities']}.")
+
+        # 4. Переезд между городами
+        response_lines.append(f"4️⃣ 🚄 / ✈️ **Переезд между городами{date_mid_fmt}:** **{intercity['name']}** ({intercity['duration']}): {intercity['description']} — **{intercity_price:,} ₽**")
+
+        # 5. Отель 2
+        h2_formatted = hotel_2.get('price_per_night_formatted', f"{hotel_2.get('price_per_night_rub', 8500):,} ₽")
+        if rooms_cnt > 1:
+            response_lines.append(f"5️⃣ 🏨 **Часть 2: Отель в {cfg['city_2']['name']} ({nights_2} ночи/ночей, {hotel_2_dates}):** **«{hotel_2['name']}»** ({hotel_2['stars']}) — **{h2_formatted}/ночь за номер** ({cost_hotel_2:,} ₽ за {rooms_cnt} ном. на {nights_2} н.) — **{cost_hotel_2:,} ₽**")
+            response_lines.append(f"• 🛏️ **Размещение:** {profile.get('room_type', 'смежные номера')}.")
+        else:
+            response_lines.append(f"5️⃣ 🏨 **Часть 2: Отель в {cfg['city_2']['name']} ({nights_2} ночи/ночей, {hotel_2_dates}):** **«{hotel_2['name']}»** ({hotel_2['stars']}) — **{h2_formatted}/ночь** ({cost_hotel_2:,} ₽ за {nights_2} ночей) — **{cost_hotel_2:,} ₽**")
+        response_lines.append(f"• Питание: {hotel_2.get('meals', 'Завтрак')} | Отмена: {hotel_2.get('cancellation', 'Бесплатно')}")
+        response_lines.append(f"• 🏛️ **Вайб и программа:** {cfg['city_2']['activities']}.")
+
+        # 6. Трансфер в аэропорт 2
+        if profile.get("without_transfer"):
+            response_lines.append(f"6️⃣ 🧳 **Трансфер в аэропорт:** Самостоятельно на такси (Трансферы исключены по вашему запросу) — **0 ₽**")
+        else:
+            response_lines.append(f"6️⃣ 🚗 **Трансфер в аэропорт {cfg['city_2']['name']}:** Отель ➔ аэропорт {cfg['city_2']['airport']} (~30 мин) — **{tr_2_price:,} ₽**")
+
+        # 7. Перелет обратно
+        response_lines.append(f"7️⃣ 🛬 **Перелёт обратно из {cfg['city_2']['name']}{date_ret_fmt}:** {fl_code_ret} ({times_ret}) — **{flight_ret_price:,} ₽**")
         response_lines.append("")
 
         # Финансовый блок
@@ -1102,6 +1281,8 @@ class AgentService:
         cart["transfer"] = f"Трансферы + {intercity['name']}"
         cart["nights"] = nights
         cart["dates"] = profile.get("dates", f"{nights} ночей")
+        cart["checkin_date"] = profile.get("checkin_date")
+        cart["checkout_date"] = profile.get("checkout_date")
         cart["total_mandatory_rub"] = mand_total
         cart["total_trip_budget_range_rub"] = {"min": total_min, "max": total_max}
         cart["onsite_spending_guide"] = f"Рекомендуемый бюджет на месте: от {onsite_min:,} до {onsite_max:,} ₽"
@@ -1238,8 +1419,20 @@ class AgentService:
                     "state": "CONFIRMED"
                 }
 
+        # Синхронизация дат: если в profile нет checkin_date, восстанавливаем из cart или текущего тура
+        if not profile.get("checkin_date"):
+            if cart.get("checkin_date"):
+                profile["checkin_date"] = cart["checkin_date"]
+                profile["checkout_date"] = cart.get("checkout_date")
+            elif cart.get("hotel") or cart.get("destination") or cart.get("dates"):
+                base_dt = date.today() + timedelta(days=14)
+                nights_cnt = profile.get("nights", cart.get("nights", 7))
+                profile["checkin_date"] = base_dt.isoformat()
+                profile["checkout_date"] = (base_dt + timedelta(days=nights_cnt)).isoformat()
+                profile["dates"] = f"{base_dt:%d.%m.%Y} — {base_dt + timedelta(days=nights_cnt):%d.%m.%Y} ({nights_cnt} ночей)"
+
         previous_dates = profile.get("dates")
-        date_question = update_trip_dates(user_lower, profile)
+        date_question = update_trip_dates(user_lower, profile, cart)
         if date_question:
             await AgentService._save_session(user_id, profile, cart, message, date_question)
             return {"text": date_question, "state": "NEEDS_DATES", "cart": cart}
@@ -1301,21 +1494,10 @@ class AgentService:
                             "cart": cart
                         }
                 elif llm_decision.get("action") == "plan":
-                    # Если запрос совершенно пустой / приветствие без параметров
-                    is_pure_greeting = not has_dest_in_cart and not llm_decision.get("destination_id") and not llm_decision.get("tags") and not llm_decision.get("origin_airport") and not llm_decision.get("budget_rub") and AgentService.is_vague_greeting(message, has_dest_in_cart)
+                    # Если запрос приветственный/неопределенный без указания направления (Анти-15-вопросов)
+                    is_pure_greeting = not has_dest_in_cart and not llm_decision.get("destination_id") and not llm_decision.get("origin_airport") and AgentService.is_vague_greeting(message, has_dest_in_cart)
                     if is_pure_greeting:
-                        reply_anti_questions = (
-                            "👋 **Здравствуйте! Я умный ассистент путешествий Ostrovok.**\n\n"
-                            "Вместо длинных анкет из 15 вопросов задам всего **два ключевых ориентира**:\n\n"
-                            "1️⃣ **Какой формат отдыха вам ближе?**\n"
-                            "• 🌊 **Пляжный релакс и рифы** (Мальдивы, Пхукет, Египет, ОАЭ, Анталья)\n"
-                            "• 🏔️ **Горы, природа и спа** (Алтай, Красная Поляна)\n"
-                            "• 🏛️ **Культура, архитектура и гастрономия** (Санкт-Петербург, Стамбул)\n"
-                            "• 👨‍👩‍👧 **Семейный All-Inclusive с детьми и аквапарками**\n\n"
-                            "2️⃣ **Примерный состав и даты поездки** (вдвоём, с семьёй, с питомцем или соло)?\n\n"
-                            "_Напишите, что вам ближе (например: «Хочу море и всё включено с ребенком»), "
-                            "и я мгновенно соберу готовый проверенный маршрут с перелетом, отелем и трансфером._"
-                        )
+                        reply_anti_questions = AgentService.get_clarification_prompt(message)
                         await AgentService._save_session(user_id, profile, cart, message, reply_anti_questions)
                         return {
                             "text": reply_anti_questions,
@@ -1357,29 +1539,21 @@ class AgentService:
                         for t in llm_decision["tags"]:
                             if t not in profile.setdefault("interests", []):
                                 profile["interests"].append(t)
-                    if llm_decision.get("budget_rub") and not profile.get("budget_rub"):
+                    has_budget_mention = bool(
+                        re.search(r"\b(?:\d+[\s\d]*(?:тыс|к|руб|₽|млн)|бюджет|дешевле|не дороже|до \d+)\b", user_lower)
+                    )
+                    if llm_decision.get("budget_rub") and has_budget_mention and not profile.get("budget_rub"):
                         profile["budget_rub"] = llm_decision["budget_rub"]
                     if llm_decision.get("nights") and not any(w in user_lower for w in ["ноч", "дн", "сут"]):
                         profile["nights"] = llm_decision["nights"]
                         profile["dates"] = f"{llm_decision['nights']} ночей"
-                    if llm_decision.get("is_multi_city"):
+                    if llm_decision.get("is_multi_city") and AgentService.is_explicit_multi_city_request(message):
                         profile["is_multi_city"] = True
 
         # Детерминированный fallback (для mock LLM и unit-тестов):
         # Пункт 4 ТЗ: Анти-15-вопросов на старте (Anti-15-Questions)
         if AgentService.is_vague_greeting(message, has_dest_in_cart):
-            reply_anti_questions = (
-                "👋 **Здравствуйте! Я умный ассистент путешествий Ostrovok.**\n\n"
-                "Вместо длинных анкет из 15 вопросов задам всего **два ключевых ориентира**:\n\n"
-                "1️⃣ **Какой формат отдыха вам ближе?**\n"
-                "• 🌊 **Пляжный релакс и рифы** (Мальдивы, Пхукет, Египет, ОАЭ, Анталья)\n"
-                "• 🏔️ **Горы, природа и спа** (Алтай, Красная Поляна)\n"
-                "• 🏛️ **Культура, архитектура и гастрономия** (Санкт-Петербург, Стамбул)\n"
-                "• 👨‍👩‍👧 **Семейный All-Inclusive с детьми и аквапарками**\n\n"
-                "2️⃣ **Примерный состав и даты поездки** (вдвоём, с семьёй, с питомцем или соло)?\n\n"
-                "_Напишите, что вам ближе (например: «Хочу море и всё включено с ребенком»), "
-                "и я мгновенно соберу готовый проверенный маршрут с перелетом, отелем и трансфером._"
-            )
+            reply_anti_questions = AgentService.get_clarification_prompt(message)
             await AgentService._save_session(user_id, profile, cart, message, reply_anti_questions)
             return {
                 "text": reply_anti_questions,
@@ -1521,7 +1695,8 @@ class AgentService:
         cart["destination"] = dest_name
 
         # Пункт: Мульти-городской тур (Multi-City Itinerary с динамическим подбором связок городов)
-        if profile.get("is_multi_city"):
+        if profile.get("is_multi_city") or (cart.get("is_multi_city") and not profile.get("domestic_only") and not profile.get("abroad_only")):
+            profile["is_multi_city"] = True
             selected_dest, selected_cfg, rationale = AgentService.select_multi_city_route(
                 user_message=message,
                 profile=profile,
@@ -1737,70 +1912,97 @@ class AgentService:
             elif budget_changed and budget_limit is not None:
                 ai_intro = f"Подобрал оптимальный тур, который укладывается в ваш бюджет {budget_limit:,} ₽:"
 
-        if ai_intro:
-            response_lines.append(f"💬 {ai_intro}")
-            response_lines.append("")
+        # Даты тура
+        if not profile.get("checkin_date"):
+            today = date.today()
+            base_date = today + timedelta(days=14)
+            profile["checkin_date"] = base_date.isoformat()
+            profile["checkout_date"] = (base_date + timedelta(days=nights)).isoformat()
+            profile["dates"] = f"{base_date:%d.%m.%Y} — {base_date + timedelta(days=nights):%d.%m.%Y} ({nights} ночей)"
+
+        d_in_str = profile.get("checkin_date")
+        d_out_str = profile.get("checkout_date")
+        date_range_str = format_russian_date_range(d_in_str, d_out_str, nights)
+        fl_date_out = format_flight_date(d_in_str)
+        fl_date_ret = format_flight_date(d_out_str)
+        hotel_dates_str = format_hotel_dates(d_in_str, d_out_str, nights)
 
         dest_display_name = top_dest['name']
         if recommended_hotel and recommended_hotel.get("city") and "(" in dest_display_name and " и " in dest_display_name:
             country_part = dest_display_name.split("(")[0].strip()
             dest_display_name = f"{country_part} ({recommended_hotel['city']})"
 
+        ai_intro = AgentService.sanitize_ai_intro(
+            intro=ai_intro,
+            dest_id=dest_id,
+            default_intro=f"Подобрал для вас проверенный тур в {dest_display_name} под ключ с перелётом, отелем и трансфером:"
+        )
+
+        if ai_intro:
+            response_lines.append(f"💬 {ai_intro}")
+            response_lines.append("")
+
         response_lines.append(f"🌴 **{dest_display_name}** | {top_dest.get('climate_summary', '')}")
+        response_lines.append(f"📅 **Даты поездки:** {date_range_str} *(даты можно изменить: напишите «смени даты на ...»)*")
         if weather_report.get("available"):
             response_lines.append(f"🌤️ **Прогноз погоды на неделю ({weather_report.get('source')}):** {weather_report['summary']}")
         response_lines.append("")
 
-        if recommended_hotel:
-            h = recommended_hotel
-            rooms_cnt = profile.get("rooms_count", 1)
-            hotel_total_stay = h['price_per_night_rub'] * nights * rooms_cnt
-            response_lines.append(f"🏨 **Рекомендуемый отель (в расчёте тура):**")
-            if rooms_cnt > 1:
-                response_lines.append(f"• **«{h['name']}»** ({h['stars']}) — **{h['price_per_night_formatted']}/ночь за номер** ({hotel_total_stay:,} ₽ за {rooms_cnt} ном. на {nights} н., {profile.get('room_type', '2 номера')})")
-            else:
-                response_lines.append(f"• **«{h['name']}»** ({h['stars']}) — **{h['price_per_night_formatted']}/ночь** ({hotel_total_stay:,} ₽ за {nights} ночей)")
-            response_lines.append(f"• Питание: {h['meals']} | До моря: {h['distance_to_sea']} | Отмена: {h['cancellation']}")
-            response_lines.append("")
+        flight_roundtrip = flight_info.get("price_rub_roundtrip", 20000)
+        flight_out_price = int(round(flight_roundtrip * 0.5))
+        flight_ret_price = flight_roundtrip - flight_out_price
 
-            if dest_id in ("turkey", "sochi", "uae", "altai"):
-                other_city = "Стамбул" if dest_id == "turkey" else ("Красную Поляну" if dest_id == "sochi" else ("Абу-Даби" if dest_id == "uae" else "Чемал"))
-                response_lines.append(f"💡 *Хотите посмотреть несколько городов? Напишите «Составь тур по городам», чтобы объединить в одном туре {recommended_hotel.get('city', 'курорт')} и {other_city} с внутренним трансфером.*")
-                response_lines.append("")
+        tr_info = logistics_info.get("transfer", {})
+        tr_price = 0 if profile.get("without_transfer") else (tr_info.get("price_rub", 2000) or 2000)
+        tr_name = tr_info.get("name", "Комфорт-трансфер")
+        tr_min = tr_info.get("duration_min", 30)
 
-        if logistics_info.get("compatible"):
-            timeline = logistics_info.get("timeline", {})
-            layover = timeline.get("layover_details", {})
-            flight_code = f"{flight_info.get('airline')} {flight_info.get('flight_no')}"
-            flight_times = f"{flight_info.get('origin_code', 'MOW')} {timeline.get('flight_departure')} ➔ {logistics_info.get('airport')} {timeline.get('flight_arrival')}"
-            
-            ret_fl = flight_info.get("return_flight", {})
-            ret_airline = ret_fl.get("airline", flight_info.get("airline"))
-            ret_no = ret_fl.get("flight_no", "")
-            ret_dep = ret_fl.get("departure_time", "15:45")
-            ret_arr = ret_fl.get("arrival_time", "20:15")
-            dest_code = ret_fl.get("origin_code", logistics_info.get("airport", "DEST"))
-            orig_code = ret_fl.get("dest_code", flight_info.get("origin_code", "SVO"))
+        timeline = logistics_info.get("timeline", {})
+        layover = timeline.get("layover_details", {})
+        flight_code = f"{flight_info.get('airline')} {flight_info.get('flight_no')}"
+        flight_times = f"{flight_info.get('origin_code', 'MOW')} {timeline.get('flight_departure')} ➔ {logistics_info.get('airport')} {timeline.get('flight_arrival')}"
 
-            date_out = profile.get("checkin_date")
-            date_ret = profile.get("checkout_date")
-            date_out_str = f" ({date_out})" if date_out else ""
-            date_ret_str = f" ({date_ret})" if date_ret else ""
+        ret_fl = flight_info.get("return_flight", {})
+        ret_airline = ret_fl.get("airline", flight_info.get("airline"))
+        ret_no = ret_fl.get("flight_no", "")
+        ret_dep = ret_fl.get("departure_time", "15:45")
+        ret_arr = ret_fl.get("arrival_time", "20:15")
+        dest_code = ret_fl.get("origin_code", logistics_info.get("airport", "DEST"))
+        orig_code = ret_fl.get("dest_code", flight_info.get("origin_code", "SVO"))
 
-            response_lines.append("✈️ **Авиаперелёт туда и обратно (включён в стоимость):**")
-            if layover.get("is_connecting"):
-                response_lines.append(f"• 🛫 **Туда{date_out_str}:** {flight_code} ({flight_times}), пересадка в {layover.get('city')} ({layover.get('duration_formatted')}).")
-            else:
-                response_lines.append(f"• 🛫 **Туда{date_out_str}:** Прямой рейс {flight_code} ({flight_times}).")
+        h = recommended_hotel
+        rooms_cnt = profile.get("rooms_count", 1)
+        hotel_total_stay = h['price_per_night_rub'] * nights * rooms_cnt
 
-            response_lines.append(f"• 🛬 **Обратно{date_ret_str}:** {ret_airline} {ret_no} ({dest_code} {ret_dep} ➔ {orig_code} {ret_arr}).")
+        response_lines.append(f"🗺️ **Программа и расчёт тура ({nights} ночей):**")
+        response_lines.append("")
 
-            if profile.get("without_transfer"):
-                response_lines.append(f"• 🧳 Прилёт: получение багажа ➔ самостоятельный выезд на такси/каршеринге в отель.")
-            else:
-                tr_name = logistics_info.get("transfer", {}).get("name", "Трансфер")
-                tr_min = logistics_info.get("transfer", {}).get("duration_min", 30)
-                response_lines.append(f"• 🚗 Трансфер ({tr_name}, ~{tr_min} мин): встреча в аэропорту ({timeline.get('transfer_start')}) ➔ прибытие в отель к {timeline.get('hotel_arrival')}.")
+        # 1. Перелет туда
+        if layover.get("is_connecting"):
+            response_lines.append(f"1️⃣ 🛫 **Перелёт туда{fl_date_out}:** {flight_code} ({flight_times}), пересадка в {layover.get('city')} ({layover.get('duration_formatted')}) — **{flight_out_price:,} ₽**")
+        else:
+            response_lines.append(f"1️⃣ 🛫 **Перелёт туда{fl_date_out}:** Прямой рейс {flight_code} ({flight_times}) — **{flight_out_price:,} ₽**")
+
+        # 2. Трансфер в отель
+        if profile.get("without_transfer"):
+            response_lines.append(f"2️⃣ 🧳 **Трансфер в отель:** Самостоятельно на такси/каршеринге (исключён по вашему запросу) — **0 ₽**")
+        else:
+            response_lines.append(f"2️⃣ 🚗 **Трансфер в отель:** {tr_name} (~{tr_min} мин): встреча в аэропорту ({timeline.get('transfer_start')}) ➔ прибытие в отель к {timeline.get('hotel_arrival')} — **{tr_price:,} ₽**")
+
+        # 3. Отель
+        if rooms_cnt > 1:
+            response_lines.append(f"3️⃣ 🏨 **Проживание в отеле ({hotel_dates_str}):** **«{h['name']}»** ({h['stars']}) — **{h['price_per_night_formatted']}/ночь за номер** ({hotel_total_stay:,} ₽ за {rooms_cnt} ном., {profile.get('room_type', '2 номера')}) — **{hotel_total_stay:,} ₽**")
+        else:
+            response_lines.append(f"3️⃣ 🏨 **Проживание в отеле ({hotel_dates_str}):** **«{h['name']}»** ({h['stars']}) — **{h['price_per_night_formatted']}/ночь** — **{hotel_total_stay:,} ₽**")
+        response_lines.append(f"• Питание: {h['meals']} | До моря: {h['distance_to_sea']} | Отмена: {h['cancellation']}")
+
+        # 4. Перелет обратно
+        response_lines.append(f"4️⃣ 🛬 **Перелёт обратно{fl_date_ret}:** {ret_airline} {ret_no} ({dest_code} {ret_dep} ➔ {orig_code} {ret_arr}) — **{flight_ret_price:,} ₽**")
+        response_lines.append("")
+
+        if dest_id in ("turkey", "sochi", "uae", "altai"):
+            other_city = "Стамбул" if dest_id == "turkey" else ("Красную Поляну" if dest_id == "sochi" else ("Абу-Даби" if dest_id == "uae" else "Чемал"))
+            response_lines.append(f"💡 *Хотите посмотреть несколько городов? Напишите «Составь тур по городам», чтобы объединить в одном туре {recommended_hotel.get('city', 'курорт')} и {other_city} с внутренним трансфером.*")
             response_lines.append("")
 
         # Финансовый блок
@@ -1810,7 +2012,7 @@ class AgentService:
 
         fin_lines = [
             f"💰 **Расчёт стоимости всей поездки (для отеля «{recommended_hotel['name']}» на {nights} н.):**",
-            f"• 🔴 **Обязательные расходы (перелёт туда-обратно + {recommended_hotel['name']} {nights} н. + трансфер):** {mand['total_mandatory_rub']:,} ₽",
+            f"• 🔴 **Обязательные расходы (перелёт туда + трансфер + проживание + перелёт обратно):** {mand['total_mandatory_rub']:,} ₽",
         ]
         if profile.get("has_pets") and mand.get("pet_total", 0) > 0:
             fin_lines.append(f"• 🐾 **Доплата за питомца в отеле:** {mand.get('pet_surcharge_per_night', 0):,} ₽/ночь ({mand['pet_total']:,} ₽ за {nights} н.) — включена в обязательные расходы")
@@ -1951,6 +2153,9 @@ class AgentService:
         cart["flexible_dates"] = flexible_dates
         cart["reasoning_steps"] = reasoning_steps
         cart["logistics"] = logistics_info
+        cart["checkin_date"] = profile.get("checkin_date")
+        cart["checkout_date"] = profile.get("checkout_date")
+        cart["dates"] = profile.get("dates")
 
         await AgentService._save_session(user_id, profile, cart, message, reply_text)
 

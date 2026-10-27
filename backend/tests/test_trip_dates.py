@@ -57,5 +57,26 @@ class TripDatesTest(unittest.TestCase):
         self.assertEqual(profile["checkin_date"], "2026-11-10")
 
 
+    def test_russian_named_month_date(self):
+        profile = {"nights": 7}
+        self.assertIsNone(update_trip_dates("17 ноября 2026", profile))
+        self.assertEqual(profile["checkin_date"], "2026-11-17")
+        self.assertEqual(profile["checkout_date"], "2026-11-24")
+
+    def test_russian_named_month_date_range(self):
+        profile = {}
+        self.assertIsNone(update_trip_dates("с 17 по 24 ноября 2026", profile))
+        self.assertEqual(profile["checkin_date"], "2026-11-17")
+        self.assertEqual(profile["checkout_date"], "2026-11-24")
+        self.assertEqual(profile["nights"], 7)
+
+    def test_shift_with_cart_fallback_succeeds(self):
+        profile = {"nights": 7}
+        cart = {"checkin_date": "2026-11-15", "checkout_date": "2026-11-22"}
+        self.assertIsNone(update_trip_dates("Сдвинь поездку на 2 дня позже", profile, cart))
+        self.assertEqual(profile["checkin_date"], "2026-11-17")
+        self.assertEqual(profile["checkout_date"], "2026-11-24")
+
+
 if __name__ == "__main__":
     unittest.main()
