@@ -3,453 +3,661 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Островок AI Travel Agent | Панель управления и Демо</title>
+  <meta name="theme-color" content="#A8EE78">
+  <title>Островок! — AI Travel Planner</title>
+  <link rel="icon" href="/static/logo-icon.png" type="image/png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <div class="app-container">
-    <!-- Header -->
-    <header class="app-header">
-      <div class="brand">
-        <div class="logo-badge">🏝️</div>
-        <div>
-          <h1>Островок <span class="highlight">AI Agent</span></h1>
-          <p class="subtitle">Интеллектуальный помощник для планирования поездок «под ключ»</p>
-        </div>
-      </div>
-      <div class="header-actions">
-        <div id="healthBadge" class="status-pill status-loading">
-          <span class="status-dot"></span>
-          <span id="healthStatusText">Проверка системы...</span>
-        </div>
-        <a href="https://t.me/{{ bot_username }}" target="_blank" class="tg-btn" id="tgBotLink">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
-          Telegram Бот
-        </a>
-      </div>
-    </header>
+  <svg class="svg-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <defs>
+      <symbol id="icon-pin" viewBox="0 0 24 24"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="10" r="2.5" fill="currentColor"/></symbol>
+      <symbol id="icon-bed" viewBox="0 0 24 24"><path d="M3 18v-8m0 4h18v4M7 10V6h5a3 3 0 0 1 3 3v1m2 0h2a2 2 0 0 1 2 2v2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-plane" viewBox="0 0 24 24"><path d="m3 16 18-8-8 13-2-6-8 1Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m11 15 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="icon-route" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="18" cy="18" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8.5 7.5c4 1 7 4 7 7.5M6 9v6a3 3 0 0 0 3 3h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="icon-send" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-settings" viewBox="0 0 24 24"><path d="M4 7h10m4 0h2M4 17h2m4 0h10M14 4v6M6 14v6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 3v4m10-4v4M3 10h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="icon-wallet" viewBox="0 0 24 24"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H18v4H6a2 2 0 0 0 0 4h15v8H6a2 2 0 0 1-2-2V6.5Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M16 15h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="icon-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    </defs>
+  </svg>
 
-    <!-- Main Layout -->
-    <main class="main-grid">
-      <!-- Left Column: Interactive Chat Simulator -->
-      <section class="card chat-card">
-        <div class="card-header">
-          <div class="card-title">
-            <span class="icon">💬</span>
-            <h2>Интерактивный диалог с AI-агентом</h2>
-          </div>
-          <span class="badge">Live Test</span>
-        </div>
-        
-        <div class="quick-prompts">
-          <button class="prompt-chip" onclick="fillPrompt('Привет! Помоги выбрать отпуск')">🎯 Анти-15-вопросов</button>
-          <button class="prompt-chip" onclick="fillPrompt('Хочу полететь в Париж')">🌍 Fallback (Париж)</button>
-          <button class="prompt-chip" onclick="fillPrompt('Хочу в Сочи в ноябре с ребенком и собакой')">🏖️ Сочи с ребенком</button>
-          <button class="prompt-chip" onclick="fillPrompt('Хочу на Мальдивы на лазурные пляжи')">🇲🇻 Мальдивы</button>
-          <button class="prompt-chip" onclick="fillPrompt('Едем на Алтай с собакой в горы')">🌲 Алтай с питомцем</button>
-          <button class="prompt-chip" onclick="fillPrompt('Хочу в Питер посмотреть музеи и Эрмитаж')">🏛️ Санкт-Петербург</button>
-          <button class="prompt-chip" onclick="fillPrompt('Едем в Сочи 4 взрослых, подбери отель на 5 ночей')">👨‍👩‍👧 4 взрослых (2 номера)</button>
-          <button class="prompt-chip" onclick="fillPrompt('Какие правила въезда и документы на Мальдивы?')">🛂 Правила въезда (Мальдивы)</button>
-          <button class="prompt-chip" onclick="fillPrompt('Составь тур по городам в Турции (Анталья и Стамбул)')">🇹🇷 Тур по городам</button>
-          <button class="prompt-chip" onclick="fillPrompt('Покажи другой отель')">🏨 Сменить отель</button>
-          <button class="prompt-chip" onclick="fillPrompt('Сделай подешевле')">📉 Сделать дешевле</button>
-          <button class="prompt-chip" onclick="fillPrompt('Убери трансфер, поедем сами')">🚕 Убрать трансфер</button>
-          <button class="prompt-chip" onclick="fillPrompt('Забронировать')">🛒 Забронировать тур</button>
-        </div>
+  <header class="site-header">
+    <div class="header-brand">
+      <a class="brand" href="https://ostrovok.ru/" target="_blank" rel="noopener noreferrer" aria-label="Островок — открыть официальный сайт в новой вкладке">
+        <img class="brand-logo" src="/static/logo-full.png" alt="Островок!">
+      </a>
+      <button class="planner-badge" id="resetInspiration" type="button" title="Вернуться к идеям для путешествий" aria-label="AI Travel Planner — показать идеи для путешествий">AI Travel Planner</button>
+    </div>
+    <nav class="header-actions" aria-label="Дополнительные действия">
+      <button class="header-button" id="diagnosticsButton" type="button"><svg><use href="#icon-settings"/></svg><span>Диагностика</span></button>
+      <a class="telegram-link" href="https://t.me/{{ bot_username }}" target="_blank" rel="noopener" aria-label="Открыть Telegram-бота"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.7 3.3 2.9 10.5c-1.3.5-1.2 1.2-.2 1.5l4.8 1.5 1.8 5.6c.2.6.1.9.8.9.5 0 .7-.2 1-.5l2.3-2.2 4.8 3.5c.9.5 1.5.2 1.7-.8l3.1-14.7c.3-1.3-.5-1.9-1.3-1.5Z" fill="currentColor"/></svg><span>Telegram</span></a>
+    </nav>
+  </header>
 
-        <div class="chat-messages" id="chatMessages">
-          <div class="msg msg-agent">
-            <div class="msg-avatar">🤖</div>
-            <div class="msg-body">
-              <p>Здравствуйте! Я умный ассистент путешествий Островка. Подберу готовый тур «под ключ», проверю стыковки в графе <strong>Neo4j</strong>, выполню семантический поиск по вайбу в <strong>pgvector</strong>, проверю визовый комплаенс и рассчитаю календарь выгоды.</p>
-            </div>
-          </div>
+  <main class="planner-layout">
+    <section class="chat-panel" aria-labelledby="chatTitle">
+      <section class="chat-hero" aria-labelledby="heroTitle">
+        <div class="hero-kicker"><span>✦</span> Ваш персональный ГУРУ путешествий</div>
+        <h1 id="heroTitle">Ооооочень умный<br>планировщик поездок!</h1>
+        <p class="hero-subtitle">Опишите отпуск своими словами — соберём всё под ключ</p>
+        <div class="hero-tabs" role="group" aria-label="Режим планирования">
+          <button class="hero-tab active" type="button" data-mode="full" aria-pressed="true"><svg><use href="#icon-plane"/></svg>Полный тур</button>
+          <button class="hero-tab" type="button" data-mode="hotels" aria-pressed="false"><svg><use href="#icon-bed"/></svg>Отели и трансфер</button>
+          <button class="hero-tab" type="button" data-mode="multi" aria-pressed="false"><svg><use href="#icon-route"/></svg>Мульти-маршрут</button>
         </div>
-
-        <form class="chat-input-form" id="chatForm" onsubmit="sendMessage(event)">
-          <input type="text" id="userInput" placeholder="Например: хочу к теплому морю в ноябре..." autocomplete="off" required>
-          <button type="submit" id="sendBtn" class="send-btn">
-            <span>Отправить</span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-          </button>
-        </form>
       </section>
 
-      <!-- Right Column: System Architecture & Knowledge Stats -->
-      <aside class="sidebar-column">
-        <!-- Architecture Status Card -->
-        <div class="card status-card">
-          <div class="card-header">
-            <div class="card-title">
-              <span class="icon">⚙️</span>
-              <h3>Компоненты решения</h3>
-            </div>
-          </div>
-          <ul class="system-checklist">
-            <li class="check-item">
-              <div class="check-icon status-ok" id="statPg">✓</div>
-              <div class="check-info">
-                <strong>PostgreSQL + pgvector</strong>
-                <span>Реляционная модель + векторный поиск по вайбу</span>
-              </div>
-            </li>
-            <li class="check-item">
-              <div class="check-icon status-ok" id="statNeo">✓</div>
-              <div class="check-info">
-                <strong>Neo4j Logistics Graph</strong>
-                <span>Валидация стыковок, времени рейсов и трансферов</span>
-              </div>
-            </li>
-            <li class="check-item">
-              <div class="check-icon status-ok" id="statLlm">✓</div>
-              <div class="check-info">
-                <strong>LLM Orchestrator</strong>
-                <span id="llmModeText">Mock / OpenAI Compatible</span>
-              </div>
-            </li>
-            <li class="check-item">
-              <div class="check-icon status-ok" id="statBot">✓</div>
-              <div class="check-info">
-                <strong>Telegram Bot (aiogram)</strong>
-                <span>Мобильный канал взаимодействия</span>
-              </div>
-            </li>
-          </ul>
-        </div>
+      <div class="panel-heading">
+        <div class="agent-avatar"><img src="/static/logo-icon.png" alt="О!"></div>
+        <div><h2 id="chatTitle">Чат с планировщиком</h2><p><span class="online-dot"></span> На связи и готов помочь</p></div>
+      </div>
+      <div class="chat-messages" id="chatMessages" aria-live="polite">
+        <div class="msg msg-agent"><div class="msg-avatar"><img src="/static/logo-icon.png" alt="О!"></div><div class="msg-body">Привет! Расскажите, какой отдых вам близок. Можно без точных дат и города — разберёмся вместе.</div></div>
+      </div>
+      <div class="quick-prompts" id="modePrompts" aria-label="Примеры запросов"></div>
+      <p class="prompt-hint" id="promptHint" role="status" aria-live="polite" hidden>✨ Нажмите на карточку ещё раз — подберём другой сценарий</p>
+      <form class="chat-input-form" id="chatForm">
+        <label class="sr-only" for="chatInput">Опишите желаемую поездку</label>
+        <textarea id="chatInput" rows="3" placeholder="Например: хочу к тёплому морю с ребёнком на 7 ночей, бюджет до 150 тысяч…" autocomplete="off" required></textarea>
+        <button class="chat-send" id="sendBtn" type="submit"><span>Собрать тур</span><svg><use href="#icon-send"/></svg></button>
+      </form>
+      <p class="form-note">Enter — отправить · Shift + Enter — новая строка · Реальных списаний не будет</p>
+    </section>
 
-        <!-- Graph & Dataset Statistics -->
-        <div class="card stats-card">
-          <div class="card-header">
-            <div class="card-title">
-              <span class="icon">📊</span>
-              <h3>База знаний и граф (Синтетика)</h3>
-            </div>
-          </div>
-          <div class="stats-grid">
-            <div class="stat-box">
-              <span class="stat-number" id="numCities">4</span>
-              <span class="stat-label">Направления</span>
-            </div>
-            <div class="stat-box">
-              <span class="stat-number" id="numHotels">16</span>
-              <span class="stat-label">Отелей</span>
-            </div>
-            <div class="stat-box">
-              <span class="stat-number" id="numAirports">6</span>
-              <span class="stat-label">Аэропортов</span>
-            </div>
-            <div class="stat-box">
-              <span class="stat-number" id="numTransfers">20</span>
-              <span class="stat-label">Маршрутов</span>
-            </div>
-          </div>
-          <div class="dest-tags">
-            <span class="dest-tag">🇷🇺 Сочи / Красная Поляна</span>
-            <span class="dest-tag">🇦🇪 ОАЭ (Дубай)</span>
-            <span class="dest-tag">🇹🇷 Турция (Анталья/Стамбул)</span>
-            <span class="dest-tag">🇹🇭 Таиланд (Пхукет)</span>
-            <span class="dest-tag">🇲🇻 Мальдивы</span>
-            <span class="dest-tag">🇪🇬 Египет</span>
-            <span class="dest-tag">🏛️ Санкт-Петербург</span>
-            <span class="dest-tag">🏔️ Алтай</span>
-          </div>
-        </div>
+    <section class="trip-workspace" id="tripWorkspace" aria-label="Ваша поездка">
+      <div class="workspace-heading"><div><span class="eyebrow">ИДЁМ ОТ ИДЕИ К ПОЕЗДКЕ</span><h2>Найдём место по душе</h2></div><span class="catalog-badge">8 направлений</span></div>
+      <div class="inspiration-grid">
+        <button class="inspiration-card" type="button" data-category="sea" aria-label="Подобрать сценарий отдыха у моря">
+          <img class="card-art" src="/static/img/sea.jpg" alt="Лазурное море и пляж" loading="eager" onerror="this.hidden=true">
+          <span class="location-tag"><svg><use href="#icon-pin"/></svg>Пляжный сезон</span><span class="card-caption"><strong>Море</strong><small>Тёплый песок и лёгкий бриз</small><b>от 45 000 ₽</b></span>
+        </button>
+        <button class="inspiration-card" type="button" data-category="mountains" aria-label="Подобрать сценарий отдыха в горах">
+          <img class="card-art" src="/static/img/mountains.jpg" alt="Горные вершины и зелёная долина" loading="eager" onerror="this.hidden=true">
+          <span class="location-tag"><svg><use href="#icon-pin"/></svg>Природа и прогулки</span><span class="card-caption"><strong>Горы</strong><small>Свежий воздух и тишина</small><b>от 35 000 ₽</b></span>
+        </button>
+        <button class="inspiration-card" type="button" data-category="city" aria-label="Подобрать сценарий городского путешествия">
+          <img class="card-art" src="/static/img/city.jpg" alt="Исторический город и река" loading="eager" onerror="this.hidden=true">
+          <span class="location-tag"><svg><use href="#icon-pin"/></svg>Культура и история</span><span class="card-caption"><strong>Город</strong><small>Музеи, вкусно, красиво</small><b>от 30 000 ₽</b></span>
+        </button>
+        <button class="inspiration-card" type="button" data-category="family" aria-label="Подобрать сценарий семейного отдыха">
+          <img class="card-art" src="/static/img/family.jpg" alt="Семейный курорт с бассейном" loading="eager" onerror="this.hidden=true">
+          <span class="location-tag"><svg><use href="#icon-pin"/></svg>Весело всей семьёй</span><span class="card-caption"><strong>Семейный отдых</strong><small>Аквапарки и всё включено</small><b>от 60 000 ₽</b></span>
+        </button>
+      </div>
+      <div class="workspace-benefits"><span><svg><use href="#icon-check"/></svg>Один план вместо десяти вкладок</span><span><svg><use href="#icon-check"/></svg>Честная полная стоимость</span><span><svg><use href="#icon-check"/></svg>Легко всё изменить</span></div>
+    </section>
+  </main>
 
-        <!-- Verification / Criteria Checklist Card -->
-        <div class="card info-card">
-          <div class="card-header">
-            <div class="card-title">
-              <span class="icon">🎯</span>
-              <h3>Критерии ТЗ хакатона</h3>
-            </div>
-          </div>
-          <p class="info-text">
-            • <strong>Не 15 вопросов:</strong> Агент выявляет параметры из контекста.<br>
-            • <strong>Мульти-номера:</strong> Автоматическое масштабирование для 3+ взрослых и семей.<br>
-            • <strong>Комплаенс въезда:</strong> Проверка загранпаспортов, виз и деклараций (IMUGA).<br>
-            • <strong>Календарь выгоды:</strong> Интерактивные чипы экономии при сдвиге дат на ±2 дня.<br>
-            • <strong>Экспорт в календарь:</strong> Генерация событий RFC 5545 (.ics).<br>
-            • <strong>Real-time Reasoning:</strong> Потоковый вывод этапов анализа и генерации.
-          </p>
-        </div>
-      </aside>
-    </main>
-  </div>
+  <dialog class="diagnostics-dialog" id="diagnosticsDialog" aria-labelledby="diagnosticsTitle">
+    <div class="dialog-header"><div><span class="eyebrow">ТЕХНИЧЕСКАЯ ИНФОРМАЦИЯ</span><h2 id="diagnosticsTitle">Диагностика системы</h2></div><button class="icon-button" id="closeDiagnostics" type="button" aria-label="Закрыть"><svg><use href="#icon-close"/></svg></button></div>
+    <div class="system-status" id="healthBadge"><span class="status-dot"></span><span id="healthStatusText">Проверяем состояние…</span></div>
+    <ul class="system-checklist"><li><span>PostgreSQL + pgvector</span><strong id="postgresStatus">—</strong></li><li><span>Neo4j Logistics Graph</span><strong id="neo4jStatus">—</strong></li><li><span>LLM Orchestrator</span><strong id="llmModeText">{{ llm_mode }}</strong></li><li><span>Telegram Bot</span><strong>@{{ bot_username }}</strong></li></ul>
+    <h3 class="stats-title">Синтетическая база знаний</h3>
+    <div class="stats-grid"><div><b id="numCities">—</b><span>направлений</span></div><div><b id="numHotels">—</b><span>отелей</span></div><div><b id="numAirports">—</b><span>аэропортов</span></div><div><b id="numTransfers">—</b><span>трансферов</span></div><div><b id="numFlights">—</b><span>рейсов</span></div></div>
+    <section class="diagnostic-reasoning" id="diagnosticReasoning" aria-label="Ход рассуждений агента" hidden></section>
+  </dialog>
 
-  <div id="toastNotice" class="toast-notice"></div>
+  <div id="toastNotice" class="toast-notice" role="status" aria-live="polite"></div>
 
   <script>
+    const chatMessages = document.getElementById('chatMessages');
+    const workspace = document.getElementById('tripWorkspace');
+    const chatInput = document.getElementById('chatInput');
+    const modePrompts = document.getElementById('modePrompts');
+    const promptHint = document.getElementById('promptHint');
+    const initialWorkspaceMarkup = workspace.innerHTML;
+    const lastPrompts = new Map();
+    let activeChips = [];
+    let chipOrder = [];
+    let chipCursor = 0;
+    let currentMode = 'full';
+    let lastTripData = {};
+    let thinkingTimer;
+    let hintTimer;
+
+    const money = value => new Intl.NumberFormat('ru-RU').format(Number(value || 0)) + ' ₽';
+    const escapeHtml = value => { const div = document.createElement('div'); div.textContent = String(value ?? ''); return div.innerHTML; };
+    const icon = name => `<svg aria-hidden="true"><use href="#icon-${name}"/></svg>`;
+    const formatMarkdown = text => {
+      const withoutReasoning = String(text ?? '').replace(/<details class="agent-reasoning">[\s\S]*?<\/details>/gi, '');
+      return escapeHtml(withoutReasoning).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/_(.*?)_/g, '<em>$1</em>').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\n/g, '<br>');
+    };
+    const pick = items => items[Math.floor(Math.random() * items.length)];
+    const shuffle = items => {
+      const result = [...items];
+      for (let i = result.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [result[i], result[j]] = [result[j], result[i]];
+      }
+      return result;
+    };
+
+    function freshPrompt(key, variants, build) {
+      let candidate = '';
+      for (let attempt = 0; attempt < 16; attempt++) {
+        candidate = build ? build() : pick(variants);
+        if (candidate !== lastPrompts.get(key)) break;
+      }
+      lastPrompts.set(key, candidate);
+      return candidate;
+    }
+
+    const scenarioConfig = {
+      sea: {
+        destinations: ['в Турцию', 'в ОАЭ', 'в Таиланд', 'на Мальдивы', 'в Египет', 'в Сочи'],
+        parties: ['на двоих взрослых', 'на семью с ребёнком 7 лет', 'на компанию из трёх друзей', 'на двоих с собакой'],
+        wishes: ['нужен отель рядом с пляжем и хорошими завтраками', 'хочется спокойную бухту и снорклинг', 'важны первый берег и короткий трансфер', 'мечтаю о террасе у воды и спокойном районе'],
+        budgets: [90000, 120000, 150000, 180000, 220000, 280000],
+        authored: [
+          'Собери тур в Турцию на 7 ночей в мае: двое взрослых, первая линия, завтраки и удобный трансфер',
+          'Хочу на Пхукет в ноябре на 10 ночей, спокойный пляж и отель для пары, бюджет до 220 000 ₽',
+          'Организуй отдых на Мальдивах на 6 ночей в феврале, красивый домашний риф и без насыщенной программы',
+          'Планирую морской отдых в Египте с ребёнком 9 лет на 8 ночей, аквапарк и всё включено',
+          'Нужен тур в Дубай на 5 ночей в декабре, городской пляж, завтраки и трансфер без долгих ожиданий',
+          'Собери поездку в Сочи к морю на 9 ночей в сентябре, пешая доступность набережной и спа',
+          'Хочется тёплого моря в Таиланде на 12 ночей, два взрослых и кот, удобный отель и спокойный район',
+          'Подбери уютный пляжный отпуск в Турции на двоих в октябре, 7 ночей и бюджет до 170 000 ₽'
+        ]
+      },
+      mountains: {
+        destinations: ['на Алтай', 'в Сочи и Красную Поляну'],
+        parties: ['на двоих взрослых', 'на семью с ребёнком 12 лет', 'на компанию из четырёх друзей', 'на двоих с собакой'],
+        wishes: ['нужны панорамный вид и спа после прогулок', 'хочется лёгкие маршруты и ночёвки в тишине', 'важны завтраки и трансфер к подъёмникам', 'мечтаю о рассветах в горах без сложного трекинга'],
+        budgets: [60000, 80000, 100000, 130000, 160000, 200000],
+        authored: [
+          'Собери тур на Алтай на 7 ночей в августе, двое взрослых, лёгкие прогулки и отель с панорамным видом',
+          'Хочу в Красную Поляну на 5 ночей в марте, спа, завтраки и трансфер к подъёмникам',
+          'Организуй спокойную поездку на Алтай с собакой на 6 ночей, без сложного трекинга',
+          'Планирую горный отдых в Сочи на 8 ночей в июне, хочу совместить прогулки и море',
+          'Нужен тур на Алтай для семьи с подростком на 10 ночей, природа, комфорт и понятная логистика',
+          'Собери короткую перезагрузку в Красной Поляне на 4 ночи, двое взрослых и бюджет до 100 000 ₽',
+          'Хочется на Алтай в сентябре на 9 ночей, камерный отель, тишина и несколько смотровых площадок',
+          'Подбери горный тур в Сочи на 6 ночей для друзей, активности днём и хорошие завтраки'
+        ]
+      },
+      city: {
+        destinations: ['в Санкт-Петербург', 'в Сочи'],
+        parties: ['на двоих взрослых', 'на одного путешественника', 'на семью с ребёнком 10 лет', 'на компанию из трёх друзей'],
+        wishes: ['нужны музеи и отель в историческом центре', 'хочется гастрономические места и прогулки без спешки', 'важны архитектура и удобная транспортная доступность', 'мечтаю о камерных улочках и красивых рассветах'],
+        budgets: [45000, 65000, 85000, 110000, 140000, 180000],
+        authored: [
+          'Собери тур в Санкт-Петербург на 4 ночи в мае, музеи, архитектура и отель рядом с Невским',
+          'Хочу городские выходные в Петербурге на 5 ночей, гастрономия и прогулки по набережным',
+          'Организуй поездку в Сочи на 6 ночей: город, набережная и пара экскурсий без ранних подъёмов',
+          'Планирую Петербург с ребёнком 10 лет на 7 ночей, интерактивные музеи и спокойный темп',
+          'Нужен атмосферный отель в центре Петербурга на 4 ночи для двоих, бюджет до 90 000 ₽ с перелётом',
+          'Собери культурный маршрут по Петербургу на 8 ночей в октябре, без тесного расписания',
+          'Хочется в Сочи на 5 ночей, совместить городские прогулки, море и винодельню',
+          'Подбери петербургский тур на двоих в декабре на 6 ночей, театр и завтраки в отеле'
+        ]
+      },
+      family: {
+        destinations: ['в Турцию', 'в ОАЭ', 'в Египет', 'в Таиланд', 'в Сочи'],
+        parties: ['на семью с ребёнком 5 лет', 'на семью с детьми 4 и 9 лет', 'на двоих взрослых и подростка', 'на большую семью с бабушкой и ребёнком'],
+        wishes: ['нужны аквапарк и детское питание', 'хочется спокойный пляж и номер с раздельными зонами', 'важны мини-клуб и короткий трансфер', 'нужны всё включено и развлечения для разного возраста'],
+        budgets: [120000, 150000, 180000, 220000, 270000, 330000],
+        authored: [
+          'Собери семейный тур в Турцию на 8 ночей с детьми 4 и 9 лет, аквапарк и всё включено',
+          'Хочу в Египет с ребёнком 5 лет на 7 ночей, пологий вход в море и короткий трансфер',
+          'Организуй отдых в ОАЭ для семьи с подростком на 6 ночей, пляж и развлечения рядом',
+          'Планирую поездку в Сочи с двумя детьми на 9 ночей, семейный номер и понятная программа',
+          'Нужен спокойный семейный отель в Таиланде на 11 ночей, хорошее питание и медицинская инфраструктура рядом',
+          'Собери тур в Турцию для большой семьи с бабушкой на 7 ночей, без длинных переездов',
+          'Хочется на море с ребёнком 6 лет в Египет на 10 ночей, мини-клуб и бюджет до 210 000 ₽',
+          'Подбери семейный отдых в ОАЭ на 5 ночей в апреле, детский бассейн и удобное заселение'
+        ]
+      }
+    };
+
+    const months = ['в январе', 'в феврале', 'в марте', 'в апреле', 'в мае', 'в июне', 'в июле', 'в августе', 'в сентябре', 'в октябре', 'в ноябре', 'в декабре'];
+
+    function nightsLabel(nights) {
+      const lastTwo = nights % 100;
+      const last = nights % 10;
+      if (lastTwo >= 11 && lastTwo <= 14) return 'ночей';
+      if (last === 1) return 'ночь';
+      if (last >= 2 && last <= 4) return 'ночи';
+      return 'ночей';
+    }
+
+    function generateScenario(category) {
+      const config = scenarioConfig[category];
+      return freshPrompt(`card-${category}`, config.authored, () => {
+        if (Math.random() < 0.42) return pick(config.authored);
+        const nights = 4 + Math.floor(Math.random() * 11);
+        const opener = pick(['Хочу', 'Собери тур', 'Планирую поездку', 'Организуй отпуск']);
+        return `${opener} ${pick(config.destinations)} ${pick(months)} на ${nights} ${nightsLabel(nights)}, ${pick(config.parties)}. ${pick(config.wishes)}. Бюджет до ${money(pick(config.budgets))} на всех, с перелётом и трансфером.`;
+      });
+    }
+
+    const chip = (id, label, ...variants) => ({id, label, variants});
+    const modeConfig = {
+      full: {
+        placeholder: 'Например: хочу к тёплому морю с ребёнком на 7 ночей, бюджет до 150 тысяч…',
+        examples: [
+          chip('full-family', 'Море с семьёй', 'Хочу полный тур к морю с ребёнком 6 лет на 7 ночей', 'Собери семейный отдых в Турции на 9 ночей с аквапарком', 'Подбери тур на море для двоих взрослых и ребёнка, всё включено', 'Организуй семейную поездку в Египет на 8 ночей с коротким трансфером'),
+          chip('full-pet', 'Тур с питомцем', 'Собери тур в Сочи с собакой на 5 ночей, с перелётом и трансфером', 'Нужен отдых на Алтае с собакой на 7 ночей и удобной логистикой', 'Подбери pet-friendly тур в Сочи на 8 ночей для двоих', 'Организуй поездку к морю с небольшой собакой, отель и трансфер'),
+          chip('full-budget', 'Недорого за границу', 'Хочу полный тур за границу на 7 ночей, недорого', 'Подбери бюджетный тур в Турцию на 6 ночей для двоих', 'Собери недорогой отдых в Египте на 8 ночей с перелётом', 'Нужен экономичный тур в ОАЭ на 5 ночей без скрытых расходов'),
+          chip('full-mountains', 'Горная перезагрузка', 'Собери тур на Алтай на 7 ночей с прогулками и спа', 'Хочу в Красную Поляну на 5 ночей, отель с видом на горы', 'Организуй спокойный горный отдых на Алтае на 9 ночей', 'Подбери тур в Сочи с поездкой в горы на 6 ночей'),
+          chip('full-spa', 'Спа и тишина', 'Нужен спокойный тур в Сочи на 6 ночей со спа и завтраками', 'Собери wellness-отдых на Алтае для двоих на 5 ночей', 'Хочу тихий отель у моря в Турции со спа на 8 ночей', 'Подбери расслабляющий тур без экскурсий на 7 ночей'),
+          chip('full-islands', 'Островная мечта', 'Собери тур на Мальдивы на 6 ночей с домашним рифом', 'Хочу на Пхукет на 10 ночей, пляжи и спокойный отель', 'Организуй отдых на Мальдивах для пары, бюджет до 300 000 ₽', 'Подбери островной отдых в Таиланде на 12 ночей'),
+          chip('full-city', 'Городские выходные', 'Собери тур в Санкт-Петербург на 4 ночи с музеями', 'Хочу городскую поездку в Сочи на 5 ночей с гастрономией', 'Организуй архитектурные выходные в Петербурге для двоих', 'Подбери тур в Петербург на 6 ночей в камерном темпе'),
+          chip('full-winter', 'Тепло зимой', 'Хочу зимой к тёплому морю в ОАЭ на 7 ночей', 'Собери новогодний тур в Таиланд на 9 ночей', 'Подбери зимний отдых в Египте с тёплым бассейном', 'Организуй побег от зимы на Мальдивы на 6 ночей')
+        ]
+      },
+      hotels: {
+        placeholder: 'Например: нужен семейный отель в Сочи на выходные и трансфер из аэропорта…',
+        examples: [
+          chip('hotel-sochi', 'Выходные в Сочи', 'Подбери отель и трансфер в Сочи на 4 ночи', 'Нужен отель у набережной в Сочи на 5 ночей с трансфером', 'Выбери спокойный отель в Сочи для двоих и встречу в аэропорту', 'Ищу городской отель в Сочи с завтраками и трансфером'),
+          chip('hotel-dubai', 'Отель в Дубае', 'Нужен отель в Дубае на 5 ночей с трансфером из аэропорта', 'Подбери пляжный отель в Дубае для пары на 6 ночей', 'Выбери отель в Дубае рядом с метро и организуй трансфер', 'Ищу отель в ОАЭ с завтраками и поздним выездом'),
+          chip('hotel-family', 'Семейный резорт', 'Подбери семейный отель в Турции с аквапарком и трансфером', 'Нужен резорт в Египте для ребёнка 5 лет, всё включено', 'Выбери семейный отель в ОАЭ с детским бассейном', 'Ищу отель в Сочи с семейным номером и трансфером'),
+          chip('hotel-pet', 'Можно с собакой', 'Нужен pet-friendly отель в Сочи на 6 ночей с трансфером', 'Подбери отель на Алтае, где можно с собакой', 'Выбери загородный отель для двоих и небольшой собаки', 'Ищу спокойный pet-friendly отель на 7 ночей'),
+          chip('hotel-spa', 'Отель со спа', 'Подбери отель со спа в Красной Поляне на 5 ночей', 'Нужен wellness-отель в Сочи с трансфером для пары', 'Выбери тихий отель с бассейном и сауной на Алтае', 'Ищу отель у моря с хорошим спа на 7 ночей'),
+          chip('hotel-first-line', 'Первая линия', 'Нужен отель на первой линии в Турции на 8 ночей', 'Подбери пляжный отель в Египте с пологим входом в море', 'Выбери отель у пляжа в Таиланде с трансфером', 'Ищу первый берег в ОАЭ, завтраки и 6 ночей'),
+          chip('hotel-center', 'В центре города', 'Подбери отель в центре Петербурга на 4 ночи', 'Нужен отель рядом с Невским с трансфером из аэропорта', 'Выбери камерный городской отель в Петербурге для двоих', 'Ищу отель в историческом центре с хорошими завтраками'),
+          chip('hotel-quiet', 'Спокойный отдых', 'Подбери тихий отель в Сочи без шумных развлечений', 'Нужен уединённый отель на Алтае на 6 ночей', 'Выбери спокойный пляжный отель в Турции для взрослых', 'Ищу камерный отель с хорошими отзывами и трансфером')
+        ]
+      },
+      multi: {
+        placeholder: 'Например: хочу объединить Сочи и Красную Поляну в одном туре на 7 ночей…',
+        examples: [
+          chip('multi-sochi', 'Сочи + Красная Поляна', 'Составь тур: Сочи и Красная Поляна на 7 ночей', 'Объедини море в Сочи и горы Красной Поляны в поездке на 9 ночей', 'Собери маршрут Красная Поляна — Сочи с трансферами на 6 ночей', 'Хочу совместить отдых в Сочи и поездку в горы на 8 ночей'),
+          chip('multi-turkey', 'Анталья + Стамбул', 'Составь тур по городам: Анталья и Стамбул на 8 ночей', 'Объедини пляжную Анталью и прогулки по Стамбулу в туре на 10 ночей', 'Собери маршрут Стамбул — Анталья с перелётами на 7 ночей', 'Хочу сначала культуру Стамбула, затем море Антальи'),
+          chip('multi-emirates', 'Дубай + Абу-Даби', 'Составь комбинированный тур: Дубай и Абу-Даби на 7 ночей', 'Объедини городской Дубай и спокойный Абу-Даби в поездке на 8 ночей', 'Собери маршрут по двум эмиратам с трансферами на 6 ночей', 'Хочу небоскрёбы Дубая и музеи Абу-Даби в одном туре'),
+          chip('multi-nature', 'Море и горы', 'Собери маршрут Сочи — Алтай на 10 ночей', 'Хочу совместить море и горные прогулки в одном туре на 9 ночей', 'Составь насыщенный тур по Сочи и Красной Поляне на 8 ночей', 'Организуй поездку с пляжным и горным этапами без сложной логистики'),
+          chip('multi-culture', 'Культура и пляж', 'Составь тур Стамбул — Анталья: музеи и море на 9 ночей', 'Объедини городские впечатления и пляжный отдых в Турции', 'Собери спокойный маршрут с двумя городами и достаточным временем у моря', 'Хочу чередовать экскурсии и свободные дни на пляже'),
+          chip('multi-family', 'Семейный маршрут', 'Собери семейный тур Сочи — Красная Поляна на 8 ночей', 'Нужен мультимаршрут по ОАЭ для семьи с ребёнком на 7 ночей', 'Составь поездку Анталья — Стамбул без утомительных переездов', 'Объедини детские развлечения и прогулки для взрослых в одном туре'),
+          chip('multi-food', 'Гастрономическое', 'Собери гастрономический тур Стамбул — Анталья на 7 ночей', 'Хочу маршрут по ОАЭ с ресторанами и локальной кухней', 'Составь поездку Сочи — Красная Поляна с интересными ресторанами', 'Организуй тур двух городов с завтраками и свободными ужинами'),
+          chip('multi-slow', 'Без спешки', 'Составь неспешный маршрут Дубай — Абу-Даби на 9 ночей', 'Нужен спокойный тур Сочи — Красная Поляна без ранних выездов', 'Собери мультимаршрут по Турции с свободными днями', 'Организуй поездку двух городов с минимумом переездов')
+        ]
+      }
+    };
+
+    const refinementChips = [
+      chip('edit-hotel', 'Другой отель', 'Покажи другой отель с похожими условиями', 'Подбери альтернативный отель в том же районе', 'Что ещё есть из отелей с высоким рейтингом?', 'Замени отель на более спокойный вариант', 'Предложи другой вариант проживания под мой бюджет'),
+      chip('edit-cheaper', 'Сделать дешевле', 'Сделай этот тур дешевле без потери удобства', 'Как уменьшить общую стоимость поездки?', 'Подбери более бюджетную версию этого маршрута', 'Немного сократи расходы, но оставь хороший отель', 'Пересобери пакет с меньшим бюджетом'),
+      chip('edit-dates', 'Сдвинуть даты', 'Сдвинь поездку на несколько дней вперёд', 'Перенеси тур на неделю позже', 'Покажи этот маршрут с другими датами', 'Сдвинь даты поездки и пересчитай стоимость', 'Перенеси отпуск немного ближе'),
+      chip('edit-transfer', 'Без трансфера', 'Убери трансфер из этого тура', 'Пересчитай поездку без трансфера', 'Трансфер не нужен, оставь остальной план', 'Убери встречу в аэропорту из стоимости', 'Оставь только перелёт и отель, трансфер не включай'),
+      chip('edit-book', 'Забронировать', 'Забронируй выбранный тур и открой ваучер')
+    ];
+
+    function resizeInput() {
+      chatInput.style.height = 'auto';
+      chatInput.style.height = Math.min(chatInput.scrollHeight, 180) + 'px';
+    }
+
+    function hidePromptHint() {
+      clearTimeout(hintTimer);
+      promptHint.hidden = true;
+    }
+
+    function prefillPrompt(text, cardHint = false) {
+      chatInput.value = text;
+      resizeInput();
+      chatInput.focus({preventScroll: true});
+      const form = document.getElementById('chatForm');
+      form.classList.remove('input-pulse');
+      void form.offsetWidth;
+      form.classList.add('input-pulse');
+      if (cardHint) {
+        promptHint.hidden = false;
+        clearTimeout(hintTimer);
+        hintTimer = setTimeout(() => { promptHint.hidden = true; }, 5500);
+      } else hidePromptHint();
+    }
+
+    function drawChips(chips, refreshable = false) {
+      activeChips = chips;
+      modePrompts.innerHTML = chips.map((item, index) => `<button class="prompt-chip chip-enter" style="--chip-delay:${index * 35}ms" type="button" data-chip="${item.id}">${escapeHtml(item.label)}</button>`).join('') + (refreshable ? '<button class="refresh-prompts" id="refreshPrompts" type="button" aria-label="Показать другие идеи">↻ Ещё идеи</button>' : '');
+    }
+
+    function rotateModeChips() {
+      if (chipCursor + 4 > chipOrder.length) {
+        const previous = chipOrder[chipOrder.length - 1]?.id;
+        let next = shuffle(modeConfig[currentMode].examples);
+        if (next[0]?.id === previous) next.push(next.shift());
+        chipOrder = next;
+        chipCursor = 0;
+      }
+      drawChips(chipOrder.slice(chipCursor, chipCursor + 4), true);
+      chipCursor += 4;
+    }
+
+    function showRefinementChips() {
+      drawChips(refinementChips);
+    }
+
+    function setMode(mode) {
+      const config = modeConfig[mode];
+      if (!config) return;
+      currentMode = mode;
+      document.querySelectorAll('.hero-tab').forEach(tab => {
+        const active = tab.dataset.mode === mode;
+        tab.classList.toggle('active', active);
+        tab.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+      chatInput.placeholder = config.placeholder;
+      chipOrder = shuffle(config.examples);
+      chipCursor = 0;
+      rotateModeChips();
+    }
+
+    function resetInspiration() {
+      lastTripData = {};
+      workspace.innerHTML = initialWorkspaceMarkup;
+      const reasoning = document.getElementById('diagnosticReasoning');
+      reasoning.hidden = true;
+      reasoning.innerHTML = '';
+      workspace.classList.remove('workspace-reset');
+      void workspace.offsetWidth;
+      workspace.classList.add('workspace-reset');
+      hidePromptHint();
+      setMode(currentMode);
+    }
+
+    document.getElementById('resetInspiration').addEventListener('click', resetInspiration);
+
+    document.addEventListener('click', event => {
+      const card = event.target.closest('.inspiration-card[data-category]');
+      if (card) prefillPrompt(generateScenario(card.dataset.category), true);
+      const chipButton = event.target.closest('[data-chip]');
+      if (chipButton) {
+        const selected = activeChips.find(item => item.id === chipButton.dataset.chip);
+        if (selected) prefillPrompt(freshPrompt(`chip-${selected.id}`, selected.variants));
+      }
+      if (event.target.closest('#refreshPrompts')) rotateModeChips();
+      const tab = event.target.closest('.hero-tab');
+      if (tab) setMode(tab.dataset.mode);
+      const flexibleDate = event.target.closest('[data-flex-message]');
+      if (flexibleDate) sendMessageWithText(flexibleDate.dataset.flexMessage);
+      if (event.target.closest('[data-download-calendar]')) downloadCalendar();
+      if (event.target.closest('[data-share-trip]')) shareCurrentTrip();
+      const details = event.target.closest('[data-expand-hotel]');
+      if (details) {
+        const extra = document.getElementById(details.dataset.expandHotel);
+        if (extra) {
+          extra.hidden = !extra.hidden;
+          details.textContent = extra.hidden ? 'Подробнее' : 'Скрыть';
+        }
+      }
+    });
+
+    chatInput.addEventListener('input', () => {
+      resizeInput();
+      hidePromptHint();
+    });
+    chatInput.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        document.getElementById('chatForm').requestSubmit();
+      }
+    });
+
+    function appendMessage(text, role) {
+      const message = document.createElement('div');
+      message.className = `msg msg-${role}`;
+      message.innerHTML = role === 'user' ? `<div class="msg-body">${escapeHtml(text)}</div>` : `<div class="msg-avatar"><img src="/static/logo-icon.png" alt="О!"></div><div class="msg-body">${formatMarkdown(text)}</div>`;
+      chatMessages.appendChild(message);
+      chatMessages.scrollTo({top: chatMessages.scrollHeight, behavior: 'smooth'});
+    }
+
+    function showThinking() {
+      const steps = [
+        ['calendar', 'Проверяю погоду и сезонность направлений на ваши даты…'],
+        ['bed', 'Подбираю отели под ваш состав гостей с высоким рейтингом…'],
+        ['route', 'Стыкую время прилёта, получение багажа, трансфер и заселение…'],
+        ['wallet', 'Считаю полную стоимость поездки с расходами на месте…']
+      ];
+      const loader = document.createElement('div');
+      loader.className = 'thinking-card';
+      loader.id = 'thinkingCard';
+      loader.innerHTML = `<div class="thinking-title"><span class="thinking-spark">✦</span>Собираю вашу поездку</div><ol>${steps.map((step, index) => `<li class="${index === 0 ? 'active' : ''}">${icon(step[0])}<span>${step[1]}</span><i></i></li>`).join('')}</ol>`;
+      chatMessages.appendChild(loader);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+      let current = 0;
+      thinkingTimer = setInterval(() => {
+        const items = loader.querySelectorAll('li');
+        if (!items.length) return;
+        items[current].classList.remove('active');
+        items[current].classList.add('done');
+        current = Math.min(current + 1, items.length - 1);
+        items[current].classList.add('active');
+        if (current === items.length - 1) clearInterval(thinkingTimer);
+      }, 1000);
+    }
+
+    function hideThinking() {
+      clearInterval(thinkingTimer);
+      document.getElementById('thinkingCard')?.remove();
+    }
+
+    function hotelArt(index) {
+      return `<img class="hotel-art" src="/static/img/hotel-${index % 3 + 1}.jpg" alt="" loading="lazy" onerror="this.hidden=true">`;
+    }
+
+    function destinationArt(destinationId) {
+      const photos = {sochi: 'sea', uae: 'hotel-1', turkey: 'city', thailand: 'sea', maldives: 'sea', egypt: 'sea', spb: 'city', altai: 'mountains'};
+      const photo = photos[destinationId] || 'sea';
+      return `<img class="destination-photo" src="/static/img/${photo}.jpg" alt="" onerror="this.hidden=true">`;
+    }
+
+    function renderHotel(hotel, index) {
+      const starsCount = Math.max(1, Math.min(5, parseInt(hotel.stars) || 4));
+      const rating = starsCount === 5 ? '9.0' : starsCount === 4 ? '8.6' : '8.2';
+      const ratingText = starsCount === 5 ? 'Превосходно' : 'Отлично';
+      const features = (hotel.features || []).filter(feature => ['family_kids', 'pet_friendly', 'beach', 'spa_wellness'].includes(feature));
+      const labels = {family_kids: 'Подходит семьям', pet_friendly: 'Можно с питомцем', beach: 'Рядом с пляжем', spa_wellness: 'Спа и отдых'};
+      const reason = features.length ? features.map(feature => labels[feature]).join(' · ') : `${hotel.meals} · ${hotel.cancellation}`;
+      const detailId = `hotel-details-${index}`;
+      return `<article class="hotel-card" style="--delay:${index * 80}ms">
+        <div class="hotel-image">${hotelArt(index)}</div>
+        <div class="hotel-content">
+          <div class="hotel-heading"><div><h3>${escapeHtml(hotel.name)} ${index === 0 ? '<span class="top-badge">TOP</span>' : ''}</h3><div class="hotel-meta"><span class="stars">${'★'.repeat(starsCount)}</span><span>${icon('pin')}${escapeHtml(hotel.distance_to_sea)}</span></div></div><div class="hotel-rating"><span>${ratingText}<small>демо-оценка</small></span><b>${rating}</b></div></div>
+          <div class="guru-strip"><span>✦ ГУРУ AI</span><p>${escapeHtml(reason)}</p></div>
+          <div class="hotel-bottom"><div class="hotel-conditions"><span>${escapeHtml(hotel.meals)}</span><small>${escapeHtml(hotel.cancellation)}</small></div><div class="hotel-price"><small>за ночь</small><strong>${money(hotel.price_per_night_rub)}</strong><button class="primary-button" type="button" data-expand-hotel="${detailId}">Подробнее</button></div></div>
+          <div class="hotel-extra" id="${detailId}" hidden><span>${icon('check')} Подходит под текущие ограничения поиска</span><span>${icon('check')} Стоимость всего проживания учтена в бюджете</span></div>
+        </div>
+      </article>`;
+    }
+
+    function renderTrip(data) {
+      if (data.booking) lastTripData = {...lastTripData, cart: data.cart, booking: data.booking};
+      else lastTripData = data;
+      const view = lastTripData;
+      const hotels = view.compared_hotels || [];
+      const cart = view.cart || {};
+      const destination = view.destination || {};
+      const booking = view.booking;
+      if (!hotels.length && !destination.name && !booking) return;
+
+      const mandatory = view.budget_breakdown?.mandatory?.total_mandatory_rub ?? booking?.total_paid_rub ?? cart.total_mandatory_rub;
+      const range = view.budget_breakdown?.total_trip_budget_range_rub ?? cart.total_trip_budget_range_rub;
+      const logistics = view.logistics || cart.logistics || {};
+      const compliance = view.compliance_info || view.compliance_check || cart.compliance || {};
+      let html = '<div class="trip-results">';
+      if (booking) html += `<section class="booking-success"><div class="success-icon">${icon('check')}</div><div><span class="eyebrow">ПОЕЗДКА ПОДТВЕРЖДЕНА</span><h2>Можно собирать чемодан!</h2><p>Ваучер <b>${escapeHtml(booking.booking_id)}</b> · демо-оплата подтверждена</p></div><a class="primary-button" href="${escapeHtml(booking.voucher_url)}" target="_blank" rel="noopener noreferrer">Открыть ваучер ${icon('arrow')}</a></section>`;
+      if (destination.name || cart.destination) html += `<section class="destination-summary">${destinationArt(destination.id || cart.destination_id)}<div class="destination-copy"><span class="eyebrow">ВАША ПОЕЗДКА</span><h2>${escapeHtml(destination.name || cart.destination)}</h2><p>${icon('calendar')}${escapeHtml(cart.dates || 'Даты уточняются')}</p>${cart.room_type ? `<span class="trip-detail">${icon('bed')}${escapeHtml(cart.room_type)}</span>` : ''}</div>${view.weather?.available ? `<div class="weather-pill">${escapeHtml(view.weather.summary)}</div>` : ''}</section>`;
+      if (mandatory != null) {
+        html += `<section class="package-banner"><div><span class="guru-white">✦ ГУРУ AI</span><h3>Вся поездка — в одном понятном плане</h3><p>Перелёт, проживание и трансфер уже состыкованы. Никаких отдельных корзин.</p></div><div class="package-price"><small>Обязательные расходы</small><strong>${money(mandatory)}</strong>${range ? `<span>Полный бюджет: ${money(range.min)}–${money(range.max)}</span>` : ''}</div></section>`;
+      }
+      if (hotels.length) html += `<div class="results-heading"><div><span class="eyebrow">ПОДОБРАНО ДЛЯ ВАС</span><h2>${hotels.length > 1 ? 'Отели на выбор' : 'Рекомендуемый отель'}</h2></div><span>${hotels.length} ${hotels.length === 1 ? 'вариант' : 'варианта'}</span></div><div class="hotel-list">${hotels.map(renderHotel).join('')}</div>`;
+      if (logistics.compatible) {
+        const timeline = logistics.timeline || {};
+        html += `<section class="logistics-card"><div class="results-heading"><div><span class="eyebrow">ВСЁ СОСТЫКОВАНО</span><h2>Маршрут прибытия</h2></div><span class="safe-badge">${icon('check')} Проверено</span></div><div class="timeline"><div><i></i><span>Прилёт</span><strong>${escapeHtml(timeline.flight_arrival || '—')}</strong></div><div><i></i><span>Багаж и выход</span><strong>${escapeHtml(timeline.transfer_start || '—')}</strong></div><div><i></i><span>Прибытие в отель</span><strong>${escapeHtml(timeline.hotel_arrival || '—')}</strong></div><div><i></i><span>Заселение</span><strong>${escapeHtml(timeline.hotel_checkin_policy || '—')}</strong></div></div></section>`;
+      }
+      if (compliance.summary || compliance.special_notes) html += `<details class="compliance-card"><summary>${icon('check')}<span><strong>Документы и правила въезда</strong><small>${escapeHtml(compliance.badge || 'Проверка перед поездкой')}</small></span></summary><div>${formatMarkdown(compliance.summary || compliance.special_notes)}</div></details>`;
+      html += renderTripExtras(view);
+      if (!hotels.length && !booking) html += `<section class="empty-result"><h3>Нужно немного изменить план</h3><p>${formatMarkdown(data.text || '')}</p></section>`;
+      workspace.innerHTML = html + '</div>';
+      renderDiagnosticReasoning(view);
+      showRefinementChips();
+    }
+
+    async function requestRegularChat(message) {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({message})
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'Не удалось обработать запрос');
+      return data;
+    }
+
+    async function requestChat(message) {
+      let response;
+      try {
+        response = await fetch('/api/chat/stream', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({message})
+        });
+      } catch (error) {
+        return requestRegularChat(message);
+      }
+      if (!response.ok || !response.body) return requestRegularChat(message);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+      let result = null;
+      let streamError = '';
+      const processBlock = block => {
+        let eventType = 'message';
+        const dataLines = [];
+        block.split('\n').forEach(line => {
+          if (line.startsWith('event:')) eventType = line.slice(6).trim();
+          if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+        });
+        if (!dataLines.length) return;
+        const payload = JSON.parse(dataLines.join('\n'));
+        if (eventType === 'result') result = payload;
+        if (eventType === 'error') streamError = payload.error || 'Агент не смог завершить запрос';
+      };
+
+      while (true) {
+        const {done, value} = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, {stream: true});
+        const blocks = buffer.split('\n\n');
+        buffer = blocks.pop() || '';
+        blocks.filter(Boolean).forEach(processBlock);
+      }
+      buffer += decoder.decode();
+      if (buffer.trim()) processBlock(buffer);
+      if (streamError) throw new Error(streamError);
+      if (!result) throw new Error('Поток ответа завершился без результата');
+      return result;
+    }
+
+    function sendMessageWithText(message) {
+      prefillPrompt(message);
+      document.getElementById('chatForm').requestSubmit();
+    }
+
+    async function sendMessage(event) {
+      event.preventDefault();
+      const message = chatInput.value.trim();
+      if (!message) return;
+      appendMessage(message, 'user');
+      chatInput.value = '';
+      resizeInput();
+      hidePromptHint();
+      document.getElementById('sendBtn').disabled = true;
+      chatMessages.setAttribute('aria-busy', 'true');
+      showThinking();
+      try {
+        const data = await requestChat(message);
+        appendMessage(data.text, 'agent');
+        renderTrip(data);
+      } catch (error) {
+        appendMessage(error.message || 'Ошибка соединения. Попробуйте ещё раз.', 'agent');
+      } finally {
+        hideThinking();
+        document.getElementById('sendBtn').disabled = false;
+        chatMessages.setAttribute('aria-busy', 'false');
+      }
+    }
+
+    document.getElementById('chatForm').addEventListener('submit', sendMessage);
+    setMode('full');
+    resizeInput();
+
+    const diagnosticsDialog = document.getElementById('diagnosticsDialog');
+    document.getElementById('diagnosticsButton').addEventListener('click', () => diagnosticsDialog.showModal());
+    document.getElementById('closeDiagnostics').addEventListener('click', () => diagnosticsDialog.close());
+    diagnosticsDialog.addEventListener('click', event => { if (event.target === diagnosticsDialog) diagnosticsDialog.close(); });
+
     async function checkHealth() {
       try {
-        const res = await fetch('/health');
-        const data = await res.json();
-        const badge = document.getElementById('healthBadge');
-        const text = document.getElementById('healthStatusText');
-        if (data.status === 'ok') {
-          badge.className = 'status-pill status-ready';
-          text.textContent = 'Система активна и готова';
-        } else {
-          badge.className = 'status-pill status-error';
-          text.textContent = 'Ошибка сервисов';
-        }
-
-        if (data.graph_stats) {
-          document.getElementById('numCities').textContent = data.graph_stats.cities || 8;
-          document.getElementById('numAirports').textContent = data.graph_stats.airports || 10;
-          document.getElementById('numHotels').textContent = data.graph_stats.hotels || 32;
-          document.getElementById('numTransfers').textContent = data.graph_stats.transfers || 40;
-        }
-
-        if (data.llm_mode) {
-          const llmEl = document.getElementById('llmModeText');
-          if (llmEl) {
-            llmEl.textContent = data.llm_mode === 'mock' ? 'Mock Agent' : ('DeepSeek Flash (' + data.llm_mode + ')');
-          }
-        }
-      } catch (err) {
-        console.warn('Health check error:', err);
+        const response = await fetch('/health');
+        const data = await response.json();
+        document.getElementById('healthBadge').className = `system-status ${data.status === 'ok' ? 'ready' : 'error'}`;
+        document.getElementById('healthStatusText').textContent = data.status === 'ok' ? 'Все системы работают' : 'Есть проблемы с сервисами';
+        document.getElementById('postgresStatus').textContent = data.postgres ? 'Подключено' : 'Недоступно';
+        document.getElementById('neo4jStatus').textContent = data.neo4j ? 'Подключено' : 'Недоступно';
+        document.getElementById('llmModeText').textContent = data.llm_mode === 'mock' ? 'Mock Agent' : data.llm_mode;
+        const stats = data.graph_stats || {};
+        ['Cities', 'Hotels', 'Airports', 'Transfers', 'Flights'].forEach(name => { document.getElementById(`num${name}`).textContent = stats[name.toLowerCase()] ?? '—'; });
+      } catch (error) {
+        document.getElementById('healthStatusText').textContent = 'Диагностика недоступна';
       }
     }
 
-    function fillPrompt(text) {
-      document.getElementById('userInput').value = text;
-      document.getElementById('userInput').focus();
-    }
-
-    function escapeHtml(str) {
-      if (!str) return '';
-      const div = document.createElement('div');
-      div.textContent = str;
-      return div.innerHTML;
-    }
-
-    function formatMarkdown(text) {
-      if (!text) return '';
-      // Preserve accordion HTML if present
-      const detailsMatch = text.match(/<details class="agent-reasoning">[\s\S]*?<\/details>/i);
-      let detailsHtml = '';
-      let restText = text;
-      if (detailsMatch) {
-        detailsHtml = detailsMatch[0];
-        restText = text.replace(detailsMatch[0], '');
-      }
-
-      let safe = restText
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-
-      safe = safe.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-      safe = safe.replace(/_(.*?)_/g, '<em>$1</em>');
-      safe = safe.replace(/• /g, '&bull; ');
-      safe = safe.replace(/\n/g, '<br>');
-
-      return (detailsHtml ? detailsHtml + '<br>' : '') + safe;
-    }
-
-    function showToast(msg) {
+    function showToast(message) {
       const toast = document.getElementById('toastNotice');
-      if (!toast) return;
-      toast.textContent = msg;
+      toast.textContent = message;
       toast.classList.add('show');
-      setTimeout(() => {
-        toast.classList.remove('show');
-      }, 3500);
-    }
-
-    function shareTrip(destination, hotel, price) {
-      const shareText = `🌴 Мы подобрали тур в ${destination}!\n🏨 Отель: ${hotel}\n💰 Бюджет: ${price}\nПодробнее в Островке!`;
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(shareText);
-        showToast('📋 Сводка тура скопирована в буфер обмена!');
-      }
-      const tgUrl = `https://t.me/share/url?url=${encodeURIComponent(window.location.href)}&text=${encodeURIComponent(shareText)}`;
-      window.open(tgUrl, '_blank');
+      clearTimeout(showToast.timer);
+      showToast.timer = setTimeout(() => toast.classList.remove('show'), 3500);
     }
 
     function downloadCalendar() {
-      showToast('📅 Загружаю события тура в календарь (.ics)...');
+      showToast('Загружаю события тура в календарь (.ics)…');
       window.location.href = '/api/cart/export-calendar';
     }
 
-    async function sendMessage(e) {
-      if (e) e.preventDefault();
-      const input = document.getElementById('userInput');
-      const message = input.value.trim();
-      if (!message) return;
-      await sendMessageWithText(message);
+    function shareCurrentTrip() {
+      const view = lastTripData;
+      const destination = view.destination?.name || view.cart?.destination || 'Тур';
+      const hotel = view.cart?.hotel || 'Рекомендуемый отель';
+      const price = view.cart?.total_mandatory_rub || view.booking?.total_paid_rub;
+      const text = `Нашли поездку: ${destination}\nОтель: ${hotel}${price ? `\nОбязательные расходы: ${money(price)}` : ''}`;
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(text)
+          .then(() => showToast('Сводка поездки скопирована'))
+          .catch(() => showToast('Открываю шеринг в Telegram'));
+      }
+      const url = `https://t.me/share/url?url=${encodeURIComponent(window.location.href)}&text=${encodeURIComponent(text)}`;
+      window.open(url, '_blank', 'noopener,noreferrer');
     }
 
-    async function sendMessageWithText(message) {
-      const chatMessages = document.getElementById('chatMessages');
-      const input = document.getElementById('userInput');
-
-      // Add user message
-      const userDiv = document.createElement('div');
-      userDiv.className = 'msg msg-user';
-      userDiv.innerHTML = `<div class="msg-body"><p>${escapeHtml(message)}</p></div><div class="msg-avatar">👤</div>`;
-      chatMessages.appendChild(userDiv);
-      input.value = '';
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-
-      // Agent message container
-      const agentDiv = document.createElement('div');
-      agentDiv.className = 'msg msg-agent';
-      agentDiv.innerHTML = `
-        <div class="msg-avatar">🤖</div>
-        <div class="msg-body">
-          <div class="stream-live-pill" id="currentStreamStatus">
-            <span>🧠</span> <span>Анализирую параметры запроса...</span>
-          </div>
-          <div class="agent-text-stream" id="agentStreamContent"></div>
-          <div class="msg-extras" id="agentExtras"></div>
-        </div>
-      `;
-      chatMessages.appendChild(agentDiv);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-
-      const statusEl = agentDiv.querySelector('#currentStreamStatus');
-      const streamEl = agentDiv.querySelector('#agentStreamContent');
-      const extrasEl = agentDiv.querySelector('#agentExtras');
-
-      let accumulatedText = '';
-      let finalResult = null;
-
-      try {
-        const response = await fetch('/api/chat/stream', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: message })
-        });
-
-        if (!response.ok) {
-          throw new Error('HTTP ' + response.status);
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder('utf-8');
-        let buffer = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const parts = buffer.split('\n\n');
-          buffer = parts.pop() || '';
-
-          for (const part of parts) {
-            const lines = part.split('\n');
-            let eventType = 'message';
-            let dataStr = '';
-
-            for (const line of lines) {
-              if (line.startsWith('event: ')) {
-                eventType = line.slice(7).trim();
-              } else if (line.startsWith('data: ')) {
-                dataStr = line.slice(6).trim();
-              }
-            }
-
-            if (!dataStr) continue;
-
-            try {
-              const parsed = JSON.parse(dataStr);
-              if (eventType === 'status') {
-                if (statusEl && parsed.message) {
-                  statusEl.innerHTML = `<span>⚡</span> <span>${escapeHtml(parsed.message)}</span>`;
-                }
-              } else if (eventType === 'token') {
-                accumulatedText += (parsed.token || '');
-                streamEl.innerHTML = formatMarkdown(accumulatedText);
-                chatMessages.scrollTop = chatMessages.scrollHeight;
-              } else if (eventType === 'result') {
-                finalResult = parsed;
-              }
-            } catch (err) {
-              console.warn('JSON parse err in stream:', err);
-            }
-          }
-        }
-
-        if (statusEl) statusEl.remove();
-
-        if (finalResult) {
-          if (finalResult.text) {
-            streamEl.innerHTML = formatMarkdown(finalResult.text);
-          }
-          renderExtras(extrasEl, finalResult);
-        } else if (accumulatedText) {
-          streamEl.innerHTML = formatMarkdown(accumulatedText);
-        }
-
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-
-      } catch (err) {
-        console.warn('Streaming error, falling back to /api/chat:', err);
-        if (statusEl) statusEl.remove();
-        // Fallback to regular chat
-        try {
-          const res = await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: message })
-          });
-          const data = await res.json();
-          streamEl.innerHTML = formatMarkdown(data.text);
-          renderExtras(extrasEl, data);
-          chatMessages.scrollTop = chatMessages.scrollHeight;
-        } catch (e2) {
-          streamEl.innerHTML = `<p>⚠️ Ошибка соединения с агентом. Пожалуйста, проверьте статус бэкенда.</p>`;
-        }
+    function renderTripExtras(view) {
+      const flexibleDates = view.flexible_dates || view.cart?.flexible_dates || [];
+      let html = '<section class="trip-extras">';
+      if (flexibleDates.length) {
+        html += `<div class="flex-dates-section"><div class="flex-dates-header">${icon('calendar')}Календарь выгоды (±2 дня)</div><div class="flex-chips-row">${flexibleDates.map(option => `<button class="flex-chip" type="button" data-flex-message="${escapeHtml(option.message)}">${escapeHtml(option.label)}</button>`).join('')}</div></div>`;
       }
+      html += `<div class="tour-actions-bar"><button class="tour-action-btn btn-calendar" type="button" data-download-calendar>${icon('calendar')}Скачать в календарь (.ics)</button><button class="tour-action-btn btn-share" type="button" data-share-trip>${icon('arrow')}Поделиться с попутчиком</button></div></section>`;
+      return html;
     }
 
-    function renderExtras(container, data) {
-      if (!container || !data) return;
-      let html = '';
-
-      // Flexible Dates Chips
-      if (data.flexible_dates && data.flexible_dates.length > 0) {
-        html += `
-          <div class="flex-dates-section">
-            <div class="flex-dates-header">📅 Календарь выгоды (±2 дня):</div>
-            <div class="flex-chips-row">
-        `;
-        data.flexible_dates.forEach(opt => {
-          const escMsg = escapeHtml(opt.message);
-          html += `<button type="button" class="flex-chip" onclick="sendMessageWithText('${escMsg}')">${escapeHtml(opt.label)}</button>`;
-        });
-        html += `
-            </div>
-          </div>
-        `;
-      }
-
-      // Actions: Export Calendar & Share Trip
-      const destName = (data.destination && data.destination.name) || (data.cart && data.cart.destination) || 'Тур';
-      const hotelName = (data.cart && data.cart.hotel) || 'Рекомендуемый отель';
-      const priceStr = (data.cart && data.cart.total_mandatory_rub) ? `${data.cart.total_mandatory_rub.toLocaleString('ru-RU')} ₽` : '';
-
-      html += `
-        <div class="tour-actions-bar">
-          <button type="button" class="tour-action-btn btn-calendar" onclick="downloadCalendar()">
-            📅 Скачать в календарь (.ics)
-          </button>
-          <button type="button" class="tour-action-btn btn-share" onclick="shareTrip('${escapeHtml(destName)}', '${escapeHtml(hotelName)}', '${escapeHtml(priceStr)}')">
-            📤 Поделиться с попутчиком
-          </button>
-        </div>
-      `;
-
-      container.innerHTML = html;
+    function renderDiagnosticReasoning(view) {
+      const container = document.getElementById('diagnosticReasoning');
+      const steps = view.reasoning_steps || view.cart?.reasoning_steps || [];
+      container.hidden = !steps.length;
+      container.innerHTML = steps.length ? `<h3 class="stats-title">Ход рассуждений агента</h3><ol>${steps.map(step => `<li><strong>${escapeHtml(step.title)}</strong><span>${escapeHtml(step.detail)}</span></li>`).join('')}</ol>` : '';
     }
 
     checkHealth();
-    setInterval(checkHealth, 10000);
+    setInterval(checkHealth, 30000);
   </script>
 </body>
 </html>

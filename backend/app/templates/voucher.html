@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#A8EE78">
+  <title>Ваучер {{ confirmation.booking_id }} — Островок!</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="voucher-page">
+  <svg class="svg-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <defs>
+      <symbol id="brand-logo" viewBox="0 0 252 48">
+        <circle cx="23" cy="24" r="17" fill="none" stroke="#0A47ED" stroke-width="8"/>
+        <text x="46" y="36" fill="#0A47ED" font-family="Onest, Arial, sans-serif" font-size="35" font-weight="700" letter-spacing="-1.8">стровок</text>
+        <path d="M226 5H240L237 31H229Z" fill="#0A47ED"/>
+        <circle cx="233" cy="41" r="5" fill="#0A47ED"/>
+      </symbol>
+      <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="icon-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    </defs>
+  </svg>
+
+  <header class="voucher-header">
+    <div class="voucher-header-inner">
+      <a class="brand" href="/" aria-label="Островок — на главную"><svg class="brand-logo" aria-label="Островок!"><use href="#brand-logo"/></svg></a>
+      <span class="voucher-status"><svg><use href="#icon-check"/></svg>Оплачено · демо</span>
+    </div>
+  </header>
+
+  <main class="voucher-main">
+    <a class="voucher-back" href="/"><svg><use href="#icon-arrow"/></svg>Вернуться к планировщику</a>
+    <article class="voucher-card">
+      <div class="voucher-intro">
+        <div><span class="eyebrow">ПОЕЗДКА ПОДТВЕРЖДЕНА</span><h1>Ваучер на путешествие</h1><p>Сохраните этот документ или возьмите его с собой в поездку.</p></div>
+        <div class="voucher-number"><small>Номер бронирования</small><strong>{{ confirmation.booking_id }}</strong></div>
+      </div>
+      <div class="voucher-details">
+        <div class="voucher-row"><span>Направление</span><strong>{{ confirmation.destination }}</strong></div>
+        <div class="voucher-row"><span>Даты поездки</span><strong>{{ confirmation.dates }}</strong></div>
+        <div class="voucher-row"><span>Отель</span><strong>{{ confirmation.hotel }}</strong></div>
+        <div class="voucher-row"><span>Перелёт</span><strong>{{ confirmation.flight }}</strong></div>
+        <div class="voucher-row"><span>Трансфер</span><strong>{{ confirmation.transfer }}</strong></div>
+        <div class="voucher-row"><span>Статус оплаты</span><strong>Оплата успешно simulated · {{ confirmation.payment_method }}</strong></div>
+      </div>
+      <div class="voucher-total"><span>Оплачено за обязательную часть поездки</span><strong>{{ total_paid }}</strong></div>
+    </article>
+
+    {% if confirmation.onsite_spending_guide %}
+    <div class="voucher-note"><strong>На заметку:</strong> {{ confirmation.onsite_spending_guide }}</div>
+    {% endif %}
+    <div class="voucher-note">{{ confirmation.hotel_checkin_guarantee }}. {{ confirmation.flight_tracking }}.</div>
+    <div class="voucher-actions">
+      <button class="primary-button" type="button" onclick="window.print()">Сохранить в PDF</button>
+      <a class="header-button" href="/">Собрать ещё одну поездку</a>
+    </div>
+    <p class="voucher-disclaimer">Это демонстрационный ваучер. Бронирование и оплата simulated, реального списания не было.</p>
+  </main>
+</body>
+</html>

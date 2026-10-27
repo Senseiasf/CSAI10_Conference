@@ -6,11 +6,12 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from uuid import UUID, uuid4
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
+from sqlalchemy import select
 
 from app.config import settings
 from app.database import (
@@ -290,3 +291,27 @@ async def api_stats():
     """Статистика по графу и базе знаний."""
     stats = await GraphService.get_graph_stats()
     return stats
+
+
+@app.get("/api/voucher/{booking_id}", response_class=HTMLResponse)
+async def get_voucher(request: Request, booking_id: str):
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(UserSessionModel).where(
+                UserSessionModel.current_cart["booking_confirmation"]["booking_id"].astext == booking_id
+            )
+        )
+        user_session = result.scalars().first()
+
+    confirmation = (user_session.current_cart or {}).get("booking_confirmation") if user_session else None
+    if not confirmation:
+        raise HTTPException(status_code=404, detail="Ваучер не найден")
+
+    return templates.TemplateResponse(
+        request=request,
+        name="voucher.html",
+        context={
+            "confirmation": confirmation,
+            "total_paid": f"{confirmation['total_paid_rub']:,} ₽",
+        },
+    )

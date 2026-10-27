@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 from sqlalchemy import select, text
 from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.database import async_session_maker
 from app.models import DestinationModel, HotelModel, RiskAlertModel, UserSessionModel
@@ -506,7 +507,8 @@ class MCPTools:
 
             sess_obj.current_state = "CONFIRMED"
             cart["booking_confirmation"] = confirmation
-            sess_obj.current_cart = cart
+            sess_obj.current_cart = dict(cart)
+            flag_modified(sess_obj, "current_cart")
             await session.commit()
 
             return confirmation
