@@ -37,7 +37,6 @@
     </div>
     <nav class="header-actions" aria-label="Дополнительные действия">
       <button class="header-button" id="diagnosticsButton" type="button"><svg><use href="#icon-settings"/></svg><span>Диагностика</span></button>
-      <a class="telegram-link" href="https://t.me/{{ bot_username }}" target="_blank" rel="noopener" aria-label="Открыть Telegram-бота"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.7 3.3 2.9 10.5c-1.3.5-1.2 1.2-.2 1.5l4.8 1.5 1.8 5.6c.2.6.1.9.8.9.5 0 .7-.2 1-.5l2.3-2.2 4.8 3.5c.9.5 1.5.2 1.7-.8l3.1-14.7c.3-1.3-.5-1.9-1.3-1.5Z" fill="currentColor"/></svg><span>Telegram</span></a>
     </nav>
   </header>
 
@@ -102,7 +101,7 @@
   <dialog class="diagnostics-dialog" id="diagnosticsDialog" aria-labelledby="diagnosticsTitle">
     <div class="dialog-header"><div><span class="eyebrow">ТЕХНИЧЕСКАЯ ИНФОРМАЦИЯ</span><h2 id="diagnosticsTitle">Диагностика системы</h2></div><button class="icon-button" id="closeDiagnostics" type="button" aria-label="Закрыть"><svg><use href="#icon-close"/></svg></button></div>
     <div class="system-status" id="healthBadge"><span class="status-dot"></span><span id="healthStatusText">Проверяем состояние…</span></div>
-    <ul class="system-checklist"><li><span>PostgreSQL + pgvector</span><strong id="postgresStatus">—</strong></li><li><span>Neo4j Logistics Graph</span><strong id="neo4jStatus">—</strong></li><li><span>LLM Orchestrator</span><strong id="llmModeText">{{ llm_mode }}</strong></li><li><span>Telegram Bot</span><strong>@{{ bot_username }}</strong></li></ul>
+    <ul class="system-checklist"><li><span>PostgreSQL + pgvector</span><strong id="postgresStatus">—</strong></li><li><span>Neo4j Logistics Graph</span><strong id="neo4jStatus">—</strong></li><li><span>LLM Orchestrator</span><strong id="llmModeText">{{ llm_mode }}</strong></li></ul>
     <h3 class="stats-title">Синтетическая база знаний</h3>
     <div class="stats-grid"><div><b id="numCities">—</b><span>направлений</span></div><div><b id="numHotels">—</b><span>отелей</span></div><div><b id="numAirports">—</b><span>аэропортов</span></div><div><b id="numTransfers">—</b><span>трансферов</span></div><div><b id="numFlights">—</b><span>рейсов</span></div></div>
     <section class="diagnostic-reasoning" id="diagnosticReasoning" aria-label="Ход рассуждений агента" hidden></section>
