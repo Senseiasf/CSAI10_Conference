@@ -389,7 +389,8 @@ class LLMService:
         hotel_name: str,
         nights: int,
         user_message: str,
-        profile: Dict[str, Any]
+        profile: Dict[str, Any],
+        top_candidates: Optional[List[Dict[str, Any]]] = None
     ) -> Optional[str]:
         """
         Генерирует инсайдерскую персональную рекомендацию консьержа от DeepSeek Flash
@@ -415,9 +416,16 @@ class LLMService:
             "Отвечай на русском языке, лаконично (не более 3 предложений), дружелюбно и по делу."
         )
 
+        top_context = ""
+        if top_candidates:
+            top_context = "\nТоп-3 кандидата после фильтрации, ML-ранжирования и учёта приоритетов пользователя:\n" + "\n".join(
+                f"{idx}. {candidate.get('name')} ({candidate.get('stars', '4★')}, "
+                f"{candidate.get('price_per_night_rub', 0):,} ₽/ночь, LTR={candidate.get('ltr_score', 0.0):.3f})"
+                for idx, candidate in enumerate(top_candidates[:3], 1)
+            )
         user_prompt = (
             f"Направление: {destination_name}\n"
-            f"Отель: {hotel_name}\n"
+            f"Отель: {hotel_name}{top_context}\n"
             f"Длительность: {nights} ночей\n"
             f"Особенности туриста: {profile_desc}\n"
             f"Запрос туриста: {user_message}"

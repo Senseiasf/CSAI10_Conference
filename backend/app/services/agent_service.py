@@ -18,6 +18,7 @@ from app.services.llm_service import LLMService
 from app.services.graph_service import GraphService
 from app.services.compliance_service import ComplianceService
 from app.services.calendar_service import CalendarService
+from app.services.ltr_service import LTRService
 
 logger = logging.getLogger(__name__)
 
@@ -1036,6 +1037,12 @@ class AgentService:
         cfg = MULTI_CITY_CONFIG.get(dest_id, MULTI_CITY_CONFIG["turkey"])
         nights_1 = max(1, int(round(nights * cfg["city_1"]["nights_share"])))
         nights_2 = max(1, nights - nights_1)
+        user_lower = message.lower().strip()
+        is_cheapest_requested = any(w in user_lower for w in [
+            "самый дешев", "самые дешев", "самая дешев", "самое дешев",
+            "самый эконом", "самый бюджет", "минимальн", "как можно дешев",
+            "максимально дешев", "подешевле", "подешевле вариант", "дешевый вариант", "дешевые билеты", "дешевыми билетами"
+        ])
 
         # 1. Подбор отелей для обоих городов через MCP
         h_res_1 = await MCPTools.compare_hotels(
@@ -1045,7 +1052,7 @@ class AgentService:
             family_friendly=profile.get("has_kids"),
             private_room_required=profile.get("private_room_required", False),
             preferred_tags=profile.get("interests"),
-            limit=3
+            limit=None if budget_limit is not None else 30
         )
         hotels_1 = h_res_1.get("compared_hotels", [])
 
@@ -1056,19 +1063,12 @@ class AgentService:
             family_friendly=profile.get("has_kids"),
             private_room_required=profile.get("private_room_required", False),
             preferred_tags=profile.get("interests"),
-            limit=3
+            limit=None if budget_limit is not None else 30
         )
         hotels_2 = h_res_2.get("compared_hotels", [])
 
         is_luxury = any(t in ("luxury", "extreme_luxury") for t in profile.get("interests", []))
         is_budget = "budget_friendly" in profile.get("interests", [])
-
-        if is_luxury:
-            hotels_1.sort(key=lambda h: -h.get("price_per_night_rub", 0))
-            hotels_2.sort(key=lambda h: -h.get("price_per_night_rub", 0))
-        elif is_budget or (budget_limit is not None and not is_luxury):
-            hotels_1.sort(key=lambda h: h.get("price_per_night_rub", 0))
-            hotels_2.sort(key=lambda h: h.get("price_per_night_rub", 0))
 
         # Если отель не найден по точному фильтру города — берем альтернативы из общего каталога
         if not hotels_1 or not hotels_2:
@@ -1078,24 +1078,40 @@ class AgentService:
                 family_friendly=profile.get("has_kids"),
                 private_room_required=profile.get("private_room_required", False),
                 preferred_tags=profile.get("interests"),
-                limit=6
+                limit=None if budget_limit is not None else 30
             )).get("compared_hotels", [])
             if not hotels_1 and all_h:
                 hotels_1 = [all_h[0]]
             if not hotels_2:
                 hotels_2 = [h for h in all_h if not hotels_1 or h["id"] != hotels_1[0]["id"]] or hotels_1
 
-        hotel_1 = hotels_1[0] if hotels_1 else {
-            "id": "h1_default",
-            "name": f"Курортный отель {cfg['city_1']['name']}", "stars": "4★",
-            "price_per_night_rub": 6000, "price_per_night_formatted": "6,000 ₽",
-            "meals": "Завтрак включен", "cancellation": "Бесплатно за 24 ч", "distance_to_sea": "300 м"
-        }
-        hotel_2 = hotels_2[0] if hotels_2 else {
-            "id": "h2_default",
-            "name": f"Гранд-отель {cfg['city_2']['name']}", "stars": "4★",
-            "price_per_night_rub": 8500, "price_per_night_formatted": "8,500 ₽",
-            "meals": "Завтрак включен", "cancellation": "Бесплатно за 48 ч", "distance_to_sea": "Центр города"
+        if not hotels_1 or not hotels_2:
+            reply_text = "Не нашлось отелей для обеих частей маршрута под ваши условия. Можно изменить города или условия поиска."
+            cart = {"destination_id": dest_id, "destination": cfg["title"], "nights": nights,
+                    "dates": profile.get("dates"), "selection_status": "no_matches"}
+            await AgentService._save_session(user_id, profile, cart, message, reply_text)
+            return {"text": reply_text, "state": "NO_MATCHES", "cart": cart, "compared_hotels": []}
+
+        hotels_1, ltr_meta_1 = LTRService.rank_hotel_candidates(hotels_1, dest_id, profile, nights_1)
+        hotels_2, ltr_meta_2 = LTRService.rank_hotel_candidates(hotels_2, dest_id, profile, nights_2)
+        policy = "ltr"
+        if is_luxury and not is_cheapest_requested:
+            policy = "luxury"
+            hotels_1.sort(key=lambda h: (-h.get("price_per_night_rub", 0), -h["ltr_score"]))
+            hotels_2.sort(key=lambda h: (-h.get("price_per_night_rub", 0), -h["ltr_score"]))
+        elif is_cheapest_requested or is_budget or budget_limit is not None:
+            policy = "budget"
+            hotels_1.sort(key=lambda h: (h.get("price_per_night_rub", 0), -h["ltr_score"]))
+            hotels_2.sort(key=lambda h: (h.get("price_per_night_rub", 0), -h["ltr_score"]))
+        hotel_1, hotel_2 = hotels_1[0], hotels_2[0]
+        for meta, hotel in ((ltr_meta_1, hotel_1), (ltr_meta_2, hotel_2)):
+            meta.update(top_k=1, top_score=hotel["ltr_score"], top_hotel=hotel["name"], selection_policy=policy)
+        ltr_meta = {
+            "engine": ltr_meta_1["engine"] if ltr_meta_1["engine"] == ltr_meta_2["engine"] else "Mixed ranking engines",
+            "archetype": ltr_meta_1["archetype"], "selection_policy": policy,
+            "candidates_count": ltr_meta_1["candidates_count"] + ltr_meta_2["candidates_count"],
+            "latency_ms": round(ltr_meta_1["latency_ms"] + ltr_meta_2["latency_ms"], 2),
+            "top_k": 2, "cities": [ltr_meta_1, ltr_meta_2],
         }
 
         # 2. Логистика: международный перелёт с учетом пожеланий по времени (день / вечер / утро)
@@ -1137,12 +1153,6 @@ class AgentService:
         orig_code = profile.get("origin_airport") or outbound_flight.get("origin_code", "SVO")
 
         # 3. Даты и логистика
-        user_lower = message.lower().strip()
-        is_cheapest_requested = any(w in user_lower for w in [
-            "самый дешев", "самые дешев", "самая дешев", "самое дешев",
-            "самый эконом", "самый бюджет", "минимальн", "как можно дешев",
-            "максимально дешев", "подешевле", "подешевле вариант", "дешевый вариант", "дешевые билеты", "дешевыми билетами"
-        ])
         is_any_time = any(w in user_lower for w in [
             "в любое время", "в любой день", "любое время", "время не важно", "не важно когда",
             "без разницы во сколько", "в любое время суток", "любое время вылета", "когда угодно"
@@ -1393,6 +1403,7 @@ class AgentService:
         # Формируем аккордеон хода рассуждений агента
         reasoning_steps = [
             {"stage": "nlu", "title": "Анализ запроса и профиля", "detail": f"Составной тур «{cfg['title']}». Состав: {profile.get('party_size', 'стандартный')}, номеров: {rooms_cnt} ({profile.get('room_type', '1 номер')})."},
+            {"stage": "ltr_ranking", "title": "ML-ранжирование (CatBoost LTR)", "detail": f"Движок {ltr_meta['engine']}: оценено {ltr_meta['candidates_count']} кандидатов для двух городов за {ltr_meta['latency_ms']} мс. Архетип: {ltr_meta['archetype']}; приоритет: {policy}."},
             {"stage": "multi_city", "title": "Сквозной маршрут", "detail": f"Программа: {cfg['city_1']['name']} ({nights_1} н.) ➔ {cfg['city_2']['name']} ({nights_2} н.)."},
             {"stage": "logistics", "title": "Межгородская логистика в Neo4j", "detail": f"Сегмент: {intercity['name']} ({intercity['duration']}). Сквозная синхронизация чек-ина."},
             {"stage": "compliance", "title": "Паспортный и визовый комплаенс", "detail": f"{compliance_info.get('passport_required')} ({compliance_info.get('passport_validity')}), {compliance_info.get('visa_policy')}."},
@@ -1432,6 +1443,8 @@ class AgentService:
         cart["room_type"] = profile.get("room_type", "1 стандартный номер (Standard Room)")
         cart["compliance"] = compliance_info
 
+        cart["ltr_ranking"] = ltr_meta
+
         await AgentService._save_session(user_id, profile, cart, message, reply_text)
 
         return {
@@ -1440,6 +1453,7 @@ class AgentService:
             "compared_hotels": [hotel_1, hotel_2],
             "logistics": logistics_1,
             "is_multi_city": True,
+            "ltr_ranking": ltr_meta,
             "cart": cart,
             "reasoning_steps": reasoning_steps,
             "flexible_dates": flexible_dates,
@@ -2129,7 +2143,7 @@ class AgentService:
             private_room_required=profile.get("private_room_required", False),
             exclude_hotel_ids=rejected_hotels,
             preferred_tags=profile.get("interests"),
-            limit=None if budget_limit is not None else 3,
+            limit=None if budget_limit is not None else 30,
         )
 
         compared_list = hotel_comparison.get("compared_hotels", [])
@@ -2197,15 +2211,17 @@ class AgentService:
         affordable = [option for option in evaluated if budget_limit is None or
                       option[2]["total_trip_budget_range_rub"]["max"] <= budget_limit]
 
+        affordable, ltr_meta = LTRService.rank_evaluated_packages(affordable, dest_id, profile, nights)
+
         is_luxury = any(t in ("luxury", "extreme_luxury") for t in profile.get("interests", []))
         is_budget = "budget_friendly" in profile.get("interests", []) or is_replan_cheaper or is_cheapest_requested
 
         if is_luxury and not is_cheapest_requested:
             # Пользователь готов раскошелиться / выбрал люкс: рекомендуем премиум-отель с максимальным комфортом в рамках бюджета
-            affordable.sort(key=lambda x: -x[0]["price_per_night_rub"])
+            affordable.sort(key=lambda x: (-x[0]["price_per_night_rub"], -x[0].get("ltr_score", 0.0)))
         elif is_cheapest_requested or is_budget or (budget_limit is not None and not is_luxury):
             # Пользователь ищет доступный вариант или ограничил бюджет: рекомендуем наиболее экономичный вариант
-            affordable.sort(key=lambda x: (x[2]["total_trip_budget_range_rub"]["max"], x[0]["price_per_night_rub"]))
+            affordable.sort(key=lambda x: (x[2]["total_trip_budget_range_rub"]["max"], -x[0].get("ltr_score", 0.0), x[0]["price_per_night_rub"]))
 
         if not affordable:
             if evaluated and budget_limit is not None:
@@ -2230,6 +2246,9 @@ class AgentService:
 
         recommended_hotel, logistics_info, budget_breakdown = affordable[0]
         compared_list = [x[0] for x in affordable[:3]]
+        policy = "luxury" if is_luxury and not is_cheapest_requested else "budget" if is_cheapest_requested or is_budget or budget_limit is not None else "ltr"
+        ltr_meta.update(top_k=len(compared_list), top_score=recommended_hotel["ltr_score"],
+                        top_hotel=recommended_hotel["name"], selection_policy=policy)
         flight_info = logistics_info["flight"]
         hotel_cost_per_night = recommended_hotel["price_per_night_rub"]
 
@@ -2583,7 +2602,8 @@ class AgentService:
                 hotel_name=recommended_hotel["name"],
                 nights=nights,
                 user_message=message,
-                profile=profile
+                profile=profile,
+                top_candidates=compared_list
             )
             if concierge_tip:
                 response_lines.append(f"✨ **AI-консьерж ({settings.OPENAI_MODEL}):** {concierge_tip}")
@@ -2594,7 +2614,8 @@ class AgentService:
         rooms_cnt = profile.get("rooms_count", 1)
         reasoning_steps = [
             {"stage": "nlu", "title": "Анализ запроса и профиля", "detail": f"Направление «{top_dest.get('name')}», {nights} н., {profile.get('adults_count', 2)} взр., {rooms_cnt} ном. ({profile.get('room_type', '1 номер')})."},
-            {"stage": "filtering", "title": "Фильтрация каталога", "detail": f"Оценено {len(compared_list)} отелей с учётом ограничений (дети={profile.get('has_kids')}, питомцы={profile.get('has_pets')})."},
+            {"stage": "filtering", "title": "Фильтрация каталога", "detail": f"Оценено {len(evaluated)} пакетов с учётом ограничений (дети={profile.get('has_kids')}, питомцы={profile.get('has_pets')})."},
+            {"stage": "ltr_ranking", "title": "ML-ранжирование (CatBoost LTR)", "detail": f"Движок {ltr_meta['engine']}: оценено {ltr_meta['candidates_count']} пакетов за {ltr_meta['latency_ms']} мс; выбрано {ltr_meta['top_k']}. Архетип: {ltr_meta['archetype']}; приоритет: {policy}."},
             {"stage": "logistics", "title": "Графовая логистика Neo4j", "detail": f"Рейс {flight_info.get('airline', '')} {flight_info.get('flight_no', '')}, трансфер {tr_info.get('name', 'стандарт')}, безопасный транзитный буфер."},
             {"stage": "compliance", "title": "Паспортный и визовый комплаенс", "detail": f"{compliance_info.get('passport_required')} ({compliance_info.get('passport_validity')}), {compliance_info.get('visa_policy')}."},
             {"stage": "budget", "title": "Двухкомпонентный расчёт", "detail": f"Обязательные расходы: {budget_breakdown['mandatory']['total_mandatory_rub']:,} ₽ (номеров: {rooms_cnt}), на месте: {budget_breakdown['onsite_flexible']['total_onsite_range_rub']['min']:,}–{budget_breakdown['onsite_flexible']['total_onsite_range_rub']['max']:,} ₽."}
@@ -2617,6 +2638,7 @@ class AgentService:
 
         cart["rooms_count"] = rooms_cnt
         cart["room_type"] = profile.get("room_type", "Стандарт")
+        cart["ltr_ranking"] = ltr_meta
         cart["compliance"] = compliance_info
         cart["flexible_dates"] = flexible_dates
         cart["reasoning_steps"] = reasoning_steps
@@ -2639,7 +2661,8 @@ class AgentService:
             "reasoning_steps": reasoning_steps,
             "flexible_dates": flexible_dates,
             "compliance_info": compliance_info,
-            "rooms_count": rooms_cnt
+            "rooms_count": rooms_cnt,
+            "ltr_ranking": ltr_meta
         }
 
     @staticmethod

@@ -34,6 +34,9 @@ RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.t
 # Копируем исходный код приложения
 COPY app /app/app
 
+# Сборка завершается ошибкой, если модель не попала в образ или не загружается.
+RUN python -c "from app.services.ltr_service import LTRService; assert LTRService.load_model() is not None, 'CatBoost model failed to load'"
+
 # Назначаем права доступа пользователю appuser
 RUN chown -R appuser:appgroup /app
 

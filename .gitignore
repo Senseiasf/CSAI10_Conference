@@ -13,6 +13,7 @@ ENV/
 # Databases & local data
 *.sqlite3
 *.db
+catboost_info/
 pg_data/
 neo4j_data/
 

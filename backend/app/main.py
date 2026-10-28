@@ -3,14 +3,14 @@ import json
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Literal
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.config import settings
@@ -25,6 +25,7 @@ from app.services.agent_service import AgentService
 from app.services.calendar_service import CalendarService
 from app.services.preference_memory import remembered_preferences, preference_summary
 from app.services.compliance_service import ComplianceService
+from app.services.ltr_service import LTRService
 from app.bot.telegram_bot import start_telegram_bot
 
 logging.basicConfig(
@@ -107,7 +108,8 @@ async def health_check():
             "postgres": pg_ok,
             "neo4j": neo_ok,
             "llm_mode": "mock" if settings.is_mock_llm else settings.OPENAI_MODEL,
-            "graph_stats": graph_stats
+            "graph_stats": graph_stats,
+            "ltr_ranker": LTRService.get_status()
         }
     )
 
@@ -150,6 +152,10 @@ async def api_chat_stream(req: ChatRequest, request: Request, response: Response
                 # 2. Этап: Графовая логистика
                 yield f"event: status\ndata: {json.dumps({'stage': 'graph', 'message': '🕸️ Проверяю стыковки рейсов и трансферы в графе Neo4j...'}, ensure_ascii=False)}\n\n"
                 await asyncio.sleep(0.04)
+
+                if result.get("ltr_ranking"):
+                    yield f"event: status\ndata: {json.dumps({'stage': 'ltr_ranking', 'message': 'Сравниваю подходящие варианты с учётом ваших предпочтений...'}, ensure_ascii=False)}\n\n"
+                    await asyncio.sleep(0.04)
 
                 # 3. Этап: Комплаенс и безопасность
                 yield f"event: status\ndata: {json.dumps({'stage': 'compliance', 'message': '🛂 Сверяю визовый режим, паспортный комплаенс и правила въезда...'}, ensure_ascii=False)}\n\n"
@@ -296,6 +302,25 @@ async def api_export_calendar_post(req: ExportCalendarRequest, request: Request)
 async def api_compliance(dest_id: str):
     """Проверка правил въезда и визовых требований по направлению."""
     return ComplianceService.get_compliance_info(dest_id)
+
+
+class LTRFeedbackRequest(BaseModel):
+    archetype: Literal["pet", "family", "luxury", "budget", "solo"] = "solo"
+    chosen_tour: Dict[str, Any]
+    rejected_tour: Dict[str, Any]
+    margin: int = Field(default=1, ge=1, le=10, strict=True)
+
+
+@app.get("/api/ltr/status")
+async def api_ltr_status():
+    """Реальный статус модели и резервного скоринга."""
+    return LTRService.get_status()
+
+
+@app.post("/api/ltr/feedback")
+async def api_ltr_feedback(req: LTRFeedbackRequest):
+    """Сохраняет парный выбор в ограниченный буфер текущего процесса."""
+    return LTRService.record_online_feedback(req.archetype, req.chosen_tour, req.rejected_tour, req.margin)
 
 
 @app.get("/api/stats")
