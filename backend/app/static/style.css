@@ -114,6 +114,27 @@ svg { display: block; }
 .workspace-benefits svg { width: 32px; height: 32px; flex-shrink: 0; padding: 6px; border-radius: 50%; background: var(--lime); color: var(--blue); }
 
 .trip-results { display: flex; flex-direction: column; gap: 18px; animation: resultIn .4s ease both; }
+.search-conditions { padding: 18px 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.search-conditions h2 { margin-top: 4px; color: var(--ink); font-size: 18px; letter-spacing: -.02em; }
+.search-conditions dl { margin-top: 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; }
+.search-conditions dl > div:first-child { grid-column: 1 / -1; }
+.search-conditions dt { color: var(--muted); font-size: 10px; }
+.search-conditions dd { margin-top: 3px; color: var(--ink); font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.segment-warning { padding: 11px 12px; display: flex; align-items: flex-start; gap: 8px; border: 1px solid #F5D28A; border-radius: 10px; background: #FFF8E8; color: #854D0E; }
+.segment-warning > svg { width: 17px; height: 17px; flex-shrink: 0; margin-top: 1px; }
+.segment-warning strong { color: #713F12; font-size: 12px; }
+.segment-warning p, .package-banner .segment-warning p { margin-top: 3px; color: #854D0E; font-size: 11px; line-height: 1.5; }
+.results-heading > .caution-badge { display: inline-flex; align-items: center; gap: 5px; color: #854D0E; font-size: 10px; white-space: nowrap; }
+.caution-badge svg { width: 15px; height: 15px; }
+.arrival-flight { margin-bottom: 20px; }
+.logistics-card .results-heading { margin-bottom: 14px; }
+.arrival-flight h3, .transfer-note h3 { display: flex; align-items: center; gap: 7px; color: var(--ink); font-size: 12px; overflow-wrap: anywhere; }
+.arrival-flight h3 svg, .transfer-note h3 svg { width: 17px; height: 17px; flex-shrink: 0; color: var(--blue); }
+.arrival-flight > p, .transfer-note > p { margin-top: 5px; color: var(--muted); font-size: 11px; }
+.arrival-flight .segment-warning { margin-top: 10px; }
+.transfer-note { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.package-banner { flex-wrap: wrap; }
+.package-banner > .segment-warning { flex-basis: 100%; }
 .destination-summary { padding: 14px; display: flex; align-items: center; gap: 16px; border: 1px solid #D8E5FC; border-radius: var(--radius); background: var(--blue-soft); }
 .destination-photo { width: 142px; height: 112px; flex-shrink: 0; object-fit: cover; border-radius: 11px; background: #BFDBFE; }
 .destination-copy { min-width: 0; flex: 1; }

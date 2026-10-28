@@ -637,7 +637,9 @@ class GraphService:
                         "buffer_description": buffer_desc,
                         "transfer_start": transfer_start_str,
                         "hotel_arrival": hotel_arr_str,
+                        "hotel_arrival_day_offset": (hotel_arrival_dt.date() - arr_dt.date()).days,
                         "hotel_checkin_policy": checkin_str,
+                        "checkin_wait_minutes": max(0, int((checkin_dt - hotel_arrival_dt).total_seconds() / 60)),
                         "force_majeure_resilience": force_majeure_resilience,
                         "layover_details": layover_details
                     },

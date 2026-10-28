@@ -1712,6 +1712,22 @@ class AgentService:
 
     @staticmethod
     async def process_message(user_id: str, message: str, progress_callback: Optional[Any] = None) -> Dict[str, Any]:
+        """Обрабатывает запрос и возвращает учтённые условия текущей поездки."""
+        session_obj = await AgentService.get_or_create_session(user_id)
+        profile = session_obj.profile or {}
+        result = await AgentService._process_message(
+            user_id, message, profile, session_obj.current_cart or {}, session_obj, progress_callback
+        )
+        if not result.get("booking_action"):
+            # Только условия поиска: служебные поля и история профиля в UI не нужны.
+            keys = ("dates", "nights", "adults_count", "kids_count", "has_kids",
+                    "has_pets", "private_room_required", "budget_rub", "rooms_count")
+            result["trip_conditions"] = {key: profile.get(key) for key in keys}
+        return result
+
+    @staticmethod
+    async def _process_message(user_id: str, message: str, profile: dict, cart: dict,
+                               session_obj: Any, progress_callback: Optional[Any] = None) -> Dict[str, Any]:
         """
         Основной цикл обработки запроса путешественника:
         1. Распознавание интента и профилирование (память пользователя)
@@ -1721,9 +1737,6 @@ class AgentService:
         5. Пункт 5 ТЗ: Имитация чекаута и ваучер
         """
         user_lower = message.lower().strip()
-        session_obj = await AgentService.get_or_create_session(user_id)
-        profile = session_obj.profile or {}
-        cart = session_obj.current_cart or {}
 
         booking_action = detect_booking_action(message)
         if booking_action:
