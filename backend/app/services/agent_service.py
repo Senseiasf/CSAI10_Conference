@@ -12,6 +12,8 @@ from app.services.vector_service import generate_text_embedding
 from app.mcp.tools import MCPTools
 from app.services.trip_dates import update_trip_dates
 from app.services.trip_budget import update_trip_budget
+from app.services.booking_stub import detect_booking_action, booking_stub
+from app.services.preference_memory import remembered_preferences
 from app.services.llm_service import LLMService
 from app.services.graph_service import GraphService
 from app.services.compliance_service import ComplianceService
@@ -486,6 +488,14 @@ class AgentService:
 
         # Логика мульти-номеров (Family / Multi-Room)
         # Стандартный номер вмещает до 2 взрослых. При >=3 взрослых или от 4 человек с детьми бронируются смежные номера
+        if re.search(r"\bбез\s+(?:детей|ребенка)\b", user_lower):
+            profile["has_kids"] = False
+            profile["kids_count"] = 0
+            interests.discard("family_kids")
+        if re.search(r"\bбез\s+(?:собаки|кошки|питомц\w*|животных)\b|\b(?:собака|кошка|питомец)\s+не\s+едет\b", user_lower):
+            profile["has_pets"] = False
+            interests.discard("pet_friendly")
+
         adults = profile.get("adults_count", 2)
         kids = profile.get("kids_count", 0)
         if adults >= 3 or (adults >= 2 and kids >= 2) or (adults + kids >= 4):
@@ -1715,6 +1725,12 @@ class AgentService:
         profile = session_obj.profile or {}
         cart = session_obj.current_cart or {}
 
+        booking_action = detect_booking_action(message)
+        if booking_action:
+            result = booking_stub(booking_action, cart)
+            await AgentService._save_session(user_id, profile, cart, message, result["text"])
+            return result
+
         previous_budget = profile.get("budget_rub")
         budget_question = update_trip_budget(user_lower, profile, cart)
         if budget_question:
@@ -1725,28 +1741,6 @@ class AgentService:
         cart_within_budget = budget_limit is None or (
             cart.get("total_trip_budget_range_rub", {}).get("max", float("inf")) <= budget_limit
         )
-
-        # 0. Проверка намерения покупки / чекаута (Пункт 5 ТЗ)
-        if any(w in user_lower for w in ["купить", "оформить", "забронировать", "оплатить", "чек", "подтвердить"]):
-            if cart.get("hotel") and cart.get("destination") and not budget_changed and cart_within_budget:
-                checkout_result = await MCPTools.checkout_cart(user_id=user_id)
-                reply = (
-                    f"🎉 **Бронирование успешно подтверждено!**\n\n"
-                    f"📋 **Ваучер заказа:** `{checkout_result['booking_id']}`\n"
-                    f"🏝️ **Направление:** {checkout_result['destination']}\n"
-                    f"✈️ **Авиаперелет:** {checkout_result.get('flight')}\n"
-                    f"🏨 **Отель:** {checkout_result['hotel']}\n"
-                    f"🚕 **Трансфер:** {checkout_result['transfer']}\n"
-                    f"💳 **Сумма к оплате:** {checkout_result['total_paid_rub']:,} ₽ (симуляция оплаты успешна)\n\n"
-                    f"💡 *{checkout_result.get('onsite_spending_guide', '')}*\n\n"
-                    f"Спасибо, что выбрали Островок! Приятного путешествия!"
-                )
-                return {
-                    "text": reply,
-                    "cart": cart,
-                    "booking": checkout_result,
-                    "state": "CONFIRMED"
-                }
 
         # Синхронизация дат: если в profile нет checkin_date, восстанавливаем из cart или текущего тура
         if not profile.get("checkin_date"):
@@ -1801,6 +1795,11 @@ class AgentService:
                 conversation_history=getattr(session_obj, "conversation_history", [])
             )
             if llm_decision:
+                if llm_decision.get("action") in ("checkout", "cancel_booking", "reschedule_booking"):
+                    action = {"checkout": "book", "cancel_booking": "cancel", "reschedule_booking": "reschedule"}[llm_decision["action"]]
+                    result = booking_stub(action, cart)
+                    await AgentService._save_session(user_id, profile, cart, message, result["text"])
+                    return result
                 if llm_decision.get("action") == "unknown_destination":
                     req_name = llm_decision.get("requested_name") or "выбранное направление"
                     alt_id = llm_decision.get("suggested_pilot_id") or "maldives"
@@ -2629,6 +2628,20 @@ class AgentService:
             "compliance_info": compliance_info,
             "rooms_count": rooms_cnt
         }
+
+    @staticmethod
+    async def reset_trip(user_id: str, forget_preferences: bool = False) -> dict:
+        async with async_session_maker() as session:
+            user_session = await session.get(UserSessionModel, user_id)
+            preferences = {}
+            if user_session:
+                preferences = {} if forget_preferences else remembered_preferences(user_session.profile or {})
+                user_session.profile = preferences
+                user_session.current_cart = {}
+                user_session.conversation_history = []
+                user_session.current_state = "INSPIRATION"
+                await session.commit()
+            return preferences
 
     @staticmethod
     async def _save_session(user_id: str, profile: dict, cart: dict, user_msg: str, agent_reply: str):

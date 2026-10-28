@@ -23,6 +23,7 @@ from app.seed import run_seed
 from app.services.graph_service import GraphService
 from app.services.agent_service import AgentService
 from app.services.calendar_service import CalendarService
+from app.services.preference_memory import remembered_preferences, preference_summary
 from app.services.compliance_service import ComplianceService
 from app.bot.telegram_bot import start_telegram_bot
 
@@ -114,18 +115,7 @@ async def health_check():
 @app.post("/api/chat")
 async def api_chat(req: ChatRequest, request: Request, response: Response):
     """Эндпоинт диалога с AI-агентом для веб-интерфейса."""
-    user_id = req.user_id
-    if not user_id:
-        cookie = request.cookies.get("ostrovok_session", "")
-        try:
-            session_id = str(UUID(cookie))
-        except ValueError:
-            session_id = str(uuid4())
-        user_id = f"web:{session_id}"
-        response.set_cookie(
-            "ostrovok_session", session_id, httponly=True, samesite="lax",
-            secure=request.url.scheme == "https", max_age=60 * 60 * 24 * 30,
-        )
+    user_id = req.user_id or web_user_id(request, response)
     result = await AgentService.process_message(
         user_id=user_id,
         message=req.message
@@ -142,18 +132,7 @@ async def api_chat_stream(req: ChatRequest, request: Request, response: Response
     - token: потоковые чанки текста для эффекта живой печати
     - result: финальный JSON с карточкой тура, чипами дат, комплаенсом и корзиной
     """
-    user_id = req.user_id
-    if not user_id:
-        cookie = request.cookies.get("ostrovok_session", "")
-        try:
-            session_id = str(UUID(cookie))
-        except ValueError:
-            session_id = str(uuid4())
-        user_id = f"web:{session_id}"
-        response.set_cookie(
-            "ostrovok_session", session_id, httponly=True, samesite="lax",
-            secure=request.url.scheme == "https", max_age=60 * 60 * 24 * 30,
-        )
+    user_id = req.user_id or web_user_id(request, response)
 
     # Выполняем расчёт тура в основном цикле запроса (для стабильности event loop и asyncpg)
     result = await AgentService.process_message(
@@ -163,17 +142,18 @@ async def api_chat_stream(req: ChatRequest, request: Request, response: Response
 
     async def sse_event_stream():
         try:
-            # 1. Этап: Анализ запроса
-            yield f"event: status\ndata: {json.dumps({'stage': 'nlu', 'message': '🧠 Анализирую намерения, состав туристов и бюджет...'}, ensure_ascii=False)}\n\n"
-            await asyncio.sleep(0.04)
+            if not result.get("booking_action"):
+                # 1. Этап: Анализ запроса
+                yield f"event: status\ndata: {json.dumps({'stage': 'nlu', 'message': '🧠 Анализирую намерения, состав туристов и бюджет...'}, ensure_ascii=False)}\n\n"
+                await asyncio.sleep(0.04)
 
-            # 2. Этап: Графовая логистика
-            yield f"event: status\ndata: {json.dumps({'stage': 'graph', 'message': '🕸️ Проверяю стыковки рейсов и трансферы в графе Neo4j...'}, ensure_ascii=False)}\n\n"
-            await asyncio.sleep(0.04)
+                # 2. Этап: Графовая логистика
+                yield f"event: status\ndata: {json.dumps({'stage': 'graph', 'message': '🕸️ Проверяю стыковки рейсов и трансферы в графе Neo4j...'}, ensure_ascii=False)}\n\n"
+                await asyncio.sleep(0.04)
 
-            # 3. Этап: Комплаенс и безопасность
-            yield f"event: status\ndata: {json.dumps({'stage': 'compliance', 'message': '🛂 Сверяю визовый режим, паспортный комплаенс и правила въезда...'}, ensure_ascii=False)}\n\n"
-            await asyncio.sleep(0.04)
+                # 3. Этап: Комплаенс и безопасность
+                yield f"event: status\ndata: {json.dumps({'stage': 'compliance', 'message': '🛂 Сверяю визовый режим, паспортный комплаенс и правила въезда...'}, ensure_ascii=False)}\n\n"
+                await asyncio.sleep(0.04)
 
             # 4. Потоковая передача текста частями (chunks)
             full_text = result.get("text", "")
@@ -195,36 +175,41 @@ async def api_chat_stream(req: ChatRequest, request: Request, response: Response
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"
+            "X-Accel-Buffering": "no",
+            **({"Set-Cookie": response.headers["set-cookie"]} if "set-cookie" in response.headers else {})
         }
     )
 
 
-@app.post("/api/session/reset")
-async def api_session_reset(request: Request, response: Response):
-    """Сброс сессии пользователя, корзины и профиля к начальному состоянию."""
-    cookie = request.cookies.get("ostrovok_session", "")
+def web_user_id(request: Request, response: Response) -> str:
     try:
-        session_id = str(UUID(cookie))
+        session_id = str(UUID(request.cookies.get("ostrovok_session", "")))
     except ValueError:
         session_id = str(uuid4())
-    user_id = f"web:{session_id}"
-    response.set_cookie(
-        "ostrovok_session", session_id, httponly=True, samesite="lax",
-        secure=request.url.scheme == "https", max_age=60 * 60 * 24 * 30,
+    response.set_cookie("ostrovok_session", session_id, httponly=True, samesite="lax",
+                        secure=request.url.scheme == "https", max_age=60 * 60 * 24 * 30)
+    return f"web:{session_id}"
+
+
+@app.get("/api/profile")
+async def api_profile(request: Request, response: Response):
+    user = await AgentService.get_or_create_session(web_user_id(request, response))
+    preferences = remembered_preferences(user.profile or {})
+    return {"preferences": preferences, "summary": preference_summary(preferences)}
+
+
+class ResetSessionRequest(BaseModel):
+    forget_preferences: bool = False
+
+
+@app.post("/api/session/reset")
+async def api_session_reset(request: Request, response: Response, options: Optional[ResetSessionRequest] = None):
+    preferences = await AgentService.reset_trip(
+        web_user_id(request, response),
+        forget_preferences=bool(options and options.forget_preferences),
     )
-    async with async_session_maker() as session:
-        res = await session.execute(
-            select(UserSessionModel).where(UserSessionModel.user_id == user_id)
-        )
-        user_session = res.scalar_one_or_none()
-        if user_session:
-            user_session.profile_json = {}
-            user_session.current_cart_json = {}
-            user_session.current_state = "INSPIRATION"
-            user_session.conversation_history = []
-            await session.commit()
-    return {"status": "ok", "message": "Сессия успешно сброшена"}
+    return {"status": "ok", "preferences": preferences, "summary": preference_summary(preferences),
+            "message": "Новая поездка: предпочтения сохранены." if preferences else "Начинаем новую поездку."}
 
 
 class ExportCalendarRequest(BaseModel):

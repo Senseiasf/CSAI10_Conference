@@ -33,7 +33,7 @@
       <a class="brand" href="https://ostrovok.ru/" target="_blank" rel="noopener noreferrer" aria-label="Островок — открыть официальный сайт в новой вкладке">
         <img class="brand-logo" src="/static/logo-full.png" alt="Островок!">
       </a>
-      <button class="planner-badge" id="resetInspiration" type="button" title="Вернуться к идеям для путешествий" aria-label="AI Travel Planner — показать идеи для путешествий">AI Travel Planner</button>
+      <button class="planner-badge" id="resetInspiration" type="button" title="Начать новую поездку, сохранив предпочтения" aria-label="Новая поездка — предпочтения сохранятся">AI Travel Planner</button>
     </div>
     <nav class="header-actions" aria-label="Дополнительные действия">
       <button class="header-button" id="diagnosticsButton" type="button"><svg><use href="#icon-settings"/></svg><span>Диагностика</span></button>
@@ -47,6 +47,10 @@
         <div class="hero-kicker"><span>✦</span> Ваш персональный ГУРУ путешествий</div>
         <h1 id="heroTitle">Ооооочень умный<br>планировщик поездок!</h1>
         <p class="hero-subtitle">Опишите отпуск своими словами — соберём всё под ключ</p>
+        <div id="preferenceMemory" hidden>
+          <p id="preferenceMemoryText" role="status"></p>
+          <button class="header-button" id="forgetPreferences" type="button">Забыть предпочтения</button>
+        </div>
         <div class="hero-tabs" role="group" aria-label="Режим планирования">
           <button class="hero-tab active" type="button" data-mode="full" aria-pressed="true"><svg><use href="#icon-plane"/></svg>Полный тур</button>
           <button class="hero-tab" type="button" data-mode="hotels" aria-pressed="false"><svg><use href="#icon-bed"/></svg>Отели и трансфер</button>
@@ -108,6 +112,7 @@
 
   <script>
     const chatMessages = document.getElementById('chatMessages');
+    const initialChatMarkup = chatMessages.innerHTML;
     const workspace = document.getElementById('tripWorkspace');
     const chatInput = document.getElementById('chatInput');
     const modePrompts = document.getElementById('modePrompts');
@@ -360,21 +365,52 @@
       rotateModeChips();
     }
 
-    function resetInspiration() {
-      fetch('/api/session/reset', { method: 'POST' }).catch(() => {});
-      lastTripData = {};
-      workspace.innerHTML = initialWorkspaceMarkup;
-      const reasoning = document.getElementById('diagnosticReasoning');
-      reasoning.hidden = true;
-      reasoning.innerHTML = '';
-      workspace.classList.remove('workspace-reset');
-      void workspace.offsetWidth;
-      workspace.classList.add('workspace-reset');
-      hidePromptHint();
-      setMode(currentMode);
+    function showPreferenceMemory(data) {
+      document.getElementById('preferenceMemoryText').textContent = data.summary || '';
+      document.getElementById('preferenceMemory').hidden = !Object.keys(data.preferences || {}).length;
     }
 
-    document.getElementById('resetInspiration').addEventListener('click', resetInspiration);
+    async function loadPreferenceMemory() {
+      try {
+        const response = await fetch('/api/profile');
+        if (!response.ok) throw new Error('Не удалось загрузить предпочтения');
+        showPreferenceMemory(await response.json());
+      } catch (error) { console.warn(error); }
+    }
+
+    async function resetInspiration(forgetPreferences = false) {
+      const button = document.getElementById('resetInspiration');
+      const send = document.getElementById('sendBtn');
+      if (send.disabled) return;
+      button.disabled = true;
+      send.disabled = true;
+      try {
+        await memoryReady;
+        const response = await fetch('/api/session/reset', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({forget_preferences: forgetPreferences})
+        });
+        if (!response.ok) throw new Error('Не удалось начать новую поездку. Попробуйте ещё раз.');
+        const data = await response.json();
+        lastTripData = {};
+        chatMessages.innerHTML = initialChatMarkup;
+        workspace.innerHTML = initialWorkspaceMarkup;
+        const reasoning = document.getElementById('diagnosticReasoning');
+        reasoning.hidden = true;
+        reasoning.innerHTML = '';
+        workspace.classList.remove('workspace-reset');
+        void workspace.offsetWidth;
+        workspace.classList.add('workspace-reset');
+        showPreferenceMemory(data);
+        showToast(data.message);
+        hidePromptHint();
+        setMode(currentMode);
+      } catch (error) { showToast(error.message); }
+      finally { button.disabled = false; send.disabled = false; }
+    }
+
+    document.getElementById('resetInspiration').addEventListener('click', () => resetInspiration());
+    document.getElementById('forgetPreferences').addEventListener('click', () => resetInspiration(true));
 
     document.addEventListener('click', event => {
       const card = event.target.closest('.inspiration-card[data-category]');
@@ -480,6 +516,7 @@
     }
 
     function renderTrip(data) {
+      if (data.booking_action) return;
       if (data.booking) lastTripData = {...lastTripData, cart: data.cart, booking: data.booking};
       else lastTripData = data;
       const view = lastTripData;
@@ -586,7 +623,9 @@
       chatMessages.setAttribute('aria-busy', 'true');
       showThinking();
       try {
+        await memoryReady;
         const data = await requestChat(message);
+        await loadPreferenceMemory();
         appendMessage(data.text, 'agent');
         renderTrip(data);
       } catch (error) {
@@ -668,6 +707,7 @@
       container.innerHTML = steps.length ? `<h3 class="stats-title">Ход рассуждений агента</h3><ol>${steps.map(step => `<li><strong>${escapeHtml(step.title)}</strong><span>${escapeHtml(step.detail)}</span></li>`).join('')}</ol>` : '';
     }
 
+    const memoryReady = loadPreferenceMemory();
     checkHealth();
     setInterval(checkHealth, 30000);
   </script>
