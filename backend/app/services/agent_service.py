@@ -1127,12 +1127,55 @@ class AgentService:
         orig_code = profile.get("origin_airport") or outbound_flight.get("origin_code", "SVO")
 
         # 3. Даты и логистика
+        user_lower = message.lower().strip()
+        is_cheapest_requested = any(w in user_lower for w in [
+            "самый дешев", "самые дешев", "самая дешев", "самое дешев",
+            "самый эконом", "самый бюджет", "минимальн", "как можно дешев",
+            "максимально дешев", "подешевле", "подешевле вариант", "дешевый вариант", "дешевые билеты", "дешевыми билетами"
+        ])
+        is_any_time = any(w in user_lower for w in [
+            "в любое время", "в любой день", "любое время", "время не важно", "не важно когда",
+            "без разницы во сколько", "в любое время суток", "любое время вылета", "когда угодно"
+        ])
+
         if not profile.get("checkin_date"):
             today = date.today()
             base_date = today + timedelta(days=14)
             profile["checkin_date"] = base_date.isoformat()
             profile["checkout_date"] = (base_date + timedelta(days=nights)).isoformat()
             profile["dates"] = f"{base_date:%d.%m.%Y} — {base_date + timedelta(days=nights):%d.%m.%Y} ({nights} ночей)"
+
+        rooms_cnt = max(1, profile.get("rooms_count", 1))
+        raw_flight_rt = outbound_flight.get("price_rub_roundtrip", 27000)
+        best_mc_flex = None
+
+        if is_cheapest_requested or is_any_time:
+            avg_hotel_price = int((hotel_1.get("price_per_night_rub", 6000) * nights_1 + hotel_2.get("price_per_night_rub", 8500) * nights_2) / max(1, nights))
+            intercity_cost = intercity.get("price_rub", 3800)
+            tr_cost = 0 if profile.get("without_transfer") else 3500
+            pf1 = (hotel_1.get("pet_surcharge_per_night_rub", 0) or 0) * nights_1 if profile.get("has_pets") else 0
+            pf2 = (hotel_2.get("pet_surcharge_per_night_rub", 0) or 0) * nights_2 if profile.get("has_pets") else 0
+            fixed_mc = intercity_cost + tr_cost + pf1 + pf2
+            flex_pre = AgentService.calculate_flexible_dates_options(
+                dest_id=dest_id,
+                base_mandatory_rub=avg_hotel_price * nights * rooms_cnt + raw_flight_rt + fixed_mc,
+                checkin_date_str=profile.get("checkin_date"),
+                nights=nights,
+                base_flight_price=raw_flight_rt,
+                base_hotel_price=avg_hotel_price,
+                fixed_costs=fixed_mc,
+                rooms_count=rooms_cnt
+            )
+            if flex_pre and flex_pre[0]["savings_rub"] > 0:
+                best_mc_flex = flex_pre[0]
+                profile["checkin_date"] = best_mc_flex["checkin_date"]
+                profile["checkout_date"] = best_mc_flex["checkout_date"]
+                profile["dates"] = f"{best_mc_flex['dates_formatted']} ({nights} ночей)"
+                profile["date_shifted"] = True
+                cart["date_shifted"] = True
+                cart["checkin_date"] = best_mc_flex["checkin_date"]
+                cart["checkout_date"] = best_mc_flex["checkout_date"]
+                cart["dates"] = profile["dates"]
 
         d_in = date.fromisoformat(profile["checkin_date"])
         d_mid = d_in + timedelta(days=nights_1)
@@ -1147,7 +1190,6 @@ class AgentService:
         hotel_2_dates = format_hotel_dates(d_mid.isoformat(), d_out.isoformat(), nights_2)
 
         # 4. Финансовый расчёт всего тура с учётом реального календарного тарифа
-        rooms_cnt = max(1, profile.get("rooms_count", 1))
         is_date_shifted = bool(profile.get("date_shifted") or cart.get("date_shifted"))
 
         # Реальный тариф на авиарейсы
@@ -1196,7 +1238,12 @@ class AgentService:
         response_lines = []
         raw_intro = profile.pop("llm_ai_intro", None) or selection_rationale
         out_dep = outbound_flight.get("departure_time", "13:40")
-        if not raw_intro:
+        if is_cheapest_requested:
+            if best_mc_flex:
+                raw_intro = f"Подобрал для вас самый дешёвый вариант комбинированного тура под ключ: сдвинул вылет на {abs(best_mc_flex['days_shift'])} дня {best_mc_flex['direction']} ({best_mc_flex['target_weekday']}, {best_mc_flex['dates_formatted']}), чтобы билеты и отели вышли по минимальному тарифу:"
+            else:
+                raw_intro = "Собрал для вас самый экономичный вариант комбинированного тура под ключ с самыми дешёвыми билетами и отелями:"
+        elif not raw_intro:
             if budget_limit is not None and total_max > budget_limit:
                 raw_intro = (
                     f"⚠️ К сожалению, с бюджетом {budget_limit:,} ₽ составить комбинированный тур невозможно. "
@@ -1282,18 +1329,12 @@ class AgentService:
         response_lines.append(f"💵 **ИТОГО под ключ:** **{total_min:,} – {total_max:,} ₽**")
         response_lines.append("")
 
-        if budget_limit is not None:
-            if total_max <= budget_limit:
-                response_lines.append(
-                    f"Лимит всей поездки: {budget_limit:,} ₽. Верхняя оценка расходов "
-                    f"{total_max:,} ₽ укладывается в бюджет ✅; это оценка, а не фиксированная цена.\n"
-                )
-            else:
-                response_lines.append(
-                    f"⚠️ Лимит всей поездки: {budget_limit:,} ₽ превышен на {total_max - budget_limit:,} ₽. "
-                    f"Верхняя оценка расходов {total_max:,} ₽ — это ближайший доступный вариант для комбинированного тура. "
-                    f"Рекомендуем увеличить бюджет или сократить количество дней.\n"
-                )
+        if budget_limit is not None and total_max > budget_limit:
+            response_lines.append(
+                f"⚠️ Лимит всей поездки: {budget_limit:,} ₽ превышен на {total_max - budget_limit:,} ₽. "
+                f"Верхняя оценка расходов {total_max:,} ₽ — это ближайший доступный вариант для комбинированного тура. "
+                f"Рекомендуем увеличить бюджет или сократить количество дней.\n"
+            )
 
         response_lines.append("🛡️ **Аудит агента (Smart Filter & Safety Check):**")
         response_lines.append(f"• ✅ **Сквозная состыковка:** График переезда между {cfg['city_1']['name']} и {cfg['city_2']['name']} согласован со временем заселения и выселения.")
@@ -1578,6 +1619,8 @@ class AgentService:
             "самый выгодный день", "выгодные даты", "выгодный день", "тарифы по дням"
         ]
         if not any(t in user_lower for t in triggers):
+            return None
+        if any(w in user_lower for w in ["сделай", "подбери", "собери", "пересчитай", "построй", "выбери"]) and any(w in user_lower for w in ["самый дешев", "самая дешев", "самое дешев", "самые дешев", "дешевле", "подешевле"]):
             return None
         if not cart.get("destination_id") and not profile.get("destination_id"):
             return None
@@ -1893,7 +1936,16 @@ class AgentService:
         explicit_dest_change = any(w in user_lower for w in ["другой город", "поменяй направление", "другая страна", "вместо", "поехали в", "а если в "])
         
         is_replan_hotel = any(w in user_lower for w in ["другой отель", "поменяй отель", "смени отель", "не нравится отель", "есть еще отели", "покажи другие варианты", "альтернативный отель", "другой вариант проживания"])
-        is_replan_cheaper = any(w in user_lower for w in ["дешевле", "подешевле", "дорого", "снизь цену", "бюджетнее", "экономнее", "сделай дешевле"])
+        is_cheapest_requested = any(w in user_lower for w in [
+            "самый дешев", "самые дешев", "самая дешев", "самое дешев",
+            "самый эконом", "самый бюджет", "минимальн", "как можно дешев",
+            "максимально дешев", "подешевле", "подешевле вариант", "дешевый вариант", "дешевые билеты", "дешевыми билетами"
+        ])
+        is_any_time = any(w in user_lower for w in [
+            "в любое время", "в любой день", "любое время", "время не важно", "не важно когда",
+            "без разницы во сколько", "в любое время суток", "любое время вылета", "когда угодно"
+        ])
+        is_replan_cheaper = is_cheapest_requested or any(w in user_lower for w in ["дешевле", "подешевле", "дорого", "снизь цену", "бюджетнее", "экономнее", "сделай дешевле"])
         is_replan_flight_day = any(w in user_lower for w in ["днем", "днём", "в обед", "дневной вылет", "дневным вылетом", "вылет днем", "вылет днём", "вылетать не в 6 утра", "не в 6 утра, а днем", "не в 6 утра, а днём"])
         is_replan_flight_later = any(w in user_lower for w in ["попозже", "самолет попозже", "вылет попозже", "рейс попозже", "не в 6 утра", "не в 6", "не в 7", "не рано", "позже 10", "после 10", "после 12", "вечером", "поздний вылет", "вылетать позже"]) or is_replan_flight_day
         is_replan_flight_morning = any(w in user_lower for w in ["пораньше", "утром", "утренний вылет", "самолет пораньше", "рейс пораньше", "ранний вылет"])
@@ -1902,13 +1954,32 @@ class AgentService:
         is_replan_dates = profile.get("dates") != previous_dates and bool(profile.get("checkin_date"))
         is_replan_nights = any(w in user_lower for w in ["ноч", "дн", "сут", "выходн", "уикенд", "недел", "месяц"]) and profile.get("nights") != cart.get("nights")
 
+        # Если запрошено любое время вылета — сбрасываем ограничения времени и типа рейса
+        if is_any_time:
+            profile["flight_time_pref"] = None
+            profile.pop("flight_time_pref", None)
+            profile["prefer_direct_flight"] = None
+            profile.pop("prefer_direct_flight", None)
+            is_replan_flight_later = False
+            is_replan_flight_day = False
+            is_replan_flight_morning = False
+            is_replan_flight = False
+
+        if is_cheapest_requested:
+            interests = profile.get("interests", [])
+            profile["interests"] = [t for t in interests if t not in ("luxury", "extreme_luxury", "luxury_extreme", "splurge")]
+            if "budget_friendly" not in profile["interests"]:
+                profile["interests"].append("budget_friendly")
+            profile.pop("budget_rub", None)
+            budget_limit = None
+
         # Применяем решения ИИ-диспетчера (Tool Calling DeepSeek Flash)
         llm_ra = profile.pop("llm_replan_action", None)
         if llm_ra == "change_hotel":
             is_replan_hotel = True
         elif llm_ra == "cheaper":
             is_replan_cheaper = True
-        elif llm_ra == "change_flight_time":
+        elif llm_ra == "change_flight_time" and not is_any_time:
             is_replan_flight = True
             if profile.get("flight_time_pref") == "day":
                 is_replan_flight_day = True
@@ -1923,7 +1994,7 @@ class AgentService:
         elif llm_ra == "change_destination":
             explicit_dest_change = True
 
-        if is_replan_flight_day:
+        if is_replan_flight_day and not is_any_time:
             profile["flight_time_pref"] = "day"
 
         is_abroad_request = profile.get("abroad_only", False)
@@ -2115,14 +2186,14 @@ class AgentService:
                       option[2]["total_trip_budget_range_rub"]["max"] <= budget_limit]
 
         is_luxury = any(t in ("luxury", "extreme_luxury") for t in profile.get("interests", []))
-        is_budget = "budget_friendly" in profile.get("interests", []) or is_replan_cheaper
+        is_budget = "budget_friendly" in profile.get("interests", []) or is_replan_cheaper or is_cheapest_requested
 
-        if is_luxury:
+        if is_luxury and not is_cheapest_requested:
             # Пользователь готов раскошелиться / выбрал люкс: рекомендуем премиум-отель с максимальным комфортом в рамках бюджета
             affordable.sort(key=lambda x: -x[0]["price_per_night_rub"])
-        elif is_budget or (budget_limit is not None and not is_luxury):
+        elif is_cheapest_requested or is_budget or (budget_limit is not None and not is_luxury):
             # Пользователь ищет доступный вариант или ограничил бюджет: рекомендуем наиболее экономичный вариант
-            affordable.sort(key=lambda x: x[2]["total_trip_budget_range_rub"]["max"])
+            affordable.sort(key=lambda x: (x[2]["total_trip_budget_range_rub"]["max"], x[0]["price_per_night_rub"]))
 
         if not affordable:
             if evaluated and budget_limit is not None:
@@ -2231,6 +2302,46 @@ class AgentService:
         except Exception:
             d_out = d_in + timedelta(days=nights)
 
+        # Реальный тариф на авиарейсы и проживание через единый метод расчёта тарифа
+        raw_flight_rt = flight_info.get("price_rub_roundtrip", 20000)
+        tr_info = logistics_info.get("transfer", {})
+        tr_price = 0 if profile.get("without_transfer") else (tr_info.get("price_rub", 2000) or 2000)
+        tr_name = tr_info.get("name", "Комфорт-трансфер")
+        tr_min = tr_info.get("duration_min", 30)
+        rooms_cnt = max(1, profile.get("rooms_count", 1))
+        pet_fee = (recommended_hotel.get("pet_surcharge_per_night_rub", 0) or 0) * nights if profile.get("has_pets") else 0
+        fixed_costs = tr_price + pet_fee
+
+        # Автоматический выбор самой выгодной даты вылета при запросе самого дешевого варианта
+        date_shifted_for_cheapest = False
+        best_flex_found = None
+        if is_cheapest_requested or (is_replan_cheaper and is_any_time):
+            flex_pre = AgentService.calculate_flexible_dates_options(
+                dest_id=dest_id,
+                base_mandatory_rub=budget_breakdown["mandatory"]["total_mandatory_rub"],
+                checkin_date_str=profile.get("checkin_date"),
+                nights=nights,
+                base_flight_price=raw_flight_rt,
+                base_hotel_price=recommended_hotel["price_per_night_rub"],
+                fixed_costs=fixed_costs,
+                rooms_count=rooms_cnt
+            )
+            if flex_pre and flex_pre[0]["savings_rub"] > 0:
+                best_flex_found = flex_pre[0]
+                profile["checkin_date"] = best_flex_found["checkin_date"]
+                profile["checkout_date"] = best_flex_found["checkout_date"]
+                profile["dates"] = f"{best_flex_found['dates_formatted']} ({nights} ночей)"
+                profile["date_shifted"] = True
+                cart["date_shifted"] = True
+                cart["checkin_date"] = best_flex_found["checkin_date"]
+                cart["checkout_date"] = best_flex_found["checkout_date"]
+                cart["dates"] = profile["dates"]
+                d_in = date.fromisoformat(best_flex_found["checkin_date"])
+                d_out = date.fromisoformat(best_flex_found["checkout_date"])
+                d_in_str = best_flex_found["checkin_date"]
+                d_out_str = best_flex_found["checkout_date"]
+                date_shifted_for_cheapest = True
+
         date_range_str = format_russian_date_range(d_in_str, d_out_str, nights)
         fl_date_out = format_flight_date(d_in_str)
         fl_date_ret = format_flight_date(d_out_str)
@@ -2241,10 +2352,21 @@ class AgentService:
             country_part = dest_display_name.split("(")[0].strip()
             dest_display_name = f"{country_part} ({recommended_hotel['city']})"
 
+        if is_cheapest_requested:
+            if date_shifted_for_cheapest and best_flex_found:
+                ai_intro = f"Подобрал для вас самый дешёвый вариант под ключ с минимальным тарифом: сместил вылет на {abs(best_flex_found['days_shift'])} дня {best_flex_found['direction']} ({best_flex_found['target_weekday']}, {best_flex_found['dates_formatted']}), чтобы билеты и отель вышли максимально выгодными:"
+            else:
+                ai_intro = "Собрал для вас самый экономичный вариант тура под ключ с самыми дешёвыми билетами и отелем:"
+
+        default_intro = (
+            f"Собрал для вас самый экономичный тур в {dest_display_name} под ключ с дешёвыми билетами и отелем:"
+            if is_cheapest_requested else
+            f"Подобрал для вас проверенный тур в {dest_display_name} под ключ с перелётом, отелем и трансфером:"
+        )
         ai_intro = AgentService.sanitize_ai_intro(
             intro=ai_intro,
             dest_id=dest_id,
-            default_intro=f"Подобрал для вас проверенный тур в {dest_display_name} под ключ с перелётом, отелем и трансфером:"
+            default_intro=default_intro
         )
 
         if ai_intro:
@@ -2256,13 +2378,6 @@ class AgentService:
         if weather_report.get("available"):
             response_lines.append(f"🌤️ **Прогноз погоды на неделю ({weather_report.get('source')}):** {weather_report['summary']}")
         response_lines.append("")
-
-        # Реальный тариф на авиарейсы и проживание через единый метод расчёта тарифа
-        raw_flight_rt = flight_info.get("price_rub_roundtrip", 20000)
-        tr_info = logistics_info.get("transfer", {})
-        tr_price = 0 if profile.get("without_transfer") else (tr_info.get("price_rub", 2000) or 2000)
-        tr_name = tr_info.get("name", "Комфорт-трансфер")
-        tr_min = tr_info.get("duration_min", 30)
 
         timeline = logistics_info.get("timeline", {})
         layover = timeline.get("layover_details", {})
@@ -2353,18 +2468,12 @@ class AgentService:
         ])
         response_lines.extend(fin_lines)
 
-        if budget_limit is not None:
-            if total_range['max'] <= budget_limit:
-                response_lines.append(
-                    f"Лимит всей поездки: {budget_limit:,} ₽. Верхняя оценка расходов "
-                    f"{total_range['max']:,} ₽ укладывается в бюджет ✅; это оценка, а не фиксированная цена.\n"
-                )
-            else:
-                response_lines.append(
-                    f"⚠️ Лимит всей поездки: {budget_limit:,} ₽ превышен на {total_range['max'] - budget_limit:,} ₽. "
-                    f"Верхняя оценка расходов {total_range['max']:,} ₽ — это ближайший доступный вариант. "
-                    f"Попробуйте увеличить бюджет, сократить длительность или выбрать другое направление.\n"
-                )
+        if budget_limit is not None and total_range['max'] > budget_limit:
+            response_lines.append(
+                f"⚠️ Лимит всей поездки: {budget_limit:,} ₽ превышен на {total_range['max'] - budget_limit:,} ₽. "
+                f"Верхняя оценка расходов {total_range['max']:,} ₽ — это ближайший доступный вариант. "
+                f"Попробуйте увеличить бюджет, сократить длительность или выбрать другое направление.\n"
+            )
 
         if len(compared_list) > 1:
             response_lines.append("📋 **Альтернативные отели (для сравнения):**")

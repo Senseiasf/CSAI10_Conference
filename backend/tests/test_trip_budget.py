@@ -129,6 +129,31 @@ class BudgetSelectionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["state"], "NO_ROUTE")
         self.assertNotIn("hotel", result["cart"])
 
+    async def test_budget_within_limit_does_not_print_budget_ceiling_boilerplate(self):
+        result, _, _, _ = await self.run_agent("Сочи до 100 тысяч", [hotel("affordable", 1000)])
+        self.assertNotIn("укладывается в бюджет", result["text"])
+        self.assertNotIn("это оценка, а не фиксированная цена", result["text"])
+        self.assertNotIn("Лимит всей поездки:", result["text"])
+
+    async def test_cheapest_any_time_request_picks_cheapest_and_no_boilerplate(self):
+        profile = {"nights": 6, "checkin_date": "2026-11-13", "checkout_date": "2026-11-19", "dates": "13.11.2026 — 19.11.2026 (6 ночей)"}
+        cart = {"destination_id": "sochi", "destination": "Сочи", "nights": 6, "total_mandatory_rub": 45240,
+                "checkin_date": "2026-11-13", "checkout_date": "2026-11-19"}
+        hotels = [hotel("expensive", 15000), hotel("affordable", 2000)]
+        result, save, _, _ = await self.run_agent(
+            "сделай самый дешевый вариант с самыми дешевыми билетами в любое время",
+            hotels, profile=profile, cart=cart
+        )
+        self.assertEqual(result["cart"]["hotel_id"], "affordable")
+        self.assertNotIn("укладывается в бюджет", result["text"])
+        self.assertNotIn("это оценка, а не фиксированная цена", result["text"])
+        self.assertNotIn("Лимит всей поездки:", result["text"])
+        # Should have shifted dates to the cheaper day (Wednesday 11 Nov)
+        self.assertEqual(result["cart"]["checkin_date"], "2026-11-11")
+        self.assertEqual(result["cart"]["checkout_date"], "2026-11-17")
+        self.assertIn("11 ноя — 17 ноя", result["text"])
+        self.assertIn("Вы выбрали самый выгодный день вылета", result["text"])
+
 
 if __name__ == "__main__":
     unittest.main()
