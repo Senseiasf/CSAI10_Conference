@@ -45,7 +45,7 @@
     <section class="chat-panel" aria-labelledby="chatTitle">
       <section class="chat-hero" aria-labelledby="heroTitle">
         <div class="hero-kicker"><span>✦</span> Ваш персональный ГУРУ путешествий</div>
-        <h1 id="heroTitle">Ооооочень умный<br>планировщик поездок!</h1>
+        <h1 id="heroTitle" aria-label="Очень умный планировщик поездок!"><span class="hero-title-line" aria-hidden="true">О<span class="stretch-o" style="--o-index:0">о</span><span class="stretch-o" style="--o-index:1">о</span><span class="stretch-o" style="--o-index:2">о</span><span class="stretch-o" style="--o-index:3">о</span><span class="stretch-o" style="--o-index:4">о</span><span class="stretch-o" style="--o-index:5">о</span><span class="stretch-o" style="--o-index:6">о</span><span class="stretch-o" style="--o-index:7">о</span><span class="stretch-o" style="--o-index:8">о</span><span class="stretch-o" style="--o-index:9">о</span><span class="stretch-o" style="--o-index:10">о</span><span class="stretch-o" style="--o-index:11">о</span>чень умный</span><span class="hero-title-line" aria-hidden="true">планировщик поездок!</span></h1>
         <p class="hero-subtitle">Опишите отпуск своими словами — соберём всё под ключ</p>
         <div id="preferenceMemory" hidden>
           <p id="preferenceMemoryText" role="status"></p>
@@ -124,6 +124,7 @@
     let chipCursor = 0;
     let currentMode = 'full';
     let lastTripData = {};
+    let lastTotalCost = null;
     let thinkingTimer;
     let hintTimer;
 
@@ -160,94 +161,30 @@
     }
 
     const scenarioConfig = {
-      sea: {
-        destinations: ['в Турцию', 'в ОАЭ', 'в Таиланд', 'на Мальдивы', 'в Египет', 'в Сочи'],
-        parties: ['на двоих взрослых', 'на семью с ребёнком 7 лет', 'на компанию из трёх друзей', 'на двоих с собакой'],
-        wishes: ['нужен отель рядом с пляжем и хорошими завтраками', 'хочется спокойную бухту и снорклинг', 'важны первый берег и короткий трансфер', 'мечтаю о террасе у воды и спокойном районе'],
-        budgets: [90000, 120000, 150000, 180000, 220000, 280000],
-        authored: [
-          'Собери тур в Турцию на 7 ночей в мае: двое взрослых, первая линия, завтраки и удобный трансфер',
-          'Хочу на Пхукет в ноябре на 10 ночей, спокойный пляж и отель для пары, бюджет до 220 000 ₽',
-          'Организуй отдых на Мальдивах на 6 ночей в феврале, красивый домашний риф и без насыщенной программы',
-          'Планирую морской отдых в Египте с ребёнком 9 лет на 8 ночей, аквапарк и всё включено',
-          'Нужен тур в Дубай на 5 ночей в декабре, городской пляж, завтраки и трансфер без долгих ожиданий',
-          'Собери поездку в Сочи к морю на 9 ночей в сентябре, пешая доступность набережной и спа',
-          'Хочется тёплого моря в Таиланде на 12 ночей, два взрослых и кот, удобный отель и спокойный район',
-          'Подбери уютный пляжный отпуск в Турции на двоих в октябре, 7 ночей и бюджет до 170 000 ₽'
-        ]
-      },
-      mountains: {
-        destinations: ['на Алтай', 'в Сочи и Красную Поляну', 'в Грузию (Тбилиси и горы Гудаури / Казбеги)'],
-        parties: ['на двоих взрослых', 'на семью с ребёнком 12 лет', 'на компанию из четырёх друзей', 'на двоих с собакой'],
-        wishes: ['нужны панорамный вид и спа после прогулок', 'хочется лёгкие маршруты и ночёвки в тишине', 'важны завтраки и трансфер к подъёмникам', 'мечтаю о рассветах в горах без сложного трекинга'],
-        budgets: [60000, 80000, 100000, 130000, 160000, 200000],
-        authored: [
-          'Собери тур на Алтай на 7 ночей в августе, двое взрослых, лёгкие прогулки и отель с панорамным видом',
-          'Хочу в Красную Поляну на 5 ночей в марте, спа, завтраки и трансфер к подъёмникам',
-          'Собери тур в Грузию на 7 ночей в октябре: Тбилиси, Гудаури и Казбеги, аутентичные отели и джип-трансфер 4x4',
-          'Хочу в Турцию в Каш на 8 ночей в сентябре, уединённые лазурные бухты и пляж Капуташ',
-          'Организуй путешествие в Таиланд: Бангкок и Самуи на 10 ночей с перелётом Bangkok Airways',
-          'Организуй спокойную поездку на Алтай с собакой на 6 ночей, без сложного трекинга',
-          'Планирую горный отдых в Сочи на 8 ночей в июне, хочу совместить прогулки и море',
-          'Нужен тур на Алтай для семьи с подростком на 10 ночей, природа, комфорт и понятная логистика',
-          'Собери короткую перезагрузку в Красной Поляне на 4 ночи, двое взрослых и бюджет до 100 000 ₽',
-          'Хочется на Алтай в сентябре на 9 ночей, камерный отель, тишина и несколько смотровых площадок',
-          'Подбери горный тур в Сочи на 6 ночей для друзей, активности днём и хорошие завтраки'
-        ]
-      },
-      city: {
-        destinations: ['в Санкт-Петербург', 'в Сочи'],
-        parties: ['на двоих взрослых', 'на одного путешественника', 'на семью с ребёнком 10 лет', 'на компанию из трёх друзей'],
-        wishes: ['нужны музеи и отель в историческом центре', 'хочется гастрономические места и прогулки без спешки', 'важны архитектура и удобная транспортная доступность', 'мечтаю о камерных улочках и красивых рассветах'],
-        budgets: [45000, 65000, 85000, 110000, 140000, 180000],
-        authored: [
-          'Собери тур в Санкт-Петербург на 4 ночи в мае, музеи, архитектура и отель рядом с Невским',
-          'Хочу городские выходные в Петербурге на 5 ночей, гастрономия и прогулки по набережным',
-          'Организуй поездку в Сочи на 6 ночей: город, набережная и пара экскурсий без ранних подъёмов',
-          'Планирую Петербург с ребёнком 10 лет на 7 ночей, интерактивные музеи и спокойный темп',
-          'Нужен атмосферный отель в центре Петербурга на 4 ночи для двоих, бюджет до 90 000 ₽ с перелётом',
-          'Собери культурный маршрут по Петербургу на 8 ночей в октябре, без тесного расписания',
-          'Хочется в Сочи на 5 ночей, совместить городские прогулки, море и винодельню',
-          'Подбери петербургский тур на двоих в декабре на 6 ночей, театр и завтраки в отеле'
-        ]
-      },
-      family: {
-        destinations: ['в Турцию', 'в ОАЭ', 'в Египет', 'в Таиланд', 'в Сочи'],
-        parties: ['на семью с ребёнком 5 лет', 'на семью с детьми 4 и 9 лет', 'на двоих взрослых и подростка', 'на большую семью с бабушкой и ребёнком'],
-        wishes: ['нужны аквапарк и детское питание', 'хочется спокойный пляж и номер с раздельными зонами', 'важны мини-клуб и короткий трансфер', 'нужны всё включено и развлечения для разного возраста'],
-        budgets: [120000, 150000, 180000, 220000, 270000, 330000],
-        authored: [
-          'Собери семейный тур в Турцию на 8 ночей с детьми 4 и 9 лет, аквапарк и всё включено',
-          'Хочу в Египет с ребёнком 5 лет на 7 ночей, пологий вход в море и короткий трансфер',
-          'Организуй отдых в ОАЭ для семьи с подростком на 6 ночей, пляж и развлечения рядом',
-          'Планирую поездку в Сочи с двумя детьми на 9 ночей, семейный номер и понятная программа',
-          'Нужен спокойный семейный отель в Таиланде на 11 ночей, хорошее питание и медицинская инфраструктура рядом',
-          'Собери тур в Турцию для большой семьи с бабушкой на 7 ночей, без длинных переездов',
-          'Хочется на море с ребёнком 6 лет в Египет на 10 ночей, мини-клуб и бюджет до 210 000 ₽',
-          'Подбери семейный отдых в ОАЭ на 5 ночей в апреле, детский бассейн и удобное заселение'
-        ]
-      }
+      sea: [
+        'Хочу поехать на море, порекомендуй интересные направления',
+        'Мечтаю о тёплом пляжном отдыхе без насыщенной программы. Куда лучше поехать?',
+        'Хочется к морю и солнцу, помоги выбрать подходящее место для отпуска'
+      ],
+      mountains: [
+        'Хочу в горы, чтобы отдохнуть на природе',
+        'Ищу спокойный горный отдых с красивыми видами и прогулками',
+        'Порекомендуй направление для перезагрузки в горах без сложного трекинга'
+      ],
+      city: [
+        'Ищу спокойный отдых на выходные в интересном городе',
+        'Хочу городское путешествие с архитектурой, музеями и вкусной едой',
+        'Порекомендуй город для неспешных прогулок и культурного отдыха'
+      ],
+      family: [
+        'Планирую отпуск с детьми, помоги выбрать комфортное направление',
+        'Хочу семейный отдых, где будет интересно и детям, и взрослым',
+        'Ищу спокойное место для поездки всей семьёй с удобным отелем'
+      ]
     };
 
-    const months = ['в январе', 'в феврале', 'в марте', 'в апреле', 'в мае', 'в июне', 'в июле', 'в августе', 'в сентябре', 'в октябре', 'в ноябре', 'в декабре'];
-
-    function nightsLabel(nights) {
-      const lastTwo = nights % 100;
-      const last = nights % 10;
-      if (lastTwo >= 11 && lastTwo <= 14) return 'ночей';
-      if (last === 1) return 'ночь';
-      if (last >= 2 && last <= 4) return 'ночи';
-      return 'ночей';
-    }
-
     function generateScenario(category) {
-      const config = scenarioConfig[category];
-      return freshPrompt(`card-${category}`, config.authored, () => {
-        if (Math.random() < 0.42) return pick(config.authored);
-        const nights = 4 + Math.floor(Math.random() * 11);
-        const opener = pick(['Хочу', 'Собери тур', 'Планирую поездку', 'Организуй отпуск']);
-        return `${opener} ${pick(config.destinations)} ${pick(months)} на ${nights} ${nightsLabel(nights)}, ${pick(config.parties)}. ${pick(config.wishes)}. Бюджет до ${money(pick(config.budgets))} на всех, с перелётом и трансфером.`;
-      });
+      return freshPrompt(`card-${category}`, scenarioConfig[category]);
     }
 
     const chip = (id, label, ...variants) => ({id, label, variants});
@@ -393,6 +330,7 @@
         if (!response.ok) throw new Error('Не удалось начать новую поездку. Попробуйте ещё раз.');
         const data = await response.json();
         lastTripData = {};
+        lastTotalCost = null;
         chatMessages.innerHTML = initialChatMarkup;
         workspace.innerHTML = initialWorkspaceMarkup;
         const reasoning = document.getElementById('diagnosticReasoning');
@@ -584,9 +522,13 @@
       if (booking) html += `<section class="booking-success"><div class="success-icon">${icon('check')}</div><div><span class="eyebrow">ПОЕЗДКА ПОДТВЕРЖДЕНА</span><h2>Можно собирать чемодан!</h2><p>Ваучер <b>${escapeHtml(booking.booking_id)}</b> · демо-оплата подтверждена</p></div><a class="primary-button" href="${escapeHtml(booking.voucher_url)}" target="_blank" rel="noopener noreferrer">Открыть ваучер ${icon('arrow')}</a></section>`;
       if (destination.name || cart.destination) html += `<section class="destination-summary">${destinationArt(destination.id || cart.destination_id)}<div class="destination-copy"><span class="eyebrow">ВАША ПОЕЗДКА</span><h2>${escapeHtml(destination.name || cart.destination)}</h2><p>${icon('calendar')}${escapeHtml(cart.dates || 'Даты уточняются')}</p>${cart.room_type ? `<span class="trip-detail">${icon('bed')}${escapeHtml(cart.room_type)}</span>` : ''}</div>${view.weather?.available ? `<div class="weather-pill">${escapeHtml(view.weather.summary)}</div>` : ''}</section>`;
       if (mandatory != null) {
+        const currentCost = Number(mandatory);
+        const costDelta = lastTotalCost !== null && Number.isFinite(currentCost) ? currentCost - lastTotalCost : 0;
+        const costDeltaBadge = costDelta ? `<span class="cost-delta cost-delta--${costDelta < 0 ? 'down' : 'up'}">${costDelta < 0 ? '↓' : '↑'} ${costDelta > 0 ? '+' : '−'}${money(Math.abs(costDelta))} ${costDelta < 0 ? 'дешевле' : 'дороже'} прошлого варианта</span>` : '';
         const limit = view.trip_conditions?.budget_rub;
         const overBudget = limit != null && range?.max > limit;
-        html += `<section class="package-banner"><div><span class="guru-white">✦ ГУРУ AI</span><h3>Вся поездка — в одном понятном плане</h3><p>Перелёт, проживание и трансфер уже состыкованы. Никаких отдельных корзин.</p></div><div class="package-price"><small>Обязательные расходы</small><strong>${money(mandatory)}</strong>${range ? `<span>Полный бюджет: ${money(range.min)}–${money(range.max)}</span>` : ''}</div>${overBudget ? renderWarning(`Бюджет превышен на ${money(range.max - limit)}`, `Верхняя оценка поездки — ${money(range.max)} при лимите ${money(limit)}. Можно сократить поездку или изменить условия в чате.`) : ''}</section>`;
+        html += `<section class="package-banner"><div><span class="guru-white">✦ ГУРУ AI</span><h3>Вся поездка — в одном понятном плане</h3><p>Перелёт, проживание и трансфер уже состыкованы. Никаких отдельных корзин.</p></div><div class="package-price"><small>Обязательные расходы</small><strong>${money(mandatory)}</strong>${costDeltaBadge}${range ? `<span>Полный бюджет: ${money(range.min)}–${money(range.max)}</span>` : ''}</div>${overBudget ? renderWarning(`Бюджет превышен на ${money(range.max - limit)}`, `Верхняя оценка поездки — ${money(range.max)} при лимите ${money(limit)}. Можно сократить поездку или изменить условия в чате.`) : ''}</section>`;
+        if (Number.isFinite(currentCost)) lastTotalCost = currentCost;
       }
       if (hotels.length) html += `<div class="results-heading"><div><span class="eyebrow">ПОДОБРАНО ДЛЯ ВАС</span><h2>${hotels.length > 1 ? 'Отели на выбор' : 'Рекомендуемый отель'}</h2></div><span>${hotels.length} ${hotels.length === 1 ? 'вариант' : 'варианта'}</span></div><div class="hotel-list">${hotels.map(renderHotel).join('')}</div>`;
       html += renderLogistics(logistics);

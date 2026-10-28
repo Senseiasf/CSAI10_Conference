@@ -165,8 +165,8 @@ class LTRService:
         path = cls.get_model_path()
         model = cls.load_model()
         return {
-            "available": model is not None and not cls._inference_failed,
-            "engine": NATIVE_ENGINE if model is not None and not cls._inference_failed else FALLBACK_ENGINE,
+            "available": HAS_CATBOOST and model is not None and not cls._inference_failed,
+            "engine": NATIVE_ENGINE if HAS_CATBOOST and model is not None and not cls._inference_failed else FALLBACK_ENGINE,
             "model_present": path.is_file(),
             "catboost_installed": HAS_CATBOOST,
             "model_loaded": model is not None,
