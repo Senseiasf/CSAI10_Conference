@@ -48,6 +48,39 @@ class BudgetParsingTest(unittest.TestCase):
             self.assertIsNone(update_trip_budget(message, profile, {}))
             self.assertEqual(profile["budget_rub"], 100000)
 
+    def test_saved_budget_references_reuse_limit_and_clear_stale_question(self):
+        for message in ("Предложи другой вариант проживания под мой бюджет", "Другой отель в рамках бюджета",
+                        "Подбери в пределах моего бюджета", "Бюджет тот же", "Сохрани мой бюджет",
+                        "Не меняй бюджет", "Мой бюджет не меняй", "Оставь прежний лимит", "С учётом нашего бюджета"):
+            with self.subTest(message=message):
+                profile = {"budget_rub": 180000, "awaiting_budget": True}
+                self.assertIsNone(update_trip_budget(message, profile, {}))
+                self.assertEqual(profile["budget_rub"], 180000)
+                self.assertNotIn("awaiting_budget", profile)
+
+    def test_saved_budget_reference_can_recover_limit_from_cart(self):
+        profile = {}
+        self.assertIsNone(update_trip_budget("Под мой бюджет", profile, {"budget_rub": 180000}))
+        self.assertEqual(profile["budget_rub"], 180000)
+        profile["budget_rub"] = 100000
+        self.assertIsNone(update_trip_budget("Под мой бюджет", profile, {"budget_rub": 180000}))
+        self.assertEqual(profile["budget_rub"], 100000)
+
+    def test_budget_reference_without_saved_limit_still_needs_amount(self):
+        profile = {}
+        self.assertIsNotNone(update_trip_budget("Предложи другой вариант проживания под мой бюджет", profile,
+                                               {"total_trip_budget_range_rub": {"max": 150000}}))
+        self.assertNotIn("budget_rub", profile)
+
+    def test_explicit_new_amount_takes_precedence_over_budget_reference(self):
+        profile = {"budget_rub": 180000}
+        self.assertIsNone(update_trip_budget("Под мой бюджет 200 тысяч", profile, {}))
+        self.assertEqual(profile["budget_rub"], 200000)
+        for message in ("Под мой бюджет двести тысяч", "Измени мой бюджет"):
+            with self.subTest(message=message):
+                self.assertIsNotNone(update_trip_budget(message, profile, {}))
+                self.assertEqual(profile["budget_rub"], 200000)
+
 
 def hotel(identifier, price):
     return {"id": identifier, "name": identifier, "price_per_night_rub": price,

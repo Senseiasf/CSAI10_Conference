@@ -9,6 +9,24 @@ MONEY = AMOUNT + UNIT + r"\s*(?:₽|руб\w*)?"
 CHEAPER = r"(?:дешевле|подешевле|бюджетнее|экономнее|сниз\w*\s+(?:цену|бюджет)|уменьш\w*\s+(?:цену|бюджет))"
 
 
+def references_saved_budget(text: str) -> bool:
+    qualifier = r"(?:(?:мо\w*|наш\w*|этот|тот\s+же|прежн\w*|текущ\w*|сохраненн\w*|указанн\w*|исходн\w*|заданн\w*)\s+)?"
+    noun = r"(?:бюджет|лимит)\w*\b"
+    reference = re.search(
+        r"\b(?:под|в\s+рамках|в\s+пределах|с\s+учетом|с)\s+" + qualifier + noun + "|"
+        r"\b(?:сохрани|оставь|не\s+(?:меняй|увеличивай|повышай))\s+" + qualifier + noun + "|"
+        r"\b(?:бюджет|лимит)\s+(?:тот\s+же|прежний|как\s+раньше|без\s+изменений|не\s+(?:меняй|увеличивай|повышай))\b", text,
+    )
+    # An explicit replacement must still be parsed or clarified, even when the
+    # message also refers to the old ceiling (e.g. 'под мой бюджет двести тысяч').
+    new_value = re.search(
+        noun + r"\s*[-:—]?\s*(?:(?:до|на|не\s+более)\s+)?"
+        r"(?:\d|ноль\b|один\b|дв[ае]\w*|три\w*|четыр\w*|пят\w*|шест\w*|сем\w*|восем\w*|девят\w*|десят\w*|сто\b|двест\w*|тысяч\w*|миллион\w*)", text,
+    )
+    change = re.search(r"\b(?:измени|поменяй|увеличь|подними|повысь|уменьши|снизь|сократи)\s+" + qualifier + noun, text)
+    return bool(reference and not (new_value or change))
+
+
 def validate_package_totals(breakdown: dict) -> None:
     """Reject inconsistent package arithmetic before it can be recommended."""
     mandatory = breakdown["mandatory"]
@@ -39,7 +57,7 @@ def validate_package_totals(breakdown: dict) -> None:
 
 def update_trip_budget(message: str, profile: dict, cart: dict) -> str | None:
     """Store a total ceiling; return a question when the requested scope is unclear."""
-    text = message.lower()
+    text = message.lower().replace("ё", "е")
     reduction = re.search(CHEAPER + r"\s+на\s+" + MONEY, text)
     absolute = re.search(r"\b(?:бюджет(?:ом)?(?:\s+(?:до|не более))?|лимит|не больше|не более|не дороже|улож\w*\s+в|до)(?:\s*[-:—]\s+|\s*)" + MONEY, text)
     match = reduction or absolute
@@ -48,6 +66,14 @@ def update_trip_budget(message: str, profile: dict, cart: dict) -> str | None:
     if not match:
         if re.search(CHEAPER + r"\s+на\b", text):
             return "На сколько рублей снизить полную стоимость поездки? Укажите сумму числом."
+        if references_saved_budget(text):
+            saved_limit = profile.get("budget_rub")
+            if saved_limit is None:
+                saved_limit = cart.get("budget_rub")
+            if type(saved_limit) is int and saved_limit > 0:
+                profile["budget_rub"] = saved_limit
+                profile.pop("awaiting_budget", None)
+                return None
         if re.search(r"\b(?:бюджет|лимит)(?:ом|а|у|е)?\b", text):
             profile["awaiting_budget"] = True
             return "Укажите общий бюджет всей поездки числом в рублях, например: «бюджет до 100 тысяч»."

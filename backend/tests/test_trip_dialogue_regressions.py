@@ -56,7 +56,7 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
                  "meals": "Завтрак", "distance_to_sea": "нет данных", "cancellation": "Бесплатно"}
         async def compare(destination_id, **kwargs):
             candidates = (destination_hotels or {}).get(destination_id, [hotel])
-            return {"compared_hotels": copy.deepcopy(candidates)}
+            return {"compared_hotels": copy.deepcopy([hotel for hotel in candidates if hotel["id"] not in kwargs.get("exclude_hotel_ids", [])])}
         self.compare = stack.enter_context(patch.object(MCPTools, "compare_hotels", new=AsyncMock(side_effect=compare)))
         logistics = {"compatible": True, "airport": "LED", "flight": {"price_rub_roundtrip": flight_price,
                      "origin_code": "SVO", "origin_name": "Москва", "airline": "Test Air", "flight_no": "T1"},
@@ -461,6 +461,42 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cheaper["cart"]["nights"], 8)
         self.assertEqual(cheaper["trip_conditions"]["adults_count"], 3)
         self.assertEqual(cheaper["trip_conditions"]["rooms_count"], 2)
+
+    async def test_other_accommodation_under_my_budget_reuses_limit_and_changes_hotel(self):
+        user = make_user(nights=5, budget_rub=180000, prefer_direct_flight=True, without_transfer=True,
+                         private_room_required=True)
+        with self.fixture(user, destination_hotels={"spb": self.named_hotels()}):
+            await AgentService.process_message("web:budget-reference", "Пересчитай на 5 ночей")
+            selected = await AgentService.process_message("web:budget-reference", "Выбери Medovaya Hotel")
+            before = copy.deepcopy(selected["cart"])
+            user.profile["awaiting_budget"] = True
+            self.dispatch.reset_mock()
+            result = await AgentService.process_message("web:budget-reference", "Предложи другой вариант проживания под мой бюджет")
+            self.dispatch.assert_not_awaited()
+            self.assertIn("medovaya", self.compare.call_args.kwargs["exclude_hotel_ids"])
+        self.assertNotEqual(result.get("state"), "NEEDS_BUDGET")
+        self.assertNotEqual(result["cart"]["hotel_id"], before["hotel_id"])
+        self.assertEqual(result["cart"]["budget_rub"], 180000)
+        self.assertEqual(result["trip_conditions"]["budget_rub"], 180000)
+        self.assertLessEqual(result["cart"]["total_trip_budget_range_rub"]["max"], 180000)
+        for key in ("nights", "dates", "checkin_date", "checkout_date", "travelers_count", "rooms_count"):
+            self.assertEqual(result["cart"][key], before[key], key)
+        self.assertTrue(user.profile["prefer_direct_flight"])
+        self.assertTrue(user.profile["without_transfer"])
+        self.assertTrue(user.profile["private_room_required"])
+        self.assertEqual(result["budget_breakdown"]["mandatory"]["transfer"], 0)
+        self.assertNotIn("awaiting_budget", user.profile)
+
+    async def test_other_accommodation_does_not_offer_over_budget_hotel(self):
+        user = make_user(nights=5, budget_rub=180000)
+        hotels = self.named_hotels()[:1] + [{**self.named_hotels()[1], "price_per_night_rub": 30000}]
+        with self.fixture(user, destination_hotels={"spb": hotels}):
+            await AgentService.process_message("web:budget-reference", "Пересчитай на 5 ночей")
+            result = await AgentService.process_message("web:budget-reference", "Предложи другой вариант проживания под мой бюджет")
+        self.assertEqual(result["state"], "BUDGET_EXCEEDED")
+        self.assertNotIn("hotel_id", result["cart"])
+        self.assertEqual(result["trip_conditions"]["budget_rub"], 180000)
+        self.assertEqual(user.profile["budget_rub"], 180000)
 
     async def test_missing_named_hotel_does_not_silently_select_something_else(self):
         user = make_user(budget_rub=1000000)
