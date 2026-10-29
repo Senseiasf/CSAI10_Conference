@@ -23,8 +23,8 @@
 Развёртывание полностью автоматизировано и укладывается в несколько минут без ручных доустановок:
 
 ```bash
-git clone https://github.com/ostrovok-hackathon-2026/topit-elening-lms-abce.git
-cd topit-elening-lms-abce
+git clone https://git.metagraph.science:22022/Senseiasf/Metagraph_DBMS.git
+cd Metagraph_DBMS
 cp .env.example .env
 docker compose up --build
 ```
