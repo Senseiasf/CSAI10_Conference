@@ -498,6 +498,61 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["trip_conditions"]["budget_rub"], 180000)
         self.assertEqual(user.profile["budget_rub"], 180000)
 
+    async def test_layover_concern_preserves_quote_without_model_or_replanning(self):
+        user = make_user(budget_rub=180000, nights=5)
+        risk = "Критический риск: самостоятельная пересадка 75 минут, требуется повторная регистрация багажа."
+        with self.fixture(user):
+            await AgentService.process_message("web:layover", "Пересчитай на 5 ночей")
+            user.current_cart["logistics"]["flight"].update(flight_type="connecting", layover_airport="MRV",
+                layover_city="Минеральные Воды", layover_duration_minutes=75, layover_risk_note=risk)
+            user.current_cart["logistics"]["timeline"]["layover_details"] = {
+                "is_connecting": True, "city": "Минеральные Воды", "airport": "MRV", "duration_minutes": 75,
+                "risk_evaluation": risk, "safety_guarantee": "Багаж сквозной, авиакомпания бесплатно пересадит."}
+            user.current_cart["reasoning_steps"] = [{"stage": "logistics", "detail": "Рейс с безопасным транзитным буфером."}]
+            before = copy.deepcopy(user.current_cart)
+            profile = copy.deepcopy(user.profile)
+            for mock in (self.dispatch, self.search, self.compare, self.logistics):
+                mock.reset_mock()
+            self.dispatch.return_value = {"action": "plan", "ai_reply_intro": "Пересчитал поездку"}
+            for question in ("А там же очень мало времени на пересадку", "Почему такая короткая пересадка?",
+                             "А хватит ли времени на пересадку с багажом?", "Сколько времени на пересадке?",
+                             "Как устроена эта пересадка", "Хочу узнать, достаточно ли времени на пересадку"):
+                with self.subTest(question=question):
+                    result = await AgentService.process_message("web:layover", question)
+                    self.assertEqual(result["state"], "CURRENT_LOGISTICS")
+                    self.assertEqual(result["cart"], before)
+                    self.assertEqual(user.profile, profile)
+                    self.assertIn(risk, result["text"])
+                    self.assertIn("75", result["text"])
+                    self.assertNotIn("бесплатно пересадит", result["text"])
+                    self.assertIn(risk, result["reasoning_steps"][0]["detail"])
+                    self.assertNotIn("безопасным транзитным буфером", result["reasoning_steps"][0]["detail"])
+                    for mock in (self.dispatch, self.search, self.compare, self.logistics):
+                        mock.assert_not_awaited()
+
+    async def test_explicit_direct_flight_request_still_replans(self):
+        user = make_user(budget_rub=180000, nights=5)
+        with self.fixture(user):
+            await AgentService.process_message("web:layover", "Пересчитай на 5 ночей")
+            self.logistics.reset_mock()
+            result = await AgentService.process_message("web:layover", "Только прямой рейс, без пересадок")
+            self.logistics.assert_awaited()
+            self.assertTrue(self.logistics.call_args.kwargs["prefer_direct_flight"])
+        self.assertNotEqual(result.get("state"), "CURRENT_LOGISTICS")
+
+    async def test_connection_diagnostics_repeat_catalogue_risk_instead_of_safety_claim(self):
+        user = make_user(budget_rub=180000, nights=5)
+        risk = "Критический риск: отдельные билеты, короткая пересадка."
+        with self.fixture(user):
+            self.logistics.return_value["flight"].update(flight_type="connecting", layover_duration_minutes=75,
+                                                        layover_airport="MRV", layover_risk_note=risk)
+            self.logistics.return_value["timeline"]["layover_details"] = {
+                "is_connecting": True, "airport": "MRV", "duration_minutes": 75, "risk_evaluation": risk}
+            result = await AgentService.process_message("web:layover", "Пересчитай на 5 ночей")
+        detail = next(step["detail"] for step in result["reasoning_steps"] if step["stage"] == "logistics")
+        self.assertIn(risk, detail)
+        self.assertNotIn("безопасный транзитный буфер", detail)
+
     async def test_missing_named_hotel_does_not_silently_select_something_else(self):
         user = make_user(budget_rub=1000000)
         with self.fixture(user, destination_hotels={"spb": self.named_hotels()}):

@@ -48,13 +48,14 @@ class TripConditionsTest(unittest.IsolatedAsyncioTestCase):
 
 
 class CheckinWaitTest(unittest.IsolatedAsyncioTestCase):
-    async def logistics(self, arrival, transfer_minutes):
+    async def logistics(self, arrival, transfer_minutes, flight_fields=None):
         row = {"airline": "Test Air", "flight_no": "TA-1", "origin_name": "Москва",
                "departure_time": "01:00", "flight_arrival_time": arrival,
                "flight_duration": 180, "flight_price_roundtrip": 20000,
                "dest_code": "AER", "dest_airport_name": "Сочи", "hotel_name": "Hotel",
                "checkin_time": "15:00", "transfer_name": "Taxi", "transfer_type": "taxi",
                "transfer_duration": transfer_minutes, "transfer_price": 1500}
+        row.update(flight_fields or {})
         records = AsyncMock()
         records.data.return_value = [row]
         db = AsyncMock()
@@ -70,6 +71,15 @@ class CheckinWaitTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result["compatible"])
         self.assertEqual(result["timeline"]["hotel_arrival"], "06:00")
         self.assertEqual(result["timeline"]["checkin_wait_minutes"], 540)
+
+    async def test_connection_does_not_invent_ticket_or_baggage_guarantees(self):
+        note = "Отдельные билеты; получить багаж и заново зарегистрироваться."
+        result = await self.logistics("17:20", 30, {"flight_type": "connecting", "layover_airport": "MRV",
+            "layover_city": "Минеральные Воды", "layover_duration_minutes": 75, "layover_risk_note": note})
+        connection = result["timeline"]["layover_details"]
+        self.assertEqual(connection["risk_evaluation"], note)
+        self.assertEqual(connection["duration_minutes"], 75)
+        self.assertNotIn("safety_guarantee", connection)
 
     async def test_arrival_at_or_after_checkin_has_no_wait(self):
         for arrival in ("14:00", "17:00"):

@@ -13,6 +13,7 @@ from app.services.vector_service import generate_text_embedding
 from app.mcp.tools import MCPTools
 from app.services.trip_dates import update_trip_dates
 from app.services.trip_budget import update_trip_budget, validate_package_totals
+from app.services.trip_logistics import is_logistics_question, describe_saved_logistics, connection_summary
 from app.services.trip_state import (
     current_trip_question, describe_budget_estimate, describe_current_trip,
     estimate_request, is_trip_edit, requested_destination,
@@ -1993,6 +1994,16 @@ class AgentService:
         # Model hints belong to one turn, never to the saved trip state.
         for transient in ("llm_destination_id", "llm_replan_action", "llm_ai_intro"):
             profile.pop(transient, None)
+        if is_logistics_question(message):
+            reply = describe_saved_logistics(cart)
+            reasoning = deepcopy(cart.get("reasoning_steps", []))
+            connection_step = next((step for step in reasoning if step.get("stage") == "logistics"), None)
+            if connection_step is None:
+                connection_step = {"stage": "logistics", "title": "Данные сохранённого рейса"}
+                reasoning.append(connection_step)
+            connection_step["detail"] = connection_summary(cart.get("logistics", {}))
+            await AgentService._save_session(user_id, profile, cart, message, reply)
+            return {"text": reply, "state": "CURRENT_LOGISTICS", "cart": cart, "reasoning_steps": reasoning}
         if current_trip_question(message):
             reply = describe_current_trip(profile, cart)
             await AgentService._save_session(user_id, profile, cart, message, reply)
@@ -2909,7 +2920,7 @@ class AgentService:
             {"stage": "nlu", "title": "Анализ запроса и профиля", "detail": f"Направление «{top_dest.get('name')}», {nights} н., {profile.get('adults_count', 2)} взр., {rooms_cnt} ном. ({profile.get('room_type', '1 номер')})."},
             {"stage": "filtering", "title": "Фильтрация каталога", "detail": f"Оценено {len(evaluated)} пакетов с учётом ограничений (дети={profile.get('has_kids')}, питомцы={profile.get('has_pets')})."},
             {"stage": "ltr_ranking", "title": "ML-ранжирование (CatBoost LTR)", "detail": f"Движок {ltr_meta['engine']}: оценено {ltr_meta['candidates_count']} пакетов за {ltr_meta['latency_ms']} мс; выбрано {ltr_meta['top_k']}. Архетип: {ltr_meta['archetype']}; приоритет: {policy}."},
-            {"stage": "logistics", "title": "Графовая логистика Neo4j", "detail": f"Рейс {flight_info.get('airline', '')} {flight_info.get('flight_no', '')}, трансфер {tr_info.get('name', 'стандарт')}, безопасный транзитный буфер."},
+            {"stage": "logistics", "title": "Графовая логистика Neo4j", "detail": f"Рейс {flight_info.get('airline', '')} {flight_info.get('flight_no', '')}. {connection_summary(logistics_info)} Трансфер: {tr_info.get('name', 'стандарт')}."},
             {"stage": "compliance", "title": "Паспортный и визовый комплаенс", "detail": f"{compliance_info.get('passport_required')} ({compliance_info.get('passport_validity')}), {compliance_info.get('visa_policy')}."},
             {"stage": "budget", "title": "Двухкомпонентный расчёт", "detail": f"Обязательные расходы: {budget_breakdown['mandatory']['total_mandatory_rub']:,} ₽ (номеров: {rooms_cnt}), на месте: {budget_breakdown['onsite_flexible']['total_onsite_range_rub']['min']:,}–{budget_breakdown['onsite_flexible']['total_onsite_range_rub']['max']:,} ₽."}
         ]

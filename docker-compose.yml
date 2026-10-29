@@ -48,6 +48,7 @@ services:
     environment:
       APP_PORT: 8080
       APP_HOST: 0.0.0.0
+      WATCHFILES_FORCE_POLLING: "true"
       POSTGRES_HOST: db
       NEO4J_URI: bolt://neo4j:7687
     volumes:

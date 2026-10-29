@@ -582,10 +582,6 @@ class GraphService:
                         "duration_minutes": layover_dur,
                         "duration_formatted": dur_str,
                         "risk_evaluation": flight_info.get("layover_risk_note", ""),
-                        "safety_guarantee": (
-                            "Оформлен единый сквозной билет: багаж регистрируется сразу до конечной точки. "
-                            "При опоздании первого рейса авиакомпания бесплатно пересаживает на следующий рейс и предоставляет питание."
-                        )
                     }
                 else:
                     layover_details = {
@@ -594,8 +590,7 @@ class GraphService:
                         "city": None,
                         "duration_minutes": 0,
                         "duration_formatted": None,
-                        "risk_evaluation": "Прямой беспосадочный рейс — риск потери стыковки или багажа при транзитной перегрузке исключён.",
-                        "safety_guarantee": "Прямой маршрут без промежуточных пунктов."
+                        "risk_evaluation": "Прямой рейс; пересадка не предусмотрена.",
                     }
 
                 if hotel_arrival_dt < checkin_dt:

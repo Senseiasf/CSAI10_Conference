@@ -12,7 +12,7 @@ function createRenderer() {
   const context = vm.createContext({
     lastTripData: {}, lastTotalCost: null, workspace: {innerHTML: ''}, initialWorkspaceMarkup: '',
     escapeHtml: String, money: value => `${value} ₽`, icon: () => '', destinationArt: () => '',
-    renderConditions: () => '', renderWarning: title => title, durationLabel: String,
+    renderConditions: () => '', renderWarning: (title, detail) => [title, detail].filter(Boolean).join(': '), durationLabel: String,
     renderHotel: hotel => `hotel-card:${hotel.name}`, formatMarkdown: String,
     renderTripExtras: () => '', renderDiagnosticReasoning: () => {}, showRefinementChips: () => {},
   });
@@ -61,4 +61,16 @@ test('corrected saved route title replaces the cached catalogue region after a p
   assert.match(context.workspace.innerHTML, /<h2>Сочи<\/h2>/);
   assert.doesNotMatch(context.workspace.innerHTML, /Сочи и Красная Поляна/);
   assert.match(context.workspace.innerHTML, /hotel-card:Medovaya Hotel/);
+});
+
+test('critical connection warning is visible without a checked or guaranteed package claim', () => {
+  const context = createRenderer();
+  context.renderTrip({cart: {destination: 'Грузия', total_mandatory_rub: 100000},
+    logistics: {compatible: true, flight: {flight_type: 'connecting'}, timeline: {layover_details: {
+      is_connecting: true, city: 'Минеральные Воды', duration_minutes: 75,
+      risk_evaluation: 'КРИТИЧЕСКИЙ РИСК: самостоятельная пересадка и повторная сдача багажа',
+    }}}});
+  assert.match(context.workspace.innerHTML, /КРИТИЧЕСКИЙ РИСК/);
+  assert.match(context.workspace.innerHTML, /Есть нюансы/);
+  assert.doesNotMatch(context.workspace.innerHTML, /safe-badge|>Проверено|уже состыкованы/);
 });
