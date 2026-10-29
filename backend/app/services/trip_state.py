@@ -145,6 +145,17 @@ def current_trip_question(message: str) -> bool:
     )) and not is_trip_edit(message)
 
 
+def single_destination_name(destination_id: str, region_name: str, hotel_city: str | None) -> str:
+    """Name the selected stay rather than every city covered by its catalogue region."""
+    if destination_id == "sochi":
+        if hotel_city and re.search(r"красн\w*\s+полян|эсто[ -]садок|роза\s+хутор", hotel_city, re.IGNORECASE):
+            return hotel_city
+        return "Сочи"
+    if hotel_city and "(" in region_name and " и " in region_name:
+        return f"{region_name.split('(')[0].strip()} ({hotel_city})"
+    return region_name
+
+
 def describe_current_trip(profile: dict, cart: dict) -> str:
     destination = cart.get("destination")
     if not destination:

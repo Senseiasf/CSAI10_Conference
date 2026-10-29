@@ -328,6 +328,87 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
                                                ("burgas", "Pansionat Burgas", 3510),
                                                ("medovaya", "Medovaya Hotel", 3860))]
 
+    async def test_single_sochi_trip_uses_actual_destination_in_every_surface(self):
+        rows = [{"id": "sochi", "name": "Сочи и Красная Поляна", "score": 1.0}]
+        for city in ("Сочи", "Адлер", "Сириус", "Сочи (Центр)"):
+            with self.subTest(city=city):
+                user = make_user(budget_rub=1000000)
+                hotel = {**self.named_hotels()[0], "city": city}
+                with self.fixture(user, destination_rows=rows, destination_hotels={"sochi": [hotel]}):
+                    result = await AgentService.process_message("web:route-name", "Хочу в Сочи на 5 ночей")
+                self.assertEqual(result["destination"]["name"], "Сочи")
+                self.assertEqual(result["cart"]["destination"], "Сочи")
+                self.assertEqual(result["cart"]["hotel_city"], city)
+                self.assertEqual(result["cart"]["budget_quote"]["destination"], "Сочи")
+                self.assertNotIn("Сочи и Красная Поляна", result["text"])
+                self.assertIn("🌴 **Сочи**", result["text"])
+                self.assertEqual(user.current_cart["destination"], "Сочи")
+        self.assertEqual(rows[0]["name"], "Сочи и Красная Поляна")
+
+    async def test_single_mountain_hotel_does_not_become_a_coastal_or_combined_trip(self):
+        user = make_user(budget_rub=1000000)
+        rows = [{"id": "sochi", "name": "Сочи и Красная Поляна", "score": 1.0}]
+        hotel = {**self.named_hotels()[0], "city": "Красная Поляна"}
+        with self.fixture(user, destination_rows=rows, destination_hotels={"sochi": [hotel]}):
+            result = await AgentService.process_message("web:route-name", "Хочу в Красную Поляну на 5 ночей")
+        self.assertEqual(result["destination"]["name"], "Красная Поляна")
+        self.assertEqual(result["cart"]["destination"], "Красная Поляна")
+        self.assertIn("🌴 **Красная Поляна**", result["text"])
+
+    async def test_old_sochi_cart_is_corrected_before_price_question_without_replanning(self):
+        user = make_user(budget_rub=1000000)
+        rows = [{"id": "sochi", "name": "Сочи и Красная Поляна", "score": 1.0}]
+        with self.fixture(user, destination_rows=rows, destination_hotels={"sochi": self.named_hotels()}):
+            await AgentService.process_message("web:route-name", "Хочу в Сочи на 5 ночей")
+            user.current_cart["destination"] = "Сочи и Красная Поляна"
+            user.current_cart["budget_quote"]["destination"] = "Сочи и Красная Поляна"
+            user.current_cart.pop("hotel_city", None)
+            before_total = user.current_cart["total_mandatory_rub"]
+            self.search.reset_mock()
+            self.compare.reset_mock()
+            db = AsyncMock()
+            db.__aenter__.return_value = db
+            db.get.return_value = SimpleNamespace(city="Сириус")
+            with patch("app.services.agent_service.async_session_maker", return_value=db):
+                result = await AgentService.process_message("web:route-name", "А по нижней оценке?")
+                db.get.assert_awaited_once()
+            self.search.assert_not_awaited()
+            self.compare.assert_not_awaited()
+            self.dispatch.assert_not_awaited()
+        self.assertEqual(result["cart"]["destination"], "Сочи")
+        self.assertNotIn("Красная Поляна", result["text"])
+        self.assertEqual(result["cart"]["budget_quote"]["destination"], "Сочи")
+        self.assertEqual(result["cart"]["total_mandatory_rub"], before_total)
+
+    async def test_pet_filters_and_surcharge_work_without_audit_boilerplate(self):
+        user = make_user(budget_rub=1000000)
+        hotel = {**self.named_hotels()[0], "pet_friendly": True, "pet_surcharge_per_night_rub": 1500}
+        with self.fixture(user, destination_hotels={"spb": [hotel]}):
+            with_pet = await AgentService.process_message("web:audit", "На 5 ночей, с собакой")
+            self.assertTrue(self.compare.call_args.kwargs["pet_friendly"])
+            self.assertGreater(with_pet["budget_breakdown"]["mandatory"]["pet_total"], 0)
+            without_pet = await AgentService.process_message("web:audit", "Без питомцев")
+            self.assertFalse(self.compare.call_args.kwargs["pet_friendly"])
+        self.assertFalse(without_pet["trip_conditions"]["has_pets"])
+        self.assertEqual(without_pet["budget_breakdown"]["mandatory"]["pet_total"], 0)
+        for result in (with_pet, without_pet):
+            for unwanted in ("Аудит агента", "Smart Filter", "Pet-контроль", "подтверждено безопасное размещение"):
+                self.assertNotIn(unwanted, result["text"])
+
+    async def test_model_intro_cannot_restore_combined_title_or_audit(self):
+        rows = [{"id": "sochi", "name": "Сочи и Красная Поляна", "score": 1.0}]
+        for intro in ("Подобрал тур в Сочи и Красную Поляну", "Аудит агента: подтверждено безопасное размещение"):
+            with self.subTest(intro=intro):
+                user = make_user(budget_rub=1000000)
+                user.current_cart = {"destination_id": "sochi", "destination": "Сочи"}
+                with self.fixture(user, destination_rows=rows, destination_hotels={"sochi": self.named_hotels()}):
+                    self.dispatch.return_value = {"action": "plan", "destination_id": "sochi", "ai_reply_intro": intro}
+                    result = await AgentService.process_message("web:route-name", "Покажи подходящий вариант")
+                    self.dispatch.assert_awaited_once()
+                self.assertNotIn(intro, result["text"])
+                self.assertNotIn("Аудит агента", result["text"])
+                self.assertIn("🌴 **Сочи**", result["text"])
+
     async def test_screenshot_flights_show_per_person_times_three_without_double_multiplication(self):
         user = make_user(nights=5, checkin_date="2026-11-12", checkout_date="2026-11-17", budget_rub=180000)
         with self.fixture(user, hotel_rate=3500, flight_price=13800):

@@ -506,7 +506,7 @@
       const view = lastTripData;
       const hotels = view.compared_hotels || [];
       const cart = view.cart || {};
-      const destination = view.destination || {};
+      const destination = {...(view.destination || {}), name: cart.destination || view.destination?.name};
       const booking = view.booking;
       if (!hotels.length && !destination.name && !booking && !cart.selection_status) {
         if (data.cart && !cart.destination) workspace.innerHTML = initialWorkspaceMarkup;

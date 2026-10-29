@@ -19,6 +19,7 @@ from app.services.trip_state import (
     hotel_selection, matching_hotels, rejected_destinations, wants_cheaper,
     destination_choice,
     transfer_preference,
+    single_destination_name,
 )
 from app.services.booking_stub import detect_booking_action, booking_stub
 from app.services.preference_memory import remembered_preferences
@@ -679,7 +680,7 @@ class AgentService:
         return any(c1 in m and c2 in m for c1, c2 in city_pairs)
 
     @staticmethod
-    def sanitize_ai_intro(intro: Optional[str], dest_id: str, default_intro: str) -> str:
+    def sanitize_ai_intro(intro: Optional[str], dest_id: str, default_intro: str, route_name: Optional[str] = None) -> str:
         """
         Проверяет, не противоречит ли реплика ИИ выбранному региону тура
         (например, когда модель упоминает Турцию при туре в Сочи).
@@ -688,6 +689,10 @@ class AgentService:
         if not intro:
             return default_intro
         intro_lower = intro.lower()
+        if re.search(r"аудит\s+агента|smart\s+filter|pet[ -]контроль", intro_lower):
+            return default_intro
+        if dest_id == "sochi" and route_name == "Сочи" and re.search(r"красн\w*\s+полян|эсто[ -]садок|роза\s+хутор", intro_lower):
+            return default_intro
         forbidden_map = {
             "sochi": ["турци", "стамбул", "анталь", "оаэ", "дуба", "египет", "мальдив", "тайланд", "таиланд", "пхукет", "питер", "петербург", "алтай", "грузи", "тбилис", "гудаур", "казбег", "самуи", "бангкок", "каш", "алань"],
             "turkey": ["сочи", "сириус", "полян", "адлер", "оаэ", "дуба", "египет", "мальдив", "тайланд", "таиланд", "пхукет", "питер", "петербург", "алтай", "грузи", "тбилис", "гудаур", "казбег", "самуи", "бангкок"],
@@ -1377,11 +1382,6 @@ class AgentService:
                 f"Рекомендуем увеличить бюджет или сократить количество дней.\n"
             )
 
-        response_lines.append("🛡️ **Аудит агента (Smart Filter & Safety Check):**")
-        response_lines.append(f"• ✅ **Сквозная состыковка:** График переезда между {cfg['city_1']['name']} и {cfg['city_2']['name']} согласован со временем заселения и выселения.")
-        response_lines.append("• ✅ **Безопасная логистика:** Отсеяны рискованные рейсы с ранним вылетом или короткими стыковками.")
-        response_lines.append("")
-
         # Паспортный и визовый комплаенс
         compliance_info = ComplianceService.get_compliance_info(dest_id, profile)
         response_lines.append(compliance_info["summary"])
@@ -1945,8 +1945,20 @@ class AgentService:
         """Обрабатывает запрос и возвращает учтённые условия текущей поездки."""
         session_obj = await AgentService.get_or_create_session(user_id)
         profile = session_obj.profile or {}
+        cart = deepcopy(session_obj.current_cart or {})
+        if (cart.get("destination_id") == "sochi" and cart.get("hotel_id")
+                and cart.get("destination") == "Сочи и Красная Поляна" and not cart.get("is_multi_city")):
+            # Existing JSONB carts may still contain the combined catalogue title.
+            # Read the selected hotel's city once, without reselecting or repricing it.
+            if not cart.get("hotel_city"):
+                async with async_session_maker() as session:
+                    hotel = await session.get(HotelModel, cart["hotel_id"])
+                    cart["hotel_city"] = hotel.city if hotel else None
+            cart["destination"] = single_destination_name("sochi", cart.get("destination", "Сочи"), cart.get("hotel_city"))
+            if cart.get("budget_quote"):
+                cart["budget_quote"]["destination"] = cart["destination"]
         result = await AgentService._process_message(
-            user_id, message, profile, session_obj.current_cart or {}, session_obj, progress_callback
+            user_id, message, profile, cart, session_obj, progress_callback
         )
         if not result.get("booking_action"):
             # Только условия поиска: служебные поля и история профиля в UI не нужны.
@@ -2540,6 +2552,7 @@ class AgentService:
                 lowest_option = min(evaluated, key=lambda x: x[2]["total_trip_budget_range_rub"][estimate_key])
                 lowest = lowest_option[2]["total_trip_budget_range_rub"][estimate_key]
                 closest_hotel = lowest_option[0]
+                dest_name = single_destination_name(dest_id, dest_name, closest_hotel.get("city"))
                 estimate_label = "нижней" if estimate_key == "min" else "верхней"
                 reply_text = (
                     f"⚠️ Среди найденных вариантов нет поездки в пределах бюджета {budget_limit:,} ₽. "
@@ -2568,6 +2581,10 @@ class AgentService:
             return {"text": reply_text, "state": state, "cart": cart, "compared_hotels": []}
 
         recommended_hotel, logistics_info, budget_breakdown = affordable[0]
+        dest_name = single_destination_name(dest_id, top_dest["name"], recommended_hotel.get("city"))
+        top_dest = {**top_dest, "name": dest_name}
+        cart["destination"] = dest_name
+        cart["hotel_city"] = recommended_hotel.get("city")
         if requested_hotel_id:
             profile["selected_hotel_id"] = requested_hotel_id
         unchanged_conditions = all(profile.get(key) == previous_slots[key] for key in slot_keys)
@@ -2710,10 +2727,7 @@ class AgentService:
         fl_date_ret = format_flight_date(d_out_str)
         hotel_dates_str = format_hotel_dates(d_in_str, d_out_str, nights)
 
-        dest_display_name = top_dest['name']
-        if recommended_hotel and recommended_hotel.get("city") and "(" in dest_display_name and " и " in dest_display_name:
-            country_part = dest_display_name.split("(")[0].strip()
-            dest_display_name = f"{country_part} ({recommended_hotel['city']})"
+        dest_display_name = dest_name
 
         if is_cheapest_requested and not (
             old_total_max is not None and budget_breakdown["total_trip_budget_range_rub"]["max"] >= old_total_max
@@ -2732,7 +2746,8 @@ class AgentService:
         ai_intro = AgentService.sanitize_ai_intro(
             intro=ai_intro,
             dest_id=dest_id,
-            default_intro=default_intro
+            default_intro=default_intro,
+            route_name=dest_name,
         )
 
         if ai_intro:
@@ -2850,40 +2865,6 @@ class AgentService:
             top_risks = "; ".join(f"{a['title']}" for a in active_alerts[:2])
             response_lines.append(f"ℹ️ **Сезонные особенности:** {top_risks}.")
             response_lines.append("")
-        # 11. Аудит безопасности и умная валидация данных агентом (фильтрация неадекватных / рискованных предложений)
-        audit_notes = []
-        if profile.get("has_kids"):
-            audit_notes.append("🚫 **Семейный контроль:** Отели категории «Adults Only (18+)» и шумные молодежные пати-резорты автоматически исключены из поиска.")
-        if profile.get("has_pets"):
-            audit_notes.append("🐾 **Pet-контроль:** Отели со строгим запретом на животных исключены; подтверждено безопасное размещение с питомцем.")
-
-        if recommended_hotel:
-            price_n = recommended_hotel.get("price_per_night_rub", 0)
-            feats = [str(f).lower() for f in (recommended_hotel.get("features", []))]
-            if price_n <= 2500 or any("shared_bathroom" in f or "hostel_dorm" in f for f in feats):
-                audit_notes.append("⚠️ **Контроль эконом-сегмента:** Выбран бюджетный вариант. Проверьте формат размещения и наличие общих удобств; отдельная санитарная проверка в демо не проводится.")
-            elif price_n >= 100000:
-                audit_notes.append("💎 **Премиум-аудит:** Подтвержден эксклюзивный статус Ultra-Luxury (персональный консьерж-сервис, приватная вилла/дворец, VIP-трансфер).")
-
-        if logistics_info.get("compatible"):
-            timeline = logistics_info.get("timeline", {})
-            layover = timeline.get("layover_details", {})
-            if layover.get("is_connecting"):
-                audit_notes.append("✈️ **Аудит стыковок:** Отсеяны опасные короткие пересадки (<60 мин, риск потери багажа); выбран рейс с безопасным транзитным буфером.")
-            
-            flight_arr = timeline.get("flight_arrival", "12:00")
-            if dest_id == "maldives" and flight_arr > "16:30":
-                audit_notes.append("🏝️ **Правило Мальдив:** Гидросамолеты летают только в светлое время (до 16:30). Для вечернего рейса трансфер заменен на скоростной катер.")
-            
-            if dest_id == "spb" and ("01:10" <= flight_arr <= "05:00"):
-                audit_notes.append("🌉 **Логистика СПб:** Прилёт в период разводки невских мостов (01:10–05:00) — маршрут трансфера проложен через скоростной ЗСД.")
-
-        if audit_notes:
-            response_lines.append("🛡️ **Аудит агента (Smart Filter & Safety Check):**")
-            for note in audit_notes:
-                response_lines.append(f"• {note}")
-            response_lines.append("")
-
         # Паспортный и визовый комплаенс
         compliance_info = ComplianceService.get_compliance_info(dest_id, profile)
         response_lines.append(compliance_info["summary"])

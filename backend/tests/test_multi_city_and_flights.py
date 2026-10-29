@@ -540,6 +540,11 @@ class DynamicMultiCityProcessMessageTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Красная Поляна", result["text"])
         self.assertIn("Ласточка", result["text"])
         self.assertIn("сочетание теплого моря и горных панорам", result["text"])
+        self.assertIn("Красная Поляна", result["destination"]["name"])
+        self.assertEqual(result["cart"]["destination"], result["destination"]["name"])
+        self.assertEqual(len(result["compared_hotels"]), 2)
+        self.assertNotIn("Аудит агента", result["text"])
+        self.assertNotIn("Safety Check", result["text"])
 
     async def test_assemble_multi_city_itinerary_with_graph_flight(self):
         user = SimpleNamespace(

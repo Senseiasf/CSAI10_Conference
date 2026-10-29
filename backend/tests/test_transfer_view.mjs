@@ -8,7 +8,7 @@ const template = fs.readFileSync(new URL('../app/templates/index.html', import.m
 const renderers = template.slice(template.indexOf('    function renderLogistics(logistics) {'),
   template.indexOf('    async function requestRegularChat('));
 
-test('transfer edits update prices and logistics while retaining destination and hotel cards', () => {
+function createRenderer() {
   const context = vm.createContext({
     lastTripData: {}, lastTotalCost: null, workspace: {innerHTML: ''}, initialWorkspaceMarkup: '',
     escapeHtml: String, money: value => `${value} ₽`, icon: () => '', destinationArt: () => '',
@@ -17,6 +17,11 @@ test('transfer edits update prices and logistics while retaining destination and
     renderTripExtras: () => '', renderDiagnosticReasoning: () => {}, showRefinementChips: () => {},
   });
   vm.runInContext(renderers, context);
+  return context;
+}
+
+test('transfer edits update prices and logistics while retaining destination and hotel cards', () => {
+  const context = createRenderer();
   const paid = {
     destination: {id: 'sochi', name: 'Сочи'}, compared_hotels: [{name: 'Medovaya Hotel'}],
     cart: {hotel: 'Medovaya Hotel', destination_id: 'sochi', destination: 'Сочи', dates: '12–17 ноября'},
@@ -44,5 +49,16 @@ test('transfer edits update prices and logistics while retaining destination and
   assert.match(context.workspace.innerHTML, /100000 ₽/);
   assert.match(context.workspace.innerHTML, /05:18/);
   assert.doesNotMatch(context.workspace.innerHTML, /Самостоятельный трансфер/);
+  assert.match(context.workspace.innerHTML, /hotel-card:Medovaya Hotel/);
+});
+
+test('corrected saved route title replaces the cached catalogue region after a partial response', () => {
+  const context = createRenderer();
+  const cart = {destination_id: 'sochi', destination: 'Сочи и Красная Поляна', hotel: 'Medovaya Hotel'};
+  context.renderTrip({destination: {id: 'sochi', name: 'Сочи и Красная Поляна'}, cart,
+    compared_hotels: [{name: 'Medovaya Hotel'}]});
+  context.renderTrip({cart: {...cart, destination: 'Сочи'}});
+  assert.match(context.workspace.innerHTML, /<h2>Сочи<\/h2>/);
+  assert.doesNotMatch(context.workspace.innerHTML, /Сочи и Красная Поляна/);
   assert.match(context.workspace.innerHTML, /hotel-card:Medovaya Hotel/);
 });
