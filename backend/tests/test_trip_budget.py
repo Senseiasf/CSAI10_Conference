@@ -57,7 +57,9 @@ def hotel(identifier, price):
 
 class BudgetSelectionTest(unittest.IsolatedAsyncioTestCase):
     async def run_agent(self, message, hotels, *, profile=None, cart=None, compatible=True):
-        user = SimpleNamespace(profile=profile or {"nights": 7, "has_pets": True, "has_kids": True},
+        fixed_profile = {"adults_count": 1, "checkin_date": "2026-11-10", "checkout_date": "2026-11-17"}
+        fixed_profile.update(profile or {"nights": 7, "has_pets": True, "has_kids": True})
+        user = SimpleNamespace(profile=fixed_profile,
                                current_cart=cart or {}, current_state="INSPIRATION")
         destination = {"id": "sochi", "name": "Сочи", "score": 1.0}
         logistics = {"compatible": compatible, "flight": {"price_rub_roundtrip": 20000},
@@ -107,7 +109,9 @@ class BudgetSelectionTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(result["cart"]["budget_rub"], 110000)
         self.assertLessEqual(result["budget_breakdown"]["total_trip_budget_range_rub"]["max"], 110000)
-        self.assertIn("41,000", result["text"])
+        # One traveler: 17,600 round trip + 7,000 hotel + 2,000 transfer.
+        self.assertEqual(result["budget_breakdown"]["mandatory"]["total_mandatory_rub"], 26600)
+        self.assertIn("26,600", result["text"])
 
     async def test_exact_ceiling_is_allowed(self):
         result, _, _, _ = await self.run_agent("Сочи до 99 тысяч", [hotel("affordable", 1000)])

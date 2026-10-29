@@ -90,7 +90,7 @@ class AgentLTRIntegrationTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(tied["cart"]["hotel_id"], "hotel-2")
 
     async def test_price_filter_cannot_be_undone_by_ltr(self):
-        result, _, _ = await self.run_agent(profile={"budget_rub": 100000},
+        result, _, _ = await self.run_agent(profile={"budget_rub": 100000, "adults_count": 1},
                                            hotels=[hotel(0, 1000), hotel(1, 100000)])
         self.assertEqual([item["id"] for item in result["compared_hotels"]], ["hotel-0"])
         self.assertLessEqual(result["budget_breakdown"]["total_trip_budget_range_rub"]["max"], 100000)

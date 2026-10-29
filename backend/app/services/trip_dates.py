@@ -1,5 +1,6 @@
 """Calendar updates independent of databases and language model providers."""
 import re
+from copy import deepcopy
 from datetime import date, timedelta
 
 
@@ -10,8 +11,34 @@ RU_MONTHS = {
 
 
 def update_trip_dates(message: str, profile: dict, cart: dict | None = None) -> str | None:
+    """Apply calendar changes atomically; invalid input leaves old dates intact."""
+    next_profile = deepcopy(profile)
+    next_cart = deepcopy(cart) if cart is not None else None
+    question = _update_trip_dates(message, next_profile, next_cart)
+    if question:
+        return question
+    profile.clear()
+    profile.update(next_profile)
+    if cart is not None:
+        cart.clear()
+        cart.update(next_cart)
+    return None
+
+
+def _update_trip_dates(message: str, profile: dict, cart: dict | None = None) -> str | None:
     """Update supported dates; return a clarification instead of guessing a shift."""
     text = message.lower()
+    range_nights = None
+    full_dates = list(re.finditer(r"\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}\.\d{1,2}\.\d{4})\b", text))
+    if len(full_dates) >= 2 and re.fullmatch(r"\s*(?:по|до|—|–|-)\s*", text[full_dates[0].end():full_dates[1].start()]):
+        try:
+            parsed = [date.fromisoformat(item.group()) if "-" in item.group()
+                      else date(*map(int, item.group().split(".")[::-1])) for item in full_dates[:2]]
+        except ValueError:
+            return "Такой даты нет в календаре. Укажите даты заезда и выезда в формате ДД.ММ.ГГГГ."
+        range_nights = (parsed[1] - parsed[0]).days
+        if not 1 <= range_nights <= 60:
+            return "Дата выезда должна быть позже заезда; длительность поездки — от 1 до 60 ночей."
     shift = re.search(
         r"(?:на\s+)?(\d+)\s*(?:дня|дней|день)\s*(позже|раньше|вперед|вперёд|назад)", text
     ) or re.search(r"(позже|раньше|вперед|вперёд|назад)\s+на\s+(\d+)\s*(?:дня|дней|день)", text)
@@ -73,9 +100,10 @@ def update_trip_dates(message: str, profile: dict, cart: dict | None = None) -> 
                 start = date(y_num, m_num, int(d1))
                 if y_str is None and start < date.today():
                     start = date(y_num + 1, m_num, int(d1))
-                end_day = int(d2)
-                if end_day > int(d1):
-                    profile["nights"] = end_day - int(d1)
+                end = date(start.year, m_num, int(d2))
+                range_nights = (end - start).days
+                if range_nights <= 0:
+                    return "Дата выезда должна быть позже даты заезда."
             except ValueError:
                 return "Такой даты нет в календаре. Укажите дату заезда в формате ДД.ММ.ГГГГ."
         elif ru_single:
@@ -132,6 +160,10 @@ def update_trip_dates(message: str, profile: dict, cart: dict | None = None) -> 
     if not shift:
         duration = re.search(r"(?:на\s+)?(\d+)\s*(?:ноч\w*|дн\w*|сут\w*)", text)
         nights = int(duration.group(1)) if duration else None
+        if range_nights is not None:
+            if nights is not None and nights != range_nights:
+                return "Даты заезда и выезда не совпадают с указанным числом ночей. Уточните даты или длительность поездки."
+            nights = range_nights
         if nights is not None and not 1 <= nights <= 60:
             return "Укажите длительность поездки от 1 до 60 ночей."
         if nights is None:

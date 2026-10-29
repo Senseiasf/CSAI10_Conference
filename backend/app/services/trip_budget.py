@@ -20,7 +20,7 @@ def update_trip_budget(message: str, profile: dict, cart: dict) -> str | None:
     if not match:
         if re.search(CHEAPER + r"\s+на\b", text):
             return "На сколько рублей снизить полную стоимость поездки? Укажите сумму числом."
-        if re.search(r"\bбюджет\b", text):
+        if re.search(r"\b(?:бюджет|лимит)(?:ом|а|у|е)?\b", text):
             profile["awaiting_budget"] = True
             return "Укажите общий бюджет всей поездки числом в рублях, например: «бюджет до 100 тысяч»."
         return None

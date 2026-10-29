@@ -101,7 +101,7 @@ class NewFeaturesTest(unittest.IsolatedAsyncioTestCase):
             dest_id="turkey",
             base_mandatory_rub=100000,
             checkin_date_str="2026-11-15",
-            nights=7
+            nights=7, base_flight_price=25000, base_hotel_price=10000, fixed_costs=5000
         )
         self.assertTrue(len(options) >= 2)
         self.assertTrue(any(opt["days_shift"] < 0 for opt in options))
@@ -117,7 +117,7 @@ class NewFeaturesTest(unittest.IsolatedAsyncioTestCase):
             dest_id="sochi",
             base_mandatory_rub=70000,
             checkin_date_str="2026-11-17",
-            nights=7
+            nights=7, base_flight_price=20000, base_hotel_price=6000, fixed_costs=3000
         )
         # On Tuesday, all candidate shifts (-2 Sun, -1 Mon, +1 Wed, +2 Thu) have higher tariffs, so savings <= 0
         best_opt = options[0]
@@ -129,21 +129,23 @@ class NewFeaturesTest(unittest.IsolatedAsyncioTestCase):
             "destination": "Сочи",
             "checkin_date": "2026-11-15",
             "nights": 7,
-            "total_mandatory_rub": 68500
+            "total_mandatory_rub": 66700,
+            "pricing_inputs": {"flight_roundtrip_per_person_rub": 20000, "hotel_per_room_night_rub": 6000,
+                               "fixed_costs_rub": 3000, "rooms_count": 1, "travelers_count": 1}
         }
         profile = {"destination_id": "sochi", "nights": 7, "checkin_date": "2026-11-15"}
         
         # Test trigger: 'реальные цены на соседние даты'
         ans1 = AgentService.answer_dates_comparison("покажи реальные цены на соседние даты", profile, cart)
         self.assertIsNotNone(ans1)
-        self.assertIn("Сравнение реальных тарифов на соседние даты", ans1)
+        self.assertIn("Сравнение расчётных тарифов на соседние даты", ans1)
         self.assertIn("самый выгодный тариф", ans1)
         self.assertIn("вторник", ans1)
 
         # Test trigger: 'проверь самую дешевую поездку'
         ans2 = AgentService.answer_dates_comparison("проверь самую дешевую поездку", profile, cart)
         self.assertIsNotNone(ans2)
-        self.assertIn("Сравнение реальных тарифов на соседние даты", ans2)
+        self.assertIn("Сравнение расчётных тарифов на соседние даты", ans2)
 
     def test_api_compliance_endpoint(self):
         resp = self.client.get("/api/compliance/thailand")

@@ -127,11 +127,12 @@ class ReportedRegressionsTest(unittest.IsolatedAsyncioTestCase):
             result = await AgentService.process_message("test", "ОАЭ, нас 3, бюджет 200000")
 
         mandatory = result["budget_breakdown"]["mandatory"]
-        self.assertEqual(mandatory["flight_price_roundtrip"], 36000)
-        self.assertEqual(mandatory["flight_out_price"], 18000)
-        self.assertEqual(mandatory["flight_ret_price"], 18000)
-        self.assertEqual(mandatory["total_mandatory_rub"], 47600)
-        self.assertEqual(result["cart"]["total_mandatory_rub"], 47600)
+        # Wednesday outbound (0.90), Monday return (0.98), three travelers.
+        self.assertEqual(mandatory["flight_price_roundtrip"], 56400)
+        self.assertEqual(mandatory["flight_out_price"], 27000)
+        self.assertEqual(mandatory["flight_ret_price"], 29400)
+        self.assertEqual(mandatory["total_mandatory_rub"], 68400)
+        self.assertEqual(result["cart"]["total_mandatory_rub"], 68400)
 
     async def test_identical_requests_keep_price_and_cart_in_sync(self):
         user = SimpleNamespace(

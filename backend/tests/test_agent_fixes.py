@@ -101,7 +101,8 @@ class AgentFixesTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("укладывается в лимит", result["text"])
         self.assertNotIn("укладывается в бюджет", result["text"])
         self.assertIn("выше лимита", result["text"])
-        self.assertIn("уложиться нереально", result["text"])
+        self.assertEqual(result["state"], "BUDGET_EXCEEDED")
+        self.assertIn("Среди найденных вариантов нет поездки", result["text"])
 
     async def test_splurge_and_luxury_picks_premium_hotel_first(self):
         """Fix: When user is ready to splurge / wants luxury, premium hotel is recommended, not cheap."""
