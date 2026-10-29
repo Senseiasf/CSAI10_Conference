@@ -414,7 +414,7 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("🌴 **Сочи**", result["text"])
 
     async def test_screenshot_flights_show_per_person_times_three_without_double_multiplication(self):
-        user = make_user(nights=5, checkin_date="2026-11-12", checkout_date="2026-11-17", budget_rub=180000)
+        user = make_user(nights=5, checkin_date="2026-11-12", checkout_date="2026-11-17", budget_rub=300000)
         with self.fixture(user, hotel_rate=3500, flight_price=13800):
             result = await AgentService.process_message("web:screenshot", "Едем втроём на 5 ночей, нужно 2 номера")
         mandatory = result["budget_breakdown"]["mandatory"]
@@ -426,7 +426,7 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("3 пассажира", result["text"])
 
     async def test_unknown_destination_searches_all_allowed_regions_before_exceeding_budget(self):
-        user = make_user(nights=5, budget_rub=180000)
+        user = make_user(nights=5, budget_rub=300000)
         user.current_cart = {}
         rows = [{"id": identifier, "name": name, "score": score}
                 for identifier, name, score in (("maldives", "Мальдивы", 1.0), ("turkey", "Турция", .9), ("sochi", "Сочи", .8))]
@@ -434,13 +434,13 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
         overpriced = {**hotels[0], "id": "costly", "price_per_night_rub": 30000}
         with self.fixture(user, destination_rows=rows,
                           destination_hotels={"maldives": [overpriced], "turkey": [overpriced], "sochi": hotels}):
-            result = await AgentService.process_message("web:screenshot", "По направлению пока не знаю, едем втроём на 5 ночей, нужно будет 2 номера, бюджет 180.000")
+            result = await AgentService.process_message("web:screenshot", "По направлению пока не знаю, едем втроём на 5 ночей, нужно будет 2 номера, бюджет 300.000")
         self.assertEqual(result["cart"]["destination_id"], "sochi")
-        self.assertLessEqual(result["budget_breakdown"]["total_trip_budget_range_rub"]["max"], 180000)
+        self.assertLessEqual(result["budget_breakdown"]["total_trip_budget_range_rub"]["max"], 300000)
         self.assertEqual(result["trip_conditions"]["adults_count"], 3)
 
     async def test_rejected_region_is_excluded_from_budget_search(self):
-        user = make_user(nights=5, budget_rub=180000, destination_flexible=True)
+        user = make_user(nights=5, budget_rub=300000, destination_flexible=True)
         user.current_cart.update(destination_id="maldives", destination="Мальдивы")
         rows = [{"id": "maldives", "name": "Мальдивы", "score": 1.0},
                 {"id": "sochi", "name": "Сочи", "score": .8}]
@@ -467,7 +467,7 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cheaper["trip_conditions"]["rooms_count"], 2)
 
     async def test_other_accommodation_under_my_budget_reuses_limit_and_changes_hotel(self):
-        user = make_user(nights=5, budget_rub=180000, prefer_direct_flight=True, without_transfer=True,
+        user = make_user(nights=5, budget_rub=300000, prefer_direct_flight=True, without_transfer=True,
                          private_room_required=True)
         with self.fixture(user, destination_hotels={"spb": self.named_hotels()}):
             await AgentService.process_message("web:budget-reference", "Пересчитай на 5 ночей")
@@ -480,9 +480,9 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
             self.assertIn("medovaya", self.compare.call_args.kwargs["exclude_hotel_ids"])
         self.assertNotEqual(result.get("state"), "NEEDS_BUDGET")
         self.assertNotEqual(result["cart"]["hotel_id"], before["hotel_id"])
-        self.assertEqual(result["cart"]["budget_rub"], 180000)
-        self.assertEqual(result["trip_conditions"]["budget_rub"], 180000)
-        self.assertLessEqual(result["cart"]["total_trip_budget_range_rub"]["max"], 180000)
+        self.assertEqual(result["cart"]["budget_rub"], 300000)
+        self.assertEqual(result["trip_conditions"]["budget_rub"], 300000)
+        self.assertLessEqual(result["cart"]["total_trip_budget_range_rub"]["max"], 300000)
         for key in ("nights", "dates", "checkin_date", "checkout_date", "travelers_count", "rooms_count"):
             self.assertEqual(result["cart"][key], before[key], key)
         self.assertTrue(user.profile["prefer_direct_flight"])
@@ -492,18 +492,18 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("awaiting_budget", user.profile)
 
     async def test_other_accommodation_does_not_offer_over_budget_hotel(self):
-        user = make_user(nights=5, budget_rub=180000)
+        user = make_user(nights=5, budget_rub=300000)
         hotels = self.named_hotels()[:1] + [{**self.named_hotels()[1], "price_per_night_rub": 30000}]
         with self.fixture(user, destination_hotels={"spb": hotels}):
             await AgentService.process_message("web:budget-reference", "Пересчитай на 5 ночей")
             result = await AgentService.process_message("web:budget-reference", "Предложи другой вариант проживания под мой бюджет")
         self.assertEqual(result["state"], "BUDGET_EXCEEDED")
         self.assertNotIn("hotel_id", result["cart"])
-        self.assertEqual(result["trip_conditions"]["budget_rub"], 180000)
-        self.assertEqual(user.profile["budget_rub"], 180000)
+        self.assertEqual(result["trip_conditions"]["budget_rub"], 300000)
+        self.assertEqual(user.profile["budget_rub"], 300000)
 
     async def test_layover_concern_preserves_quote_without_model_or_replanning(self):
-        user = make_user(budget_rub=180000, nights=5)
+        user = make_user(budget_rub=300000, nights=5)
         risk = "Критический риск: самостоятельная пересадка 75 минут, требуется повторная регистрация багажа."
         with self.fixture(user):
             await AgentService.process_message("web:layover", "Пересчитай на 5 ночей")
@@ -535,7 +535,7 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
                         mock.assert_not_awaited()
 
     async def test_explicit_direct_flight_request_still_replans(self):
-        user = make_user(budget_rub=180000, nights=5)
+        user = make_user(budget_rub=300000, nights=5)
         with self.fixture(user):
             await AgentService.process_message("web:layover", "Пересчитай на 5 ночей")
             self.logistics.reset_mock()
@@ -545,7 +545,7 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual(result.get("state"), "CURRENT_LOGISTICS")
 
     async def test_connection_diagnostics_repeat_catalogue_risk_instead_of_safety_claim(self):
-        user = make_user(budget_rub=180000, nights=5)
+        user = make_user(budget_rub=300000, nights=5)
         risk = "Критический риск: отдельные билеты, короткая пересадка."
         with self.fixture(user):
             self.logistics.return_value["flight"].update(flight_type="connecting", layover_duration_minutes=75,
@@ -566,7 +566,7 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["cart"]["hotel_id"], first["cart"]["hotel_id"])
 
     async def test_named_hotel_above_ceiling_does_not_replace_an_affordable_plan(self):
-        user = make_user(budget_rub=180000)
+        user = make_user(budget_rub=300000)
         hotels = self.named_hotels()
         hotels.append({**hotels[0], "id": "luxury", "name": "Expensive Hotel", "price_per_night_rub": 100000})
         with self.fixture(user, destination_hotels={"spb": hotels}):
@@ -574,7 +574,7 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
             result = await AgentService.process_message("web:screenshot", "Выбери Expensive Hotel")
         self.assertEqual(result["state"], "HOTEL_OVER_BUDGET")
         self.assertEqual(result["cart"]["hotel_id"], first["cart"]["hotel_id"])
-        self.assertEqual(user.profile["budget_rub"], 180000)
+        self.assertEqual(user.profile["budget_rub"], 300000)
 
     async def test_city_in_hotel_name_does_not_change_destination(self):
         user = make_user(budget_rub=1000000)

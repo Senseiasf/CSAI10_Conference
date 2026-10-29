@@ -3,8 +3,8 @@ from datetime import date
 from typing import Any, Awaitable, Callable
 
 from app.config import settings
-from app.domain.dialogue import ChangeOperation, DialogueDecision, DialogueIntent, StateChange
-from app.domain.trip import TripQuote, TripState
+from app.domain.dialogue import ChangeOperation, DialogueDecision, DialogueIntent, SearchCriteriaDecision, StateChange
+from app.domain.trip import PendingAction, TripQuote, TripState
 from app.services.booking_stub import booking_stub, detect_booking_action
 from app.services.dialogue_parser import DialogueParser, DialogueParserError, decision_context
 from app.services.llm_service import LLMService
@@ -16,6 +16,17 @@ from app.services.trip_state_store import TripStateStore
 
 class TripValidationError(ValueError):
     pass
+
+
+STATE_CHANGING_INTENTS = {
+    DialogueIntent.MODIFY,
+    DialogueIntent.PLAN,
+    DialogueIntent.SEARCH_ALTERNATIVES,
+    DialogueIntent.SELECT_OFFER,
+    DialogueIntent.CORRECTION,
+    DialogueIntent.NEW_TRIP,
+}
+ALTERNATIVE_INTENTS = {DialogueIntent.COMPARISON, DialogueIntent.SEARCH_ALTERNATIVES}
 
 
 class TripController:
@@ -49,14 +60,27 @@ class TripController:
                 quote,
             )
             LLMService._last_error = None
+            if decision.intent == DialogueIntent.NEW_TRIP:
+                state = TripState()
+                profile = {}
+                cart = {}
+                quote = None
+            self.apply_search_criteria(state, decision.search)
+            if decision.intent in STATE_CHANGING_INTENTS and decision.changes:
+                state = self.apply_changes(state, decision.changes)
+            if decision.intent in STATE_CHANGING_INTENTS or decision.search:
+                profile = state.apply_to_profile(profile)
+            if decision.intent == DialogueIntent.CLARIFY:
+                state.pending_action = self.pending_for_decision(decision, state)
+                profile = state.apply_to_profile(profile)
             if decision.narrative:
                 profile["llm_ai_intro"] = decision.narrative
-            if decision.intent in (DialogueIntent.MODIFY, DialogueIntent.PLAN) and decision.changes:
-                state = self.apply_changes(state, decision.changes)
-                profile = state.apply_to_profile(profile)
             hotel_change = next((change for change in decision.changes if change.field == "hotel_id"), None)
             if hotel_change:
                 profile["_resolved_hotel_id"] = hotel_change.value
+            destination_change = next((change for change in decision.changes if change.field == "destination_id"), None)
+            if destination_change and destination_change.value != cart.get("destination_id"):
+                profile["_structured_destination_changed"] = True
         except (DialogueParserError, TripValidationError) as exc:
             code = getattr(exc, "code", "validation")
             public_message = getattr(exc, "public_message", str(exc))
@@ -78,16 +102,45 @@ class TripController:
             }
 
         if decision.intent in (DialogueIntent.QUESTION, DialogueIntent.CLARIFY):
-            result = self._read_only_result(decision, profile, cart)
+            result = self._read_only_result(decision, profile, cart, message)
+            session.profile = deepcopy(profile)
+            session.current_cart = deepcopy(cart)
             await save_session(user_id, profile, cart, message, result["text"])
             return self._enrich(result, decision, profile, cart, quote)
+
+        if decision.intent == DialogueIntent.NEW_TRIP and not decision.changes and not decision.search:
+            reply = "Начинаем новую поездку. Расскажите, какой отдых хотите, когда и кто едет."
+            session.profile = deepcopy(profile)
+            session.current_cart = deepcopy(cart)
+            await save_session(user_id, profile, cart, message, reply)
+            return self._enrich({"text": reply, "state": "NEW_TRIP", "cart": cart}, decision, profile, cart, None)
+
+        missing = self.outstanding_fields(decision, state)
+        if missing:
+            kind = "search_alternatives" if decision.intent == DialogueIntent.SEARCH_ALTERNATIVES else "plan_trip"
+            state.pending_action = PendingAction(kind=kind, missing_fields=missing, question=self.missing_question(missing))
+            profile = state.apply_to_profile(profile)
+            reply = state.pending_action.question
+            result = {"text": reply, "state": "CLARIFICATION_REQUIRED", "cart": cart, "pending_action": state.pending_action.model_dump(mode="json")}
+            session.profile = deepcopy(profile)
+            session.current_cart = deepcopy(cart)
+            await save_session(user_id, profile, cart, message, reply)
+            return self._enrich(result, decision, profile, cart, quote)
+        if (decision.intent != DialogueIntent.PLAN
+                and any(change.field != "replan_action" for change in decision.changes)
+                and not profile.get("llm_ai_intro")):
+            profile["llm_ai_intro"] = self.change_explanation(decision.changes)
 
         original_profile = deepcopy(profile)
         original_cart = deepcopy(cart)
         profile["_skip_llm_dispatch"] = True
         profile["_current_quote_id"] = quote.quote_id if quote else None
-        if decision.intent == DialogueIntent.COMPARISON:
+        profile["_structured_compound_edit"] = any(
+            change.field not in ("without_transfer", "replan_action") for change in decision.changes
+        )
+        if decision.intent in ALTERNATIVE_INTENTS:
             profile["_comparison_only"] = True
+            profile["_structured_comparison"] = True
         result = await plan_executor(
             user_id,
             message,
@@ -98,7 +151,7 @@ class TripController:
         )
         final_cart = result.get("cart") or cart
         final_quote = TripStateStore.quote_from_cart(final_cart) or quote
-        if decision.intent == DialogueIntent.COMPARISON:
+        if decision.intent in ALTERNATIVE_INTENTS:
             result["quote_difference"] = compare_quotes(quote, final_quote) if final_quote else None
             result["alternative_quote"] = final_quote.model_dump(mode="json") if final_quote else None
             profile = original_profile
@@ -114,7 +167,7 @@ class TripController:
         session.current_cart = deepcopy(final_cart)
         return self._enrich(result, decision, profile, final_cart, final_quote)
 
-    def _read_only_result(self, decision: DialogueDecision, profile: dict, cart: dict) -> dict:
+    def _read_only_result(self, decision: DialogueDecision, profile: dict, cart: dict, message: str) -> dict:
         if decision.intent == DialogueIntent.CLARIFY:
             return {
                 "text": decision.clarification or decision.answer or "Уточните, пожалуйста, запрос.",
@@ -129,6 +182,11 @@ class TripController:
                 reasoning.append(step)
             step["detail"] = connection_summary(cart.get("logistics") or {})
             return {"text": describe_saved_logistics(cart), "state": "CURRENT_LOGISTICS", "cart": cart, "reasoning_steps": reasoning}
+        if decision.topic == "internal_schedule":
+            from app.services.agent_service import AgentService
+            reply = AgentService.answer_internal_route_timing(message.lower(), cart)
+            if reply:
+                return {"text": reply, "state": "INTERNAL_SCHEDULE_INFO", "cart": cart}
         if decision.topic == "budget_estimate" and cart.get("budget_quote"):
             mode = decision.mode or "max"
             reply = describe_budget_estimate(cart["budget_quote"], mode, profile.get("budget_rub"))
@@ -136,6 +194,92 @@ class TripController:
         if decision.answer:
             return {"text": decision.answer, "state": "CONSULTATION", "cart": cart}
         return {"text": describe_current_trip(profile, cart), "state": "CURRENT_TRIP", "cart": cart}
+
+    def apply_search_criteria(self, state: TripState, criteria: SearchCriteriaDecision | None) -> None:
+        if not criteria:
+            return
+        if criteria.scope:
+            state.search.scope = criteria.scope
+        if criteria.destination_query is not None:
+            state.search.destination_query = criteria.destination_query
+        if criteria.price_preference:
+            state.search.price_preference = criteria.price_preference
+
+    def pending_for_decision(self, decision: DialogueDecision, state: TripState) -> PendingAction:
+        missing = list(decision.search.missing_fields if decision.search else [])
+        if not missing and state.pending_action:
+            missing = list(state.pending_action.missing_fields)
+        kind = "search_alternatives" if decision.search and decision.search.scope == "other_destinations" else "plan_trip"
+        if decision.references and not missing:
+            kind = "select_offer"
+            missing = ["hotel_id"]
+        return PendingAction(kind=kind, missing_fields=missing, question=self.missing_question(missing) if missing else decision.clarification)
+
+    def outstanding_fields(self, decision: DialogueDecision, state: TripState) -> list[str]:
+        fields = list(decision.search.missing_fields if decision.search else [])
+        if state.pending_action and decision.intent != DialogueIntent.NEW_TRIP:
+            fields.extend(state.pending_action.missing_fields)
+        return list(dict.fromkeys(field for field in fields if self.is_missing(state, field)))
+
+    def is_missing(self, state: TripState, field: str) -> bool:
+        if field in ("direction", "destination_id"):
+            return not (state.destination_id or state.search.destination_query or state.preferences.interests)
+        if field == "checkin_date":
+            return not state.dates.checkin_date
+        if field == "nights":
+            return not state.dates.nights
+        if field == "adults_count":
+            return not state.passengers.adults_count
+        if field == "kids_ages":
+            return (state.passengers.kids_count or 0) > len(state.kids_ages)
+        if field == "rooms_count":
+            travelers = (state.passengers.adults_count or 2) + (state.passengers.kids_count or 0)
+            return travelers > 4 and not state.rooms_count
+        if field == "budget_rub":
+            return state.budget_rub is None
+        if field == "hotel_id":
+            return not state.selected_offers.get("hotel_id")
+        return False
+
+    def missing_question(self, fields: list[str]) -> str:
+        labels = {
+            "direction": "какой отдых или направление вам ближе",
+            "destination_id": "какое направление выбрать",
+            "checkin_date": "с какой даты начинается поездка",
+            "nights": "сколько ночей вы едете",
+            "adults_count": "сколько взрослых едет, включая вас",
+            "kids_ages": "какой возраст у детей",
+            "rooms_count": "сколько отдельных номеров нужно",
+            "budget_rub": "какой общий лимит поездки в рублях",
+            "hotel_id": "какой именно вариант выбрать",
+        }
+        unknown = [field for field in fields if field not in labels]
+        if unknown:
+            return "Уточните, пожалуйста, недостающие условия поездки."
+        if not fields:
+            return "Уточните, пожалуйста, запрос."
+        return "Уточните, пожалуйста: " + ", ".join(labels[field] for field in fields) + "?"
+
+    def change_explanation(self, changes: list[StateChange]) -> str:
+        labels = {
+            "nights": "длительность",
+            "adults_count": "число взрослых",
+            "kids_count": "число детей",
+            "kids_ages": "возраст детей",
+            "rooms_count": "количество номеров",
+            "budget_rub": "общий лимит",
+            "has_pets": "поездка с питомцем",
+            "without_transfer": "трансфер",
+            "destination_id": "направление",
+            "interests": "критерии направления",
+            "hotel_id": "выбор отеля",
+            "price_preference": "уровень предложения",
+            "search_scope": "область поиска",
+            "checkin_date": "дата заезда",
+            "checkout_date": "дата выезда",
+        }
+        changed = [labels.get(change.field, change.field) for change in changes if change.field != "replan_action"]
+        return "Обновляю условия: " + ", ".join(changed) + ". Проверяю совместимость и пересчитываю стоимость."
 
     def apply_changes(self, state: TripState, changes: list[StateChange]) -> TripState:
         updated = state.model_copy(deep=True)
@@ -145,7 +289,7 @@ class TripController:
                 continue
             value = change.value
             if change.operation == ChangeOperation.CLEAR:
-                value = [] if change.field in ("interests", "rejected_destinations", "rejected_hotels") else None
+                value = [] if change.field in ("interests", "rejected_destinations", "rejected_hotels", "kids_ages") else None
             if change.field in ("interests", "rejected_destinations", "rejected_hotels"):
                 target = getattr(updated.preferences, change.field)
                 values = value if isinstance(value, list) else [value]
@@ -168,10 +312,20 @@ class TripController:
                 setattr(updated.passengers, change.field, value)
                 if change.field == "kids_count":
                     updated.passengers.has_kids = value > 0
+            elif change.field == "kids_ages":
+                updated.kids_ages = list(value or [])
+            elif change.field == "price_preference":
+                updated.search.price_preference = value or "any"
+            elif change.field == "search_scope":
+                updated.search.scope = value or "current"
+            elif change.field == "destination_query":
+                updated.search.destination_query = value
             elif change.field in ("without_transfer", "prefer_direct_flight", "flight_time_pref", "origin_airport"):
                 setattr(updated.services, change.field, value)
             elif change.field == "private_room_required":
                 updated.preferences.private_room_required = bool(value) if value is not None else False
+            elif change.field == "is_multi_city":
+                updated.preferences.is_multi_city = bool(value)
             else:
                 setattr(updated, change.field, value)
         self._validate_state(updated)
@@ -182,7 +336,8 @@ class TripController:
             "destination_id", "checkin_date", "checkout_date", "nights", "adults_count", "kids_count",
             "has_pets", "rooms_count", "budget_rub", "without_transfer", "prefer_direct_flight",
             "flight_time_pref", "origin_airport", "private_room_required", "interests", "hotel_id",
-            "rejected_destinations", "rejected_hotels", "replan_action",
+            "rejected_destinations", "rejected_hotels", "replan_action", "kids_ages",
+            "price_preference", "search_scope", "destination_query", "is_multi_city",
         }
         if change.field not in allowed:
             raise TripValidationError(f"Неизвестное поле поездки: {change.field}")
@@ -199,8 +354,16 @@ class TripController:
             or (change.field != "kids_count" and value <= 0)
         ):
             raise TripValidationError(f"Некорректное числовое значение: {change.field}")
-        if change.field in ("has_pets", "without_transfer", "prefer_direct_flight", "private_room_required") and type(value) is not bool:
+        if change.field in ("has_pets", "without_transfer", "prefer_direct_flight", "private_room_required", "is_multi_city") and type(value) is not bool:
             raise TripValidationError(f"Ожидается true/false: {change.field}")
+        if change.field == "kids_ages" and (
+            not isinstance(value, list) or any(type(age) is not int or age < 0 or age > 17 for age in value)
+        ):
+            raise TripValidationError("Возраст детей должен быть списком целых чисел от 0 до 17")
+        if change.field == "price_preference" and value not in ("cheaper", "more_expensive", "comfort", "any"):
+            raise TripValidationError("Неизвестный уровень предложения")
+        if change.field == "search_scope" and value not in ("current", "other_destinations", "any", "hotels", "flights", "dates"):
+            raise TripValidationError("Неизвестная область поиска")
         if change.field in ("checkin_date", "checkout_date"):
             try:
                 date.fromisoformat(value)
@@ -213,7 +376,7 @@ class TripController:
             checkout = date.fromisoformat(state.dates.checkout_date)
             if checkout <= checkin:
                 raise TripValidationError("Дата выезда должна быть позже даты заезда")
-        if (state.passengers.adults_count or 2) + state.passengers.kids_count > 50:
+        if (state.passengers.adults_count or 2) + (state.passengers.kids_count or 0) > 50:
             raise TripValidationError("Слишком большая группа")
 
     def _enrich(

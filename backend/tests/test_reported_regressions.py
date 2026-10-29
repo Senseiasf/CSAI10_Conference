@@ -127,7 +127,7 @@ class ReportedRegressionsTest(unittest.IsolatedAsyncioTestCase):
             current_state="INSPIRATION",
         )
         with self.patches(user):
-            result = await AgentService.process_message("test", "ОАЭ, нас 3, бюджет 200000")
+            result = await AgentService.process_message("test", "ОАЭ, нас 3, бюджет 500000")
 
         mandatory = result["budget_breakdown"]["mandatory"]
         # Wednesday outbound (0.90), Monday return (0.98), three travelers.

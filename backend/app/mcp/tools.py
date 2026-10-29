@@ -373,7 +373,8 @@ class MCPTools:
         origin_airport_code: Optional[str] = "SVO",
         prefer_direct_flight: Optional[bool] = None,
         without_transfer: Optional[bool] = False,
-        flight_time_pref: Optional[str] = None
+        flight_time_pref: Optional[str] = None,
+        travelers_count: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         MCP Tool: Запрашивает графовую базу Neo4j для проверки сквозной цепочки:
@@ -387,6 +388,7 @@ class MCPTools:
             prefer_direct_flight=prefer_direct_flight,
             without_transfer=without_transfer,
             flight_time_pref=flight_time_pref,
+            travelers_count=travelers_count,
         )
 
     @staticmethod
@@ -413,31 +415,29 @@ class MCPTools:
 
         food_daily = onsite_meta.get("food_per_day", {"min": 2000, "max": 4500})
         ent_tour = onsite_meta.get("entertainment_7d", {"min": 10000, "max": 25000})
+        actual_travelers = max(1, travelers_count or 1)
 
         # Корректировка расходов на еду в зависимости от включенного питания
         is_all_inclusive = "all inclusive" in meals_type.lower() or "все включено" in meals_type.lower()
         is_half_board = "полупансион" in meals_type.lower() or "ужин" in meals_type.lower() or "half board" in meals_type.lower()
 
         if is_all_inclusive:
-            # При All Inclusive на еду вне отеля нужно минимум на напитки/кафе
-            food_min = int(600 * nights)
-            food_max = int(1500 * nights)
-            food_note = f"All-Inclusive в отеле: основное питание включено, заложены перекусы и напитки ({food_min:,}–{food_max:,} ₽ за {nights} н.)"
+            food_min = int(600 * nights * actual_travelers)
+            food_max = int(1500 * nights * actual_travelers)
+            food_note = f"All-Inclusive в отеле: основное питание включено, заложены перекусы и напитки ({food_min:,}–{food_max:,} ₽ за {nights} н., {actual_travelers} путешеств.)"
         elif is_half_board:
-            food_min = int(food_daily["min"] * 0.5 * nights)
-            food_max = int(food_daily["max"] * 0.5 * nights)
-            food_note = f"Полупансион (завтрак + ужин): заложены обеды в кафе и ресторанах ({food_min:,}–{food_max:,} ₽ за {nights} н.)"
+            food_min = int(food_daily["min"] * 0.5 * nights * actual_travelers)
+            food_max = int(food_daily["max"] * 0.5 * nights * actual_travelers)
+            food_note = f"Полупансион (завтрак + ужин): заложены обеды в кафе и ресторанах ({food_min:,}–{food_max:,} ₽ за {nights} н., {actual_travelers} путешеств.)"
         else:
-            food_min = int(food_daily["min"] * nights)
-            food_max = int(food_daily["max"] * nights)
-            food_note = f"Завтрак включен: заложены обеды и ужины в кафе и ресторанах ({food_min:,}–{food_max:,} ₽ за {nights} н.)"
+            food_min = int(food_daily["min"] * nights * actual_travelers)
+            food_max = int(food_daily["max"] * nights * actual_travelers)
+            food_note = f"Завтрак включен: заложены обеды и ужины в кафе и ресторанах ({food_min:,}–{food_max:,} ₽ за {nights} н., {actual_travelers} путешеств.)"
 
-        # Развлечения и экскурсии масштабируются пропорционально длительности
-        ent_min = max(2000, int(ent_tour.get("min", 10000) / 7.0 * nights))
-        ent_max = max(5000, int(ent_tour.get("max", 25000) / 7.0 * nights))
+        ent_min = max(2000, int(ent_tour.get("min", 10000) / 7.0 * nights * actual_travelers))
+        ent_max = max(5000, int(ent_tour.get("max", 25000) / 7.0 * nights * actual_travelers))
 
         actual_rooms = max(1, rooms_count or 1)
-        actual_travelers = max(1, travelers_count or 1)
         hotel_total = hotel_price_per_night * nights * actual_rooms
         pet_total = (pet_surcharge_per_night or 0) * nights
         flight_total = flight_price_roundtrip * actual_travelers
@@ -463,6 +463,7 @@ class MCPTools:
                 "total_mandatory_rub": mandatory_total
             },
             "onsite_flexible": {
+                "travelers_count": actual_travelers,
                 "food_range_rub": {"min": food_min, "max": food_max},
                 "food_note": food_note,
                 "entertainment_range_rub": {"min": ent_min, "max": ent_max},
