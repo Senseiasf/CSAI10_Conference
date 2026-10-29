@@ -306,9 +306,9 @@ class MCPTools:
 
         is_any_lux = any(t in ("luxury", "extreme_luxury", "luxury_extreme") for t in (preferred_tags or []))
         if is_any_lux:
-            hotels.sort(key=lambda h: (-hotel_tag_score(h), -h.price_per_night_rub))
+            hotels.sort(key=lambda h: (-hotel_tag_score(h), -h.price_per_night_rub, h.id))
         else:
-            hotels.sort(key=lambda h: (-hotel_tag_score(h), h.price_per_night_rub))
+            hotels.sort(key=lambda h: (-hotel_tag_score(h), h.price_per_night_rub, h.id))
 
         if preferred_hotel_id:
             hotels.sort(key=lambda h: 0 if h.id == preferred_hotel_id else 1)
@@ -398,7 +398,8 @@ class MCPTools:
         meals_type: str = "Завтрак включен",
         nights: int = 7,
         pet_surcharge_per_night: int = 0,
-        rooms_count: int = 1
+        rooms_count: int = 1,
+        travelers_count: int = 1
     ) -> Dict[str, Any]:
         """
         MCP Tool / Calculator: Рассчитывает детальную структуру расходов:
@@ -436,9 +437,11 @@ class MCPTools:
         ent_max = max(5000, int(ent_tour.get("max", 25000) / 7.0 * nights))
 
         actual_rooms = max(1, rooms_count or 1)
+        actual_travelers = max(1, travelers_count or 1)
         hotel_total = hotel_price_per_night * nights * actual_rooms
         pet_total = (pet_surcharge_per_night or 0) * nights
-        mandatory_total = flight_price_roundtrip + hotel_total + transfer_price + pet_total
+        flight_total = flight_price_roundtrip * actual_travelers
+        mandatory_total = flight_total + hotel_total + transfer_price + pet_total
 
         onsite_min = food_min + ent_min
         onsite_max = food_max + ent_max
@@ -449,7 +452,8 @@ class MCPTools:
         return {
             "nights": nights,
             "mandatory": {
-                "flight_roundtrip": flight_price_roundtrip,
+                "flight_roundtrip": flight_total,
+                "travelers_count": actual_travelers,
                 "rooms_count": actual_rooms,
                 "hotel_total": hotel_total,
                 "hotel_per_night": hotel_price_per_night,

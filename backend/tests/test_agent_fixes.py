@@ -86,9 +86,9 @@ class AgentFixesTest(unittest.IsolatedAsyncioTestCase):
         profile = {"nights": 7, "has_pets": True, "has_kids": False, "interests": ["pet_friendly"]}
         result, _ = await self.run_agent("Сочи", [hotel], profile=profile)
 
-        # 1500 * 7 = 10,500 ₽ pet surcharge
-        # hotel = 35,000, flight = 20,000, transfer = 2,000 -> mandatory without pet = 57,000; with pet = 67,500
-        self.assertEqual(result["cart"]["total_mandatory_rub"], 67500)
+        # 1500 * 7 = 10,500 ₽ pet surcharge; cart uses the same calendar rate as the response.
+        self.assertEqual(result["cart"]["total_mandatory_rub"],
+                         result["budget_breakdown"]["mandatory"]["total_mandatory_rub"])
         self.assertIn("Доплата за питомца", result["text"])
         self.assertIn("1,500", result["text"])
         self.assertIn("10,500", result["text"])

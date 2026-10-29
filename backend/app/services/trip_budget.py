@@ -3,7 +3,7 @@ import re
 from decimal import Decimal
 
 
-AMOUNT = r"(?P<amount>-?(?:\d{1,3}(?:[ \u00a0\u202f]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?))"
+AMOUNT = r"(?P<amount>-?(?:\d{1,3}(?:[ \u00a0\u202f.]\d{3})+(?:,\d+)?|\d+(?:[.,]\d+)?))"
 UNIT = r"\s*(?P<unit>тыс(?:яч\w*)?\.?|[кk](?!\w)|млн\.?|миллион\w*)?"
 MONEY = AMOUNT + UNIT + r"\s*(?:₽|руб\w*)?"
 CHEAPER = r"(?:дешевле|подешевле|бюджетнее|экономнее|сниз\w*\s+(?:цену|бюджет)|уменьш\w*\s+(?:цену|бюджет))"
@@ -13,12 +13,15 @@ def update_trip_budget(message: str, profile: dict, cart: dict) -> str | None:
     """Store a total ceiling; return a question when the requested scope is unclear."""
     text = message.lower()
     reduction = re.search(CHEAPER + r"\s+на\s+" + MONEY, text)
-    absolute = re.search(r"\b(?:бюджет(?:ом)?(?:\s+(?:до|не более))?|не больше|не более|не дороже|улож\w*\s+в|до)\s*[:—]?\s*" + MONEY, text)
+    absolute = re.search(r"\b(?:бюджет(?:ом)?(?:\s+(?:до|не более))?|лимит|не больше|не более|не дороже|улож\w*\s+в|до)(?:\s*[-:—]\s+|\s*)" + MONEY, text)
     match = reduction or absolute
+    if not match and profile.get("awaiting_budget"):
+        match = re.fullmatch(r"\s*" + MONEY + r"\s*", text)
     if not match:
         if re.search(CHEAPER + r"\s+на\b", text):
             return "На сколько рублей снизить полную стоимость поездки? Укажите сумму числом."
         if re.search(r"\bбюджет\b", text):
+            profile["awaiting_budget"] = True
             return "Укажите общий бюджет всей поездки числом в рублях, например: «бюджет до 100 тысяч»."
         return None
 
@@ -32,7 +35,8 @@ def update_trip_budget(message: str, profile: dict, cart: dict) -> str | None:
     # Bare 'до 7 ночей' is a duration, not a monetary constraint.
     if re.match(r"\s*(?:ноч\w*|дн\w*|сут\w*|недел\w*|человек\w*|лет)\b", tail):
         return None
-    value = Decimal(re.sub(r"[ \u00a0\u202f]", "", match["amount"]).replace(",", "."))
+    raw_amount = re.sub(r"(?<=\d)\.(?=\d{3}(?:\D|$))", "", match["amount"])
+    value = Decimal(re.sub(r"[ \u00a0\u202f]", "", raw_amount).replace(",", "."))
     unit = match["unit"] or ""
     factor = 1_000_000 if unit.startswith(("млн", "миллион")) else 1000 if unit else 1
     amount = int(value * factor)
@@ -52,4 +56,5 @@ def update_trip_budget(message: str, profile: dict, cart: dict) -> str | None:
         limit = amount
 
     profile["budget_rub"] = limit
+    profile.pop("awaiting_budget", None)
     return None
