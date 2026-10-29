@@ -29,6 +29,10 @@ from app.services.graph_service import GraphService
 from app.services.compliance_service import ComplianceService
 from app.services.calendar_service import CalendarService
 from app.services.ltr_service import LTRService
+from app.services.trip_controller import TripController
+from app.services.trip_state_store import TripStateStore
+from app.services.graph_repository import graph_repository
+from app.services.quote_service import build_tour_version, compare_quotes, version_breakdown
 
 logger = logging.getLogger(__name__)
 
@@ -1634,10 +1638,11 @@ class AgentService:
             "fixed_costs_rub": fixed_costs, "rooms_count": rooms, "travelers_count": travelers,
         }
         validate_package_totals(breakdown)
-        return breakdown
+        return version_breakdown(breakdown, profile.get("_current_quote_id"))
 
     @staticmethod
-    async def evaluate_hotels(dest_id: str, hotels: list[dict], profile: dict, *, flexible_dates: bool = False) -> list:
+    async def evaluate_hotels(dest_id: str, hotels: list[dict], profile: dict, *, flexible_dates: bool = False,
+                              preserve_cart: dict | None = None) -> list:
         evaluated = []
         for hotel in hotels:
             logistics = await MCPTools.check_logistics_compatibility(
@@ -1645,6 +1650,8 @@ class AgentService:
                 prefer_direct_flight=profile.get("prefer_direct_flight"),
                 without_transfer=profile.get("without_transfer", False), flight_time_pref=profile.get("flight_time_pref"),
             )
+            if preserve_cart:
+                logistics = graph_repository.preserve_compatible_hotel_change(preserve_cart, hotel, profile, logistics)
             if not logistics.get("compatible") or "price_rub_roundtrip" not in logistics.get("flight", {}):
                 continue
             if not profile.get("without_transfer") and "price_rub" not in logistics.get("transfer", {}):
@@ -1723,8 +1730,10 @@ class AgentService:
         estimate_key = "min" if profile.get("budget_estimate") == "min" else "max"
         limit = profile.get("budget_rub")
         if not without_transfer and limit is not None and breakdown["total_trip_budget_range_rub"][estimate_key] > limit:
+            profile["without_transfer"] = bool(cart.get("without_transfer", True))
             return {"text": f"С трансфером оценка превысит лимит {limit:,} ₽. Текущий план без трансфера сохранён.",
                     "state": "TRANSFER_OVER_BUDGET", "cart": cart}
+        breakdown = version_breakdown(breakdown, (updated.get("budget_breakdown") or {}).get("quote_id"))
         updated["original_transfer"] = original
         if without_transfer:
             logistics["transfer"] = {"name": "Самостоятельный проезд", "type": "self", "price_rub": 0, "duration_min": None}
@@ -1958,27 +1967,39 @@ class AgentService:
             cart["destination"] = single_destination_name("sochi", cart.get("destination", "Сочи"), cart.get("hotel_city"))
             if cart.get("budget_quote"):
                 cart["budget_quote"]["destination"] = cart["destination"]
-        result = await AgentService._process_message(
-            user_id, message, profile, cart, session_obj, progress_callback
-        )
+        if getattr(settings, "DIALOGUE_HANDLER", "v2") == "v2":
+            session_obj.current_cart = deepcopy(cart)
+            result = await TripController().handle(
+                user_id, message, session_obj,
+                AgentService._process_message,
+                AgentService._save_session,
+                progress_callback,
+            )
+        else:
+            result = await AgentService._process_message(
+                user_id, message, profile, cart, session_obj, progress_callback
+            )
+        effective_profile = result.pop("_effective_profile", profile)
         if not result.get("booking_action"):
             # Только условия поиска: служебные поля и история профиля в UI не нужны.
             keys = ("dates", "nights", "adults_count", "kids_count", "has_kids",
                     "has_pets", "private_room_required", "budget_rub", "rooms_count", "without_transfer")
-            result["trip_conditions"] = {key: profile.get(key) for key in keys}
+            result["trip_conditions"] = {key: effective_profile.get(key) for key in keys}
         return result
 
     @staticmethod
     async def _process_message(user_id: str, message: str, profile: dict, cart: dict,
                                session_obj: Any, progress_callback: Optional[Any] = None) -> Dict[str, Any]:
         """
-        Основной цикл обработки запроса путешественника:
-        1. Распознавание интента и профилирование (память пользователя)
+        Совместимый исполнитель подбора и перепланирования поездки.
+        В v2 намерение уже определено DialogueParser и проверено TripController:
+        1. Профилирование и обновление параметров (память пользователя)
         2. Пункт 4 ТЗ: Анти-15-вопросов при нечетком старте
         3. Пункт 3 ТЗ: Fallback & рекомендации для неизвестных направлений
         4. Пункт 2 ТЗ: Динамическое перепланирование на лету без сброса контекста
         5. Пункт 5 ТЗ: Имитация чекаута и ваучер
         """
+        skip_llm = bool(profile.pop("_skip_llm_dispatch", False))
         user_lower = message.lower().replace("ё", "е").strip()
         previous_cart = deepcopy(cart)
         transfer_setting = transfer_preference(message)
@@ -2105,7 +2126,7 @@ class AgentService:
         # ИИ сам извлекает параметры (город вылета, время, географию, неизвестные локации, тип перепланирования, теги)
         # без необходимости для пользователя говорить точные кодовые слова.
         has_dest_in_cart = bool(cart.get("destination_id"))
-        if not settings.is_mock_llm and not user_id.startswith("test") and not (deterministic_trip_edit or requested_estimate):
+        if not skip_llm and not settings.is_mock_llm and not user_id.startswith("test") and not (deterministic_trip_edit or requested_estimate):
             llm_decision = await LLMService.dispatch_intent(
                 user_message=message,
                 profile=profile,
@@ -2469,7 +2490,8 @@ class AgentService:
             )
             hotels = hotel_comparison.get("compared_hotels", [])
             if selected_hotel_query:
-                matches = matching_hotels(selected_hotel_query, hotels)
+                resolved_hotel_id = profile.get("_resolved_hotel_id")
+                matches = [hotel for hotel in hotels if hotel["id"] == resolved_hotel_id] if resolved_hotel_id else matching_hotels(selected_hotel_query, hotels)
                 if len(matches) != 1:
                     reply = (f"По названию «{selected_hotel_query}» найдено несколько отелей. Уточните полное название."
                              if matches else f"Отель «{selected_hotel_query}» не найден среди доступных в текущем направлении с вашими условиями.")
@@ -2483,6 +2505,8 @@ class AgentService:
             evaluated_regions.append((candidate, await AgentService.evaluate_hotels(
                 candidate["id"], hotels, profile,
                 flexible_dates=(is_replan_cheaper and is_any_time and not profile.get("date_shifted")),
+                preserve_cart=previous_cart if selected_hotel_query and previous_cart.get("hotel_id")
+                             and previous_cart.get("destination_id") == candidate["id"] else None,
             )))
 
         if selected_hotel_query:
@@ -2984,6 +3008,8 @@ class AgentService:
                 preferences = {} if forget_preferences else remembered_preferences(user_session.profile or {})
                 user_session.profile = preferences
                 user_session.current_cart = {}
+                user_session.trip_state = None
+                user_session.trip_quote = None
                 user_session.conversation_history = []
                 user_session.current_state = "INSPIRATION"
                 await session.commit()
@@ -2991,11 +3017,39 @@ class AgentService:
 
     @staticmethod
     async def _save_session(user_id: str, profile: dict, cart: dict, user_msg: str, agent_reply: str):
+        if profile.get("_comparison_only"):
+            return
         async with async_session_maker() as session:
             sess_to_update = await session.get(UserSessionModel, user_id)
             if sess_to_update:
+                previous_cart = deepcopy(sess_to_update.current_cart or {})
+                previous_quote = TripStateStore.quote_from_cart(previous_cart)
+                profile.pop("_current_quote_id", None)
+                profile.pop("_resolved_hotel_id", None)
+                state, quote = TripStateStore.from_legacy(profile, cart)
+                if quote and cart.get("hotel_id") and quote.quote_id != (previous_quote.quote_id if previous_quote else None):
+                    if previous_quote:
+                        quote.previous_quote_id = previous_quote.quote_id
+                        cart["budget_breakdown"] = quote.enrich_breakdown(cart["budget_breakdown"])
+                    previous_version_id = previous_cart.get("tour_version_id")
+                    version = build_tour_version(cart, profile, quote, previous_version_id, user_msg)
+                    try:
+                        await graph_repository.save_tour_version(version)
+                        version.persistence_status = "saved"
+                        cart["versioning"] = {"status": "saved", "version_id": version.version_id}
+                    except Exception as exc:
+                        version.persistence_status = "failed"
+                        cart["versioning"] = {"status": "failed", "version_id": version.version_id, "error": str(exc)[:500]}
+                        logger.warning("Neo4j tour version save failed for %s: %s", user_id, exc)
+                    cart["tour_version_id"] = version.version_id
+                    cart["previous_tour_version_id"] = previous_version_id
+                    cart["tour_version"] = version.model_dump(mode="json")
+                    cart["quote_difference"] = compare_quotes(previous_quote, quote)
+                    profile["tour_version_id"] = version.version_id
+                    state, quote = TripStateStore.from_legacy(profile, cart)
                 sess_to_update.profile = deepcopy(profile)
                 sess_to_update.current_cart = deepcopy(cart)
+                TripStateStore.project(sess_to_update, state, quote)
                 sess_history = list(sess_to_update.conversation_history or [])
                 sess_history.append({"user": user_msg, "agent": agent_reply})
                 sess_to_update.conversation_history = sess_history

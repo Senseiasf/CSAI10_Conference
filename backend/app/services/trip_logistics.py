@@ -14,6 +14,20 @@ def is_logistics_question(message: str) -> bool:
 
 
 def connection_summary(logistics: dict) -> str:
+    connections = (logistics.get("route") or {}).get("connections") or []
+    if connections:
+        connection = connections[0]
+        airport = connection.get("airport") or {}
+        city = airport.get("name")
+        code = airport.get("code")
+        place = " ".join(str(value) for value in (city, f"({code})" if code else None) if value) or "аэропорт не указан"
+        minutes = connection.get("duration_minutes")
+        duration = f"{minutes} мин" if minutes is not None else "длительность не указана"
+        note = connection.get("risk_note")
+        facts = f"Пересадка: {place}, {duration}. " + (note or "Данных о риске пересадки недостаточно.")
+        if connection.get("status") == "unknown" or connection.get("baggage_status") == "unknown":
+            facts += " Статус пересадки: неизвестно; единый билет и сквозной багаж не подтверждены."
+        return facts
     flight = logistics.get("flight", {})
     layover = logistics.get("timeline", {}).get("layover_details", {})
     if layover.get("is_connecting") or flight.get("flight_type") == "connecting":

@@ -1,4 +1,5 @@
-import os
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,13 +28,25 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_USERNAME: str = "OstrovokTravelBot"
     
     # LLM (OpenAI-compatible / DeepSeek)
+    LLM_MODE: Literal["mock", "live"] = "mock"
+    DIALOGUE_HANDLER: Literal["legacy", "v2"] = "v2"
     OPENAI_API_KEY: str = ""
     OPENAI_BASE_URL: str = "https://api.deepseek.com"
     OPENAI_MODEL: str = "deepseek-flash"
-    
+
     @property
     def is_mock_llm(self) -> bool:
-        return not self.OPENAI_API_KEY or self.OPENAI_API_KEY.strip().lower() in ("mock", "stub", "dummy", "")
+        return self.LLM_MODE == "mock"
+
+    @property
+    def llm_configuration_error(self) -> str | None:
+        if self.is_mock_llm:
+            return None
+        if self.OPENAI_API_KEY.strip().lower() in ("", "mock", "stub", "dummy"):
+            return "LLM_MODE=live требует действующий OPENAI_API_KEY"
+        if not self.OPENAI_BASE_URL.strip() or not self.OPENAI_MODEL.strip():
+            return "Для live-режима укажите OPENAI_BASE_URL и OPENAI_MODEL"
+        return None
     
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -643,7 +643,9 @@
         document.getElementById('healthStatusText').textContent = data.status === 'ok' ? 'Все системы работают' : 'Есть проблемы с сервисами';
         document.getElementById('postgresStatus').textContent = data.postgres ? 'Подключено' : 'Недоступно';
         document.getElementById('neo4jStatus').textContent = data.neo4j ? 'Подключено' : 'Недоступно';
-        document.getElementById('llmModeText').textContent = data.llm_mode === 'mock' ? 'Mock Agent' : data.llm_mode;
+        const llmLabel = data.llm_mode === 'mock' ? 'Mock Agent' : data.llm_mode;
+        document.getElementById('llmModeText').textContent = data.llm?.error
+          ? `${llmLabel} · Ошибка: ${data.llm.error.message}` : llmLabel;
         document.getElementById('ltrStatusText').textContent = data.ltr_ranker
           ? data.ltr_ranker.available ? `${data.ltr_ranker.engine} · ${data.ltr_ranker.model_size_kb} КБ` : 'Резервный аналитический скоринг'
           : 'Статус недоступен';

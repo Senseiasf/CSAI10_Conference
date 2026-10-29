@@ -7,6 +7,8 @@ from app.config import settings
 from app.mcp.tools import MCPTools
 from app.services.agent_service import AgentService
 from app.services.llm_service import LLMService
+from app.domain.dialogue import DialogueDecision, DialogueIntent
+from app.services.dialogue_parser import DialogueParser
 from app.services.trip_budget import update_trip_budget
 
 
@@ -103,7 +105,8 @@ class ReportedRegressionsTest(unittest.IsolatedAsyncioTestCase):
         user = SimpleNamespace(profile={"nights": 5}, current_cart={}, current_state="INSPIRATION")
         with self.patches(user) as stack:
             stack.enter_context(patch.object(type(settings), "is_mock_llm", new_callable=PropertyMock, return_value=False))
-            stack.enter_context(patch.object(LLMService, "dispatch_intent", new=AsyncMock(return_value={"action": "plan"})))
+            stack.enter_context(patch.object(DialogueParser, "parse", new=AsyncMock(
+                return_value=DialogueDecision(intent=DialogueIntent.PLAN))))
             advice = stack.enter_context(patch.object(LLMService, "generate_concierge_advice", new_callable=AsyncMock))
             result = await AgentService.process_message("real-user", "ОАЭ, бюджет 200.000")
         advice.assert_not_awaited()

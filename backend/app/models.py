@@ -71,5 +71,7 @@ class UserSessionModel(Base):
     current_state = Column(String(64), default="INSPIRATION")
     profile = Column(JSONB, default=dict)  # preferences: budget, children, pets, dates
     current_cart = Column(JSONB, default=dict)  # current assembled trip
+    trip_state = Column(JSONB, nullable=True)
+    trip_quote = Column(JSONB, nullable=True)
     conversation_history = Column(JSONB, default=list)  # message list
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

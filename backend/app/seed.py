@@ -33,6 +33,8 @@ async def seed_postgres(data: dict):
         # Create all tables
         await conn.run_sync(Base.metadata.create_all)
         await conn.execute(text("ALTER TABLE hotels ADD COLUMN IF NOT EXISTS pet_surcharge_per_night_rub INTEGER DEFAULT 0;"))
+        await conn.execute(text("ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS trip_state JSONB;"))
+        await conn.execute(text("ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS trip_quote JSONB;"))
 
     async with async_session_maker() as session:
         for dest in data["destinations"]:

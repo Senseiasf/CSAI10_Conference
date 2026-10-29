@@ -10,7 +10,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from app.database import async_session_maker
 from app.models import DestinationModel, HotelModel, RiskAlertModel, UserSessionModel
 from app.services.vector_service import generate_text_embedding
-from app.services.graph_service import GraphService
+from app.services.graph_repository import graph_repository
 
 logger = logging.getLogger("mcp_tools")
 
@@ -380,13 +380,13 @@ class MCPTools:
         (Аэропорт вылета) -[:FLIGHT_TO]-> (Аэропорт прибытия) -[:TRANSFER_TO]-> (Отель)
         """
         logger.info(f"[MCP] Calling check_logistics_compatibility: {origin_airport_code} -> {airport_code} -> {hotel_id}, direct={prefer_direct_flight}, no_transfer={without_transfer}, time_pref={flight_time_pref}")
-        return await GraphService.validate_logistics(
-            airport_code=airport_code,
-            hotel_id=hotel_id,
+        return await graph_repository.check_compatibility(
+            airport_code,
+            hotel_id,
             origin_airport_code=origin_airport_code,
             prefer_direct_flight=prefer_direct_flight,
             without_transfer=without_transfer,
-            flight_time_pref=flight_time_pref
+            flight_time_pref=flight_time_pref,
         )
 
     @staticmethod
