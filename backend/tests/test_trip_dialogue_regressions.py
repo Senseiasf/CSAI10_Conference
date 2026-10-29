@@ -14,7 +14,7 @@ from app.services.agent_service import AgentService
 from app.services.llm_service import LLMService
 from app.services.trip_dates import update_trip_dates
 from app.services.trip_budget import validate_package_totals
-from app.services.trip_state import requested_destination, rejected_destinations, hotel_selection, destination_choice
+from app.services.trip_state import requested_destination, rejected_destinations, hotel_selection, destination_choice, transfer_preference
 
 
 def make_user(**overrides):
@@ -61,13 +61,91 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
         logistics = {"compatible": True, "airport": "LED", "flight": {"price_rub_roundtrip": flight_price,
                      "origin_code": "SVO", "origin_name": "Москва", "airline": "Test Air", "flight_no": "T1"},
                      "transfer": {"price_rub": transfer_price, "name": "Трансфер"}, "timeline": {}}
-        stack.enter_context(patch.object(MCPTools, "check_logistics_compatibility", new=AsyncMock(return_value=logistics)))
+        self.logistics = stack.enter_context(patch.object(MCPTools, "check_logistics_compatibility", new=AsyncMock(return_value=logistics)))
         stack.enter_context(patch.object(MCPTools, "get_destination_risks", new=AsyncMock(return_value={})))
         stack.enter_context(patch.object(MCPTools, "get_live_weather", new=AsyncMock(return_value={})))
         stack.enter_context(patch("app.services.agent_service.settings", SimpleNamespace(is_mock_llm=False)))
         self.dispatch = stack.enter_context(patch.object(LLMService, "dispatch_intent", new=AsyncMock(
             return_value={"action": "consultation", "text": "Старый ответ без пересчёта"})))
         return stack
+
+    async def test_remove_transfer_preserves_every_other_quoted_segment(self):
+        user = make_user(budget_rub=1000000)
+        with self.fixture(user):
+            first = await AgentService.process_message("web:transfer", "Пересчитай на 5 ночей")
+            before = copy.deepcopy(first["cart"])
+            for mock in (self.search, self.compare, self.logistics, self.dispatch):
+                mock.reset_mock()
+            result = await AgentService.process_message("web:transfer", "Трансфер не нужен, оставь остальной план")
+            for mock in (self.search, self.compare, self.logistics, self.dispatch):
+                mock.assert_not_awaited()
+        self.assertEqual(result["state"], "TRANSFER_REMOVED")
+        after = result["cart"]
+        for key in ("hotel_id", "hotel", "flight", "destination_id", "dates", "checkin_date", "checkout_date",
+                    "nights", "travelers_count", "rooms_count", "price_per_night_rub"):
+            self.assertEqual(after[key], before[key], key)
+        self.assertEqual(after["logistics"]["flight"], before["logistics"]["flight"])
+        self.assertEqual(after["logistics"]["transfer"]["type"], "self")
+        self.assertEqual(after["logistics"]["transfer"]["price_rub"], 0)
+        self.assertIsNone(after["logistics"]["timeline"]["hotel_arrival"])
+        self.assertTrue(result["trip_conditions"]["without_transfer"])
+        self.assertEqual(after["total_mandatory_rub"], before["total_mandatory_rub"] - 2000)
+        for bound in ("min", "max"):
+            self.assertEqual(after["total_trip_budget_range_rub"][bound], before["total_trip_budget_range_rub"][bound] - 2000)
+        self.assertEqual(result["budget_breakdown"], after["budget_breakdown"])
+        self.assertEqual(result["logistics"], after["logistics"])
+        validate_package_totals(after["budget_breakdown"])
+
+    async def test_transfer_removal_is_idempotent_and_can_restore_original_quote(self):
+        user = make_user(budget_rub=1000000)
+        with self.fixture(user):
+            first = await AgentService.process_message("web:transfer", "Пересчитай на 5 ночей")
+            before = copy.deepcopy(first["cart"])
+            removed = await AgentService.process_message("web:transfer", "Убери трансфер")
+            again = await AgentService.process_message("web:transfer", "Не нужен трансфер")
+            self.assertEqual(again["cart"]["total_mandatory_rub"], removed["cart"]["total_mandatory_rub"])
+            self.assertEqual(again["cart"]["total_trip_budget_range_rub"], removed["cart"]["total_trip_budget_range_rub"])
+            restored = await AgentService.process_message("web:transfer", "Верни трансфер")
+        self.assertEqual(restored["state"], "TRANSFER_INCLUDED")
+        self.assertFalse(restored["trip_conditions"]["without_transfer"])
+        self.assertEqual(restored["cart"]["total_trip_budget_range_rub"], before["total_trip_budget_range_rub"])
+        self.assertEqual(restored["logistics"], before["logistics"])
+        validate_package_totals(restored["budget_breakdown"])
+
+    async def test_transfer_removal_supports_already_saved_carts_without_full_ledger(self):
+        user = make_user(budget_rub=1000000)
+        with self.fixture(user):
+            first = await AgentService.process_message("web:transfer", "Пересчитай на 5 ночей")
+            user.current_cart.pop("budget_breakdown", None)
+            self.search.reset_mock()
+            self.compare.reset_mock()
+            result = await AgentService.process_message("web:transfer", "Трансфер нам не нужен")
+            self.search.assert_not_awaited()
+            self.compare.assert_not_awaited()
+        self.assertEqual(result["state"], "TRANSFER_REMOVED")
+        self.assertEqual(result["cart"]["total_mandatory_rub"], first["cart"]["total_mandatory_rub"] - 2000)
+        validate_package_totals(result["budget_breakdown"])
+
+    async def test_transfer_restoration_respects_budget_and_preserves_current_plan(self):
+        user = make_user(budget_rub=1000000)
+        with self.fixture(user):
+            await AgentService.process_message("web:transfer", "Пересчитай на 5 ночей")
+            removed = await AgentService.process_message("web:transfer", "Без трансфера")
+            user.profile["budget_rub"] = removed["cart"]["total_trip_budget_range_rub"]["max"]
+            result = await AgentService.process_message("web:transfer", "Добавь трансфер")
+        self.assertEqual(result["state"], "TRANSFER_OVER_BUDGET")
+        self.assertEqual(result["cart"], removed["cart"])
+        self.assertTrue(user.profile["without_transfer"])
+
+    async def test_compound_transfer_and_duration_edit_reprices_new_duration(self):
+        user = make_user(budget_rub=1000000)
+        with self.fixture(user):
+            await AgentService.process_message("web:transfer", "Пересчитай на 5 ночей")
+            result = await AgentService.process_message("web:transfer", "Трансфер не нужен, и на 8 ночей")
+        self.assertEqual(result["cart"]["nights"], 8)
+        self.assertTrue(user.profile["without_transfer"])
+        self.assertEqual(result["budget_breakdown"]["mandatory"]["transfer"], 0)
+        self.assertNotIn("с перелётом, отелем и трансфером", result["text"])
 
     async def test_question_about_eight_nights_recalculates_without_free_form_reply(self):
         user = make_user(budget_rub=1000000)
@@ -357,6 +435,16 @@ class StatePersistenceTest(unittest.IsolatedAsyncioTestCase):
 
 
 class ExplicitSlotsTest(unittest.TestCase):
+    def test_transfer_preference_word_order_and_negation(self):
+        for text in ("Трансфер не нужен, оставь остальной план", "Не нужен трансфер", "Трансфер нам не нужен",
+                     "Без трансфера", "Убери трансфер", "Поедем сами"):
+            with self.subTest(text=text):
+                self.assertIs(transfer_preference(text), True)
+        for text in ("Не убирай трансфер", "Верни трансфер", "Добавь трансфер", "Трансфер нужен"):
+            with self.subTest(text=text):
+                self.assertIs(transfer_preference(text), False)
+        self.assertIsNone(transfer_preference("Какие условия отмены трансфера?"))
+
     def test_generic_hotel_requests_are_not_mistaken_for_hotel_names(self):
         for message in ("Выбери спокойный отель в Сочи для двоих", "Выбери отель в Дубае рядом с метро",
                         "Выбери семейный отель в ОАЭ с детским бассейном", "Выбери загородный отель для двоих",

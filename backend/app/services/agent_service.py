@@ -18,6 +18,7 @@ from app.services.trip_state import (
     estimate_request, is_trip_edit, requested_destination,
     hotel_selection, matching_hotels, rejected_destinations, wants_cheaper,
     destination_choice,
+    transfer_preference,
 )
 from app.services.booking_stub import detect_booking_action, booking_stub
 from app.services.preference_memory import remembered_preferences
@@ -1664,6 +1665,104 @@ class AgentService:
         }
 
     @staticmethod
+    def change_saved_transfer(profile: dict, cart: dict, without_transfer: bool) -> Optional[dict]:
+        """Edit only the included transfer of an already quoted single-hotel trip."""
+        if not cart.get("hotel_id") or cart.get("is_multi_city") or not cart.get("logistics") or not cart.get("pricing_inputs"):
+            return None
+        updated = deepcopy(cart)
+        logistics = updated["logistics"]
+        current_transfer = logistics.get("transfer", {})
+        original = updated.get("original_transfer")
+        if current_transfer.get("type") != "self":
+            original = {"transfer": deepcopy(current_transfer), "timeline": deepcopy(logistics.get("timeline", {})),
+                        "logistics_status": logistics.get("logistics_status")}
+        if not without_transfer and not original:
+            return None
+        breakdown = deepcopy(updated.get("budget_breakdown"))
+        if not breakdown:
+            # Earlier carts retain exact pricing inputs and the quoted range.
+            # Reconstruct the ledger without querying or replacing any segment.
+            inputs = updated["pricing_inputs"]
+            nights = updated["nights"]
+            calc = AgentService.calculate_real_trip_cost_by_date(
+                date.fromisoformat(updated["checkin_date"]), nights,
+                inputs["flight_roundtrip_per_person_rub"], inputs["hotel_per_room_night_rub"],
+                inputs["fixed_costs_rub"], inputs["rooms_count"], inputs["travelers_count"],
+            )
+            old_transfer = current_transfer.get("price_rub", 0)
+            travelers = inputs["travelers_count"]
+            breakdown = {
+                "nights": nights, "checkin_date": updated["checkin_date"], "checkout_date": updated["checkout_date"],
+                "mandatory": {
+                    "travelers_count": travelers, "rooms_count": inputs["rooms_count"],
+                    "flight_roundtrip": calc["flight_total"], "flight_price_roundtrip": calc["flight_total"],
+                    "flight_out_price": calc["flight_out"], "flight_ret_price": calc["flight_ret"],
+                    "flight_out_per_person_rub": calc["flight_out"] // travelers,
+                    "flight_ret_per_person_rub": calc["flight_ret"] // travelers,
+                    "hotel_per_night": calc["hotel_rate"], "hotel_total": calc["hotel_total"],
+                    "transfer": old_transfer, "pet_total": inputs["fixed_costs_rub"] - old_transfer,
+                    "total_mandatory_rub": updated["total_mandatory_rub"],
+                },
+                "onsite_flexible": {"total_onsite_range_rub": {
+                    key: updated["total_trip_budget_range_rub"][key] - updated["total_mandatory_rub"] for key in ("min", "max")
+                }},
+                "total_trip_budget_range_rub": deepcopy(updated["total_trip_budget_range_rub"]),
+                "pricing_inputs": deepcopy(inputs), "pricing_source": "saved_quote",
+            }
+        validate_package_totals(breakdown)
+        old_price = breakdown["mandatory"]["transfer"]
+        new_price = 0 if without_transfer else original["transfer"]["price_rub"]
+        delta = new_price - old_price
+        breakdown["mandatory"]["transfer"] = new_price
+        breakdown["mandatory"]["total_mandatory_rub"] += delta
+        for bound in ("min", "max"):
+            breakdown["total_trip_budget_range_rub"][bound] += delta
+        breakdown["pricing_inputs"]["fixed_costs_rub"] += delta
+        validate_package_totals(breakdown)
+        estimate_key = "min" if profile.get("budget_estimate") == "min" else "max"
+        limit = profile.get("budget_rub")
+        if not without_transfer and limit is not None and breakdown["total_trip_budget_range_rub"][estimate_key] > limit:
+            return {"text": f"С трансфером оценка превысит лимит {limit:,} ₽. Текущий план без трансфера сохранён.",
+                    "state": "TRANSFER_OVER_BUDGET", "cart": cart}
+        updated["original_transfer"] = original
+        if without_transfer:
+            logistics["transfer"] = {"name": "Самостоятельный проезд", "type": "self", "price_rub": 0, "duration_min": None}
+            logistics.setdefault("timeline", {}).update(hotel_arrival=None, hotel_arrival_day_offset=None, checkin_wait_minutes=None)
+            logistics["logistics_status"] = "Самостоятельный проезд; время прибытия в отель уточняется"
+        else:
+            logistics["transfer"] = deepcopy(original["transfer"])
+            logistics["timeline"] = deepcopy(original["timeline"])
+            if original["logistics_status"] is None:
+                logistics.pop("logistics_status", None)
+            else:
+                logistics["logistics_status"] = original["logistics_status"]
+        if "mandatory_logistics_cost" in logistics:
+            logistics["mandatory_logistics_cost"] += delta
+        updated.update(without_transfer=without_transfer, transfer=logistics["transfer"]["name"],
+                       logistics_check=logistics.get("logistics_status", "Состыковано"), budget_breakdown=breakdown,
+                       pricing_inputs=deepcopy(breakdown["pricing_inputs"]),
+                       total_mandatory_rub=breakdown["mandatory"]["total_mandatory_rub"],
+                       total_trip_budget_range_rub=deepcopy(breakdown["total_trip_budget_range_rub"]))
+        updated["budget_quote"] = AgentService.budget_quote(updated["destination"], {"name": updated["hotel"]}, breakdown)
+        for option in updated.get("flexible_dates", []):
+            option["target_mandatory_rub"] += delta
+        for step in updated.get("reasoning_steps", []):
+            if step.get("stage") == "budget":
+                step["detail"] = f"Обязательные расходы: {updated['total_mandatory_rub']:,} ₽; включённый трансфер: {new_price:,} ₽."
+            elif step.get("stage") == "logistics":
+                step["detail"] = logistics.get("logistics_status", "Состыковано")
+        profile["without_transfer"] = without_transfer
+        bounds = updated["total_trip_budget_range_rub"]
+        action = ("Трансфер уже исключён." if current_transfer.get("type") == "self" else "Трансфер исключён из расчёта.") if without_transfer else "Трансфер возвращён в план."
+        reply = (f"{action} Отель «{updated['hotel']}», рейсы, даты {updated['dates']}, состав и номера сохранены.\n\n"
+                 f"Обязательные расходы: {updated['total_mandatory_rub']:,} ₽. Полная оценка: {bounds['min']:,}–{bounds['max']:,} ₽.")
+        if without_transfer:
+            reply += f"\n\nИз включённых расходов убрано {old_price:,} ₽. Самостоятельную дорогу организуете и оплачиваете отдельно; её стоимость здесь не учтена."
+        return {"text": reply, "state": "TRANSFER_REMOVED" if without_transfer else "TRANSFER_INCLUDED", "cart": updated,
+                "logistics": logistics, "budget_breakdown": breakdown, "reasoning_steps": updated.get("reasoning_steps", []),
+                "flexible_dates": updated.get("flexible_dates", [])}
+
+    @staticmethod
     def calculate_flexible_dates_options(
         dest_id: str,
         base_mandatory_rub: int,
@@ -1852,7 +1951,7 @@ class AgentService:
         if not result.get("booking_action"):
             # Только условия поиска: служебные поля и история профиля в UI не нужны.
             keys = ("dates", "nights", "adults_count", "kids_count", "has_kids",
-                    "has_pets", "private_room_required", "budget_rub", "rooms_count")
+                    "has_pets", "private_room_required", "budget_rub", "rooms_count", "without_transfer")
             result["trip_conditions"] = {key: profile.get(key) for key in keys}
         return result
 
@@ -1869,6 +1968,7 @@ class AgentService:
         """
         user_lower = message.lower().replace("ё", "е").strip()
         previous_cart = deepcopy(cart)
+        transfer_setting = transfer_preference(message)
         selected_hotel_query = hotel_selection(message)
         direct_destination_choice = destination_choice(message) if not selected_hotel_query else None
         slot_message = "" if selected_hotel_query else user_lower
@@ -1941,11 +2041,22 @@ class AgentService:
 
         # 1. Извлечение интересов и обновление профиля пользователя (User Memory)
         profile = AgentService.extract_interests_and_slots(slot_message, profile)
-        deterministic_trip_edit = is_trip_edit(message) or bool(excluded_now) or bool(direct_destination_choice) or budget_changed or previous_calendar != (
+        other_conditions_changed = budget_changed or previous_calendar != (
             profile.get("checkin_date"), profile.get("checkout_date")
         ) or any(
             profile.get(key) != previous_slots[key] for key in slot_keys
         )
+        other_replan_requested = bool(selected_hotel_query or excluded_now or direct_destination_choice or wants_cheaper(message)) or bool(re.search(
+            r"(?:другой|поменяй|смени)\s+(?:отель|город|номер|направление)|"
+            r"прямой|пересад|вылет|рейс|самолет|попозже|пораньше|утром|вечером|днем|любое время",
+            user_lower,
+        ))
+        if transfer_setting is not None and not other_conditions_changed and not other_replan_requested:
+            result = AgentService.change_saved_transfer(profile, cart, transfer_setting)
+            if result:
+                await AgentService._save_session(user_id, profile, result["cart"], message, result["text"])
+                return result
+        deterministic_trip_edit = is_trip_edit(message) or transfer_setting is not None or bool(excluded_now) or bool(direct_destination_choice) or other_conditions_changed
 
         # Проверка вопроса о расписании внутреннего маршрута / переезда между городами
         internal_timing_reply = AgentService.answer_internal_route_timing(user_lower, cart)
@@ -2139,7 +2250,7 @@ class AgentService:
         is_replan_flight_later = any(w in user_lower for w in ["попозже", "самолет попозже", "вылет попозже", "рейс попозже", "не в 6 утра", "не в 6", "не в 7", "не рано", "позже 10", "после 10", "после 12", "вечером", "поздний вылет", "вылетать позже"]) or is_replan_flight_day
         is_replan_flight_morning = any(w in user_lower for w in ["пораньше", "утром", "утренний вылет", "самолет пораньше", "рейс пораньше", "ранний вылет"])
         is_replan_flight = is_replan_flight_later or is_replan_flight_morning or any(w in user_lower for w in ["только прямой", "прямой рейс", "без пересадок", "с пересадкой", "стыковочный", "рейс подешевле"])
-        is_replan_transfer = any(w in user_lower for w in ["убери трансфер", "без трансфера", "поедем сами", "на каршеринге", "возьмем такси сами", "своим ходом", "не нужен трансфер"])
+        is_replan_transfer = transfer_setting is not None
         is_replan_dates = profile.get("dates") != previous_dates and bool(profile.get("checkin_date"))
         is_replan_nights = any(w in user_lower for w in ["ноч", "дн", "сут", "выходн", "уикенд", "недел", "месяц"]) and profile.get("nights") != cart.get("nights")
 
@@ -2209,7 +2320,7 @@ class AgentService:
 
         # Обработка исключения трансфера
         if is_replan_transfer:
-            profile["without_transfer"] = True
+            profile["without_transfer"] = transfer_setting if transfer_setting is not None else True
 
         # Обработка типа рейса
         if any(w in user_lower for w in ["только прямой", "прямой рейс", "без пересадок"]):
@@ -2505,6 +2616,9 @@ class AgentService:
 
         # Сохранение в корзину
         cart.pop("selection_status", None)
+        cart.pop("original_transfer", None)
+        cart["without_transfer"] = profile.get("without_transfer", False)
+        cart["budget_breakdown"] = deepcopy(budget_breakdown)
         if recommended_hotel:
             cart["hotel_id"] = recommended_hotel["id"]
             cart["hotel"] = recommended_hotel["name"]
@@ -2552,7 +2666,8 @@ class AgentService:
             elif is_replan_cheaper and old_total_max is not None:
                 ai_intro = "Пересчитал варианты с сохранением условий. Более дешёвого варианта среди найденных нет:"
             elif is_replan_transfer:
-                ai_intro = "Без проблем! Исключил трансфер из расчёта — вы сможете добраться самостоятельно:"
+                ai_intro = ("Исключил трансфер из расчёта — самостоятельная дорога оплачивается отдельно:"
+                            if profile.get("without_transfer") else "Вернул трансфер в расчёт поездки:")
             elif is_replan_flight:
                 fl_type_str = "только прямой беспосадочный рейс" if profile.get("prefer_direct_flight") else "рейс с комфортной стыковкой"
                 ai_intro = f"Маршрут перестроен: теперь подобран {fl_type_str}:"
@@ -2608,10 +2723,11 @@ class AgentService:
             else:
                 ai_intro = "Собрал для вас самый экономичный вариант тура под ключ с самыми дешёвыми билетами и отелем:"
 
+        package_parts = "с перелётом и отелем; трансфер исключён" if profile.get("without_transfer") else "с перелётом, отелем и трансфером"
         default_intro = (
             f"Собрал для вас самый экономичный тур в {dest_display_name} под ключ с дешёвыми билетами и отелем:"
             if is_cheapest_requested else
-            f"Подобрал для вас проверенный тур в {dest_display_name} под ключ с перелётом, отелем и трансфером:"
+            f"Подобрал для вас проверенный тур в {dest_display_name} {package_parts}:"
         )
         ai_intro = AgentService.sanitize_ai_intro(
             intro=ai_intro,
@@ -2668,7 +2784,7 @@ class AgentService:
 
         # 2. Трансфер в отель
         if profile.get("without_transfer"):
-            response_lines.append(f"2️⃣ 🧳 **Трансфер в отель:** Самостоятельно на такси/каршеринге (исключён по вашему запросу) — **0 ₽**")
+            response_lines.append("2️⃣ 🧳 **Трансфер в отель исключён.** Самостоятельная дорога оплачивается отдельно и в расчёт не входит.")
         else:
             response_lines.append(f"2️⃣ 🚗 **Трансфер в отель:** {tr_name} (~{tr_min} мин): встреча в аэропорту ({timeline.get('transfer_start')}) ➔ прибытие в отель к {timeline.get('hotel_arrival')} — **{tr_price:,} ₽**")
 

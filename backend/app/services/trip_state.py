@@ -70,6 +70,25 @@ def wants_cheaper(message: str) -> bool:
     ))
 
 
+def transfer_preference(message: str) -> bool | None:
+    """Return True for self-organized transport, False for an included transfer."""
+    text = message.lower().replace("ё", "е")
+    if re.search(r"\bне\s+(?:убирай|исключай|отменяй)\s+трансфер|\bне\s+хочу\s+без\s+трансфера", text):
+        return False
+    remove = (
+        r"\b(?:без\s+трансфера|(?:убери|уберите|исключи|удали|отмени)\s+трансфер\w*|"
+        r"трансфер\w*\s+(?:(?:мне|нам)\s+)?не\s+(?:нуж\w*|надо|требуется)|"
+        r"не\s+(?:нуж\w*|надо|требуется)\s+(?:(?:мне|нам)\s+)?трансфер\w*)\b"
+    )
+    if re.search(remove, text) or any(phrase in text for phrase in (
+        "поедем сами", "на каршеринге", "возьмем такси сами", "своим ходом",
+    )):
+        return True
+    if re.search(r"\b(?:верни|добавь|включи)\s+(?:обратно\s+)?трансфер\w*|\bтрансфер\w*\s+нужен\b|\bнужен\s+трансфер\w*", text):
+        return False
+    return None
+
+
 def hotel_selection(message: str) -> str | None:
     match = re.match(r"\s*(?:выбери(?:те)?|выбираю|переключи(?:сь)?\s+на)\s+(.+?)\s*[.!?]?\s*$", message, re.IGNORECASE)
     if not match:

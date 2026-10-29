@@ -484,7 +484,7 @@
       const flight = logistics.flight || {};
       const layover = timeline.layover_details || {};
       const wait = Number(timeline.checkin_wait_minutes) || 0;
-      const hasWarnings = wait > 0 || layover.is_connecting || !logistics.compatible;
+      const hasWarnings = wait > 0 || layover.is_connecting || !logistics.compatible || logistics.transfer?.type === 'self';
       if (!logistics.compatible) return logistics.reason ? `<section class="logistics-card">${renderWarning('Маршрут требует проверки', logistics.reason)}</section>` : '';
       const nextDay = timeline.hotel_arrival_day_offset > 0 ? ` (+${timeline.hotel_arrival_day_offset} дн.)` : '';
       let warnings = '';
@@ -501,7 +501,7 @@
     function renderTrip(data) {
       if (data.booking_action) return;
       if (data.booking) lastTripData = {...lastTripData, cart: data.cart, booking: data.booking};
-      else if (!data.destination && !data.compared_hotels && data.cart?.hotel && data.cart.hotel === lastTripData.cart?.hotel && data.cart.destination_id === lastTripData.cart?.destination_id) lastTripData = {...lastTripData, cart: data.cart, trip_conditions: data.trip_conditions};
+      else if (!data.destination && !data.compared_hotels && data.cart?.hotel && data.cart.hotel === lastTripData.cart?.hotel && data.cart.destination_id === lastTripData.cart?.destination_id) lastTripData = {...lastTripData, ...data};
       else lastTripData = data;
       const view = lastTripData;
       const hotels = view.compared_hotels || [];
@@ -516,6 +516,7 @@
       const mandatory = view.budget_breakdown?.mandatory?.total_mandatory_rub ?? booking?.total_paid_rub ?? cart.total_mandatory_rub;
       const range = view.budget_breakdown?.total_trip_budget_range_rub ?? cart.total_trip_budget_range_rub;
       const logistics = view.logistics || cart.logistics || {};
+      const withoutTransfer = logistics.transfer?.type === 'self' || cart.without_transfer;
       const compliance = view.compliance_info || view.compliance_check || cart.compliance || {};
       let html = '<div class="trip-results">';
       html += renderConditions(view.trip_conditions);
@@ -527,7 +528,7 @@
         const costDeltaBadge = costDelta ? `<span class="cost-delta cost-delta--${costDelta < 0 ? 'down' : 'up'}">${costDelta < 0 ? '↓' : '↑'} ${costDelta > 0 ? '+' : '−'}${money(Math.abs(costDelta))} ${costDelta < 0 ? 'дешевле' : 'дороже'} прошлого варианта</span>` : '';
         const limit = view.trip_conditions?.budget_rub;
         const overBudget = limit != null && range?.max > limit;
-        html += `<section class="package-banner"><div><span class="guru-white">✦ ГУРУ AI</span><h3>Вся поездка — в одном понятном плане</h3><p>Перелёт, проживание и трансфер уже состыкованы. Никаких отдельных корзин.</p></div><div class="package-price"><small>Обязательные расходы</small><strong>${money(mandatory)}</strong>${costDeltaBadge}${range ? `<span>Полный бюджет: ${money(range.min)}–${money(range.max)}</span>` : ''}</div>${overBudget ? renderWarning(`Бюджет превышен на ${money(range.max - limit)}`, `Верхняя оценка поездки — ${money(range.max)} при лимите ${money(limit)}. Можно сократить поездку или изменить условия в чате.`) : ''}</section>`;
+        html += `<section class="package-banner"><div><span class="guru-white">✦ ГУРУ AI</span><h3>Вся поездка — в одном понятном плане</h3><p>${withoutTransfer ? 'Перелёт и проживание включены. Трансфер исключён; самостоятельная дорога оплачивается отдельно.' : 'Перелёт, проживание и трансфер уже состыкованы. Никаких отдельных корзин.'}</p></div><div class="package-price"><small>Обязательные расходы</small><strong>${money(mandatory)}</strong>${costDeltaBadge}${range ? `<span>Полный бюджет: ${money(range.min)}–${money(range.max)}</span>` : ''}</div>${overBudget ? renderWarning(`Бюджет превышен на ${money(range.max - limit)}`, `Верхняя оценка поездки — ${money(range.max)} при лимите ${money(limit)}. Можно сократить поездку или изменить условия в чате.`) : ''}</section>`;
         if (Number.isFinite(currentCost)) lastTotalCost = currentCost;
       }
       if (hotels.length) html += `<div class="results-heading"><div><span class="eyebrow">ПОДОБРАНО ДЛЯ ВАС</span><h2>${hotels.length > 1 ? 'Отели на выбор' : 'Рекомендуемый отель'}</h2></div><span>${hotels.length} ${hotels.length === 1 ? 'вариант' : 'варианта'}</span></div><div class="hotel-list">${hotels.map(renderHotel).join('')}</div>`;
