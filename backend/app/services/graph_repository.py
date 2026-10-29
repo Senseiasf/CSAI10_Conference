@@ -51,6 +51,21 @@ class Neo4jGraphRepository(GraphRepository):
             without_transfer=preferences.get("without_transfer", False),
             flight_time_pref=preferences.get("flight_time_pref"),
         )
+        travelers = max(1, preferences.get("travelers_count") or 1)
+        transfer = result.get("transfer") or {}
+        capacity = transfer.get("capacity") or transfer.get("max_passengers")
+        if result.get("compatible") and capacity is not None and travelers > capacity:
+            return {
+                "compatible": False,
+                "reason": f"Трансфер вмещает {capacity} пассажиров, а едет {travelers}.",
+                "travelers_count": travelers,
+            }
+        if transfer:
+            transfer["capacity_status"] = "known" if capacity is not None else "unknown"
+            if transfer.get("price_per_person_rub") is not None:
+                transfer["price_rub"] = transfer["price_per_person_rub"] * travelers
+        result["travelers_count"] = travelers
+        result["room_capacity_status"] = "unknown"
         if result.get("compatible"):
             cart = {
                 "destination_id": preferences.get("destination_id") or "unknown",

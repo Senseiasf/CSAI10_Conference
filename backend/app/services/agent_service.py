@@ -1150,7 +1150,8 @@ class AgentService:
             origin_airport_code=profile.get("origin_airport"),
             prefer_direct_flight=profile.get("prefer_direct_flight"),
             without_transfer=profile.get("without_transfer", False),
-            flight_time_pref=profile.get("flight_time_pref")
+            flight_time_pref=profile.get("flight_time_pref"),
+            travelers_count=max(1, profile.get("adults_count") or 2) + (profile.get("kids_count") or 0),
         )
         outbound_flight = logistics_1.get("flight", {})
 
@@ -1649,6 +1650,7 @@ class AgentService:
                 airport_code="", hotel_id=hotel["id"], origin_airport_code=profile.get("origin_airport"),
                 prefer_direct_flight=profile.get("prefer_direct_flight"),
                 without_transfer=profile.get("without_transfer", False), flight_time_pref=profile.get("flight_time_pref"),
+                travelers_count=max(1, profile.get("adults_count") or 2) + (profile.get("kids_count") or 0),
             )
             if preserve_cart:
                 logistics = graph_repository.preserve_compatible_hotel_change(preserve_cart, hotel, profile, logistics)
@@ -2013,9 +2015,10 @@ class AgentService:
         previous_slots = {key: deepcopy(profile.get(key)) for key in slot_keys}
 
         # Model hints belong to one turn, never to the saved trip state.
-        for transient in ("llm_destination_id", "llm_replan_action", "llm_ai_intro"):
-            profile.pop(transient, None)
-        if is_logistics_question(message):
+        if not skip_llm:
+            for transient in ("llm_destination_id", "llm_replan_action", "llm_ai_intro"):
+                profile.pop(transient, None)
+        if not skip_llm and is_logistics_question(message):
             reply = describe_saved_logistics(cart)
             reasoning = deepcopy(cart.get("reasoning_steps", []))
             connection_step = next((step for step in reasoning if step.get("stage") == "logistics"), None)
@@ -2025,12 +2028,12 @@ class AgentService:
             connection_step["detail"] = connection_summary(cart.get("logistics", {}))
             await AgentService._save_session(user_id, profile, cart, message, reply)
             return {"text": reply, "state": "CURRENT_LOGISTICS", "cart": cart, "reasoning_steps": reasoning}
-        if current_trip_question(message):
+        if not skip_llm and current_trip_question(message):
             reply = describe_current_trip(profile, cart)
             await AgentService._save_session(user_id, profile, cart, message, reply)
             return {"text": reply, "state": "CURRENT_TRIP", "cart": cart}
 
-        requested_estimate = estimate_request(message)
+        requested_estimate = None if skip_llm else estimate_request(message)
         if requested_estimate:
             profile["budget_estimate"] = requested_estimate
             if cart.get("budget_quote") and not is_trip_edit(message):
@@ -2039,7 +2042,7 @@ class AgentService:
                 await AgentService._save_session(user_id, profile, cart, message, reply)
                 return {"text": reply, "state": "BUDGET_ESTIMATE", "cart": cart}
 
-        booking_action = detect_booking_action(message)
+        booking_action = None if skip_llm else detect_booking_action(message)
         if booking_action:
             result = booking_stub(booking_action, cart)
             await AgentService._save_session(user_id, profile, cart, message, result["text"])
@@ -2059,6 +2062,7 @@ class AgentService:
             cart.update(nights=profile.get("nights", 7), dates=profile.get("dates"),
                         checkin_date=profile.get("checkin_date"), checkout_date=profile.get("checkout_date"),
                         selection_status="needs_budget")
+            profile["pending_action"] = {"kind": "plan_trip", "missing_fields": ["budget_rub"], "question": budget_question}
             await AgentService._save_session(user_id, profile, cart, message, budget_question)
             return {"text": budget_question, "state": "NEEDS_BUDGET", "cart": cart}
         budget_changed = profile.get("budget_rub") != previous_budget
@@ -2080,11 +2084,26 @@ class AgentService:
         previous_calendar = (profile.get("checkin_date"), profile.get("checkout_date"))
         date_question = update_trip_dates(slot_message, profile, cart)
         if date_question:
+            profile["pending_action"] = {"kind": "plan_trip", "missing_fields": ["checkin_date"], "question": date_question}
             await AgentService._save_session(user_id, profile, cart, message, date_question)
             return {"text": date_question, "state": "NEEDS_DATES", "cart": cart}
 
         # 1. Извлечение интересов и обновление профиля пользователя (User Memory)
         profile = AgentService.extract_interests_and_slots(slot_message, profile)
+        if skip_llm:
+            if profile.get("search_scope") == "other_destinations":
+                profile["destination_flexible"] = True
+            elif profile.get("search_scope") in ("current", "hotels", "flights", "dates"):
+                profile["destination_flexible"] = False
+            if profile.get("preferred_destination"):
+                profile["llm_destination_id"] = profile["preferred_destination"]
+            price_preference = profile.get("price_preference")
+            if price_preference in ("more_expensive", "comfort"):
+                profile["interests"] = [tag for tag in profile.get("interests", []) if tag != "budget_friendly"]
+                if "luxury" not in profile["interests"]:
+                    profile["interests"].append("luxury")
+            elif price_preference == "cheaper":
+                profile["llm_replan_action"] = "cheaper"
         other_conditions_changed = budget_changed or previous_calendar != (
             profile.get("checkin_date"), profile.get("checkout_date")
         ) or any(
@@ -2095,7 +2114,8 @@ class AgentService:
             r"прямой|пересад|вылет|рейс|самолет|попозже|пораньше|утром|вечером|днем|любое время",
             user_lower,
         ))
-        if transfer_setting is not None and not other_conditions_changed and not other_replan_requested:
+        if (transfer_setting is not None and not other_conditions_changed and not other_replan_requested
+                and not profile.pop("_structured_compound_edit", False)):
             result = AgentService.change_saved_transfer(profile, cart, transfer_setting)
             if result:
                 await AgentService._save_session(user_id, profile, result["cart"], message, result["text"])
@@ -2103,7 +2123,7 @@ class AgentService:
         deterministic_trip_edit = is_trip_edit(message) or transfer_setting is not None or bool(excluded_now) or bool(direct_destination_choice) or other_conditions_changed
 
         # Проверка вопроса о расписании внутреннего маршрута / переезда между городами
-        internal_timing_reply = AgentService.answer_internal_route_timing(user_lower, cart)
+        internal_timing_reply = None if skip_llm else AgentService.answer_internal_route_timing(user_lower, cart)
         if internal_timing_reply:
             await AgentService._save_session(user_id, profile, cart, message, internal_timing_reply)
             return {
@@ -2113,7 +2133,9 @@ class AgentService:
             }
 
         # Проверка вопроса о сравнении реальных цен на соседние даты / поиске самого дешёвого дня
-        dates_comparison_reply = AgentService.answer_dates_comparison(user_lower, profile, cart)
+        dates_comparison_reply = AgentService.answer_dates_comparison(user_lower, profile, cart) if (
+            not skip_llm or profile.get("_structured_comparison")
+        ) else None
         if dates_comparison_reply:
             await AgentService._save_session(user_id, profile, cart, message, dates_comparison_reply)
             return {
@@ -2222,7 +2244,7 @@ class AgentService:
 
         # Детерминированный fallback (для mock LLM и unit-тестов):
         # Пункт 4 ТЗ: Анти-15-вопросов на старте (Anti-15-Questions)
-        if not selected_hotel_query and AgentService.is_vague_greeting(message, has_dest_in_cart):
+        if not skip_llm and not selected_hotel_query and AgentService.is_vague_greeting(message, has_dest_in_cart):
             profile["is_multi_city"] = False
             cart.clear()
             cart.pop("is_multi_city", None)
@@ -2235,7 +2257,7 @@ class AgentService:
             }
 
         # Детерминированный fallback для неизвестных направлений (если оффлайн / mock LLM)
-        unknown_match = AgentService.detect_unknown_destination(message) if not selected_hotel_query else None
+        unknown_match = None if skip_llm else AgentService.detect_unknown_destination(message) if not selected_hotel_query else None
         if unknown_match and not profile.get("llm_destination_id"):
             alt_id = unknown_match["pilot_alt_id"]
             alt_name = unknown_match["pilot_alt_name"]
@@ -2275,7 +2297,9 @@ class AgentService:
             profile["destination_flexible"] = False
         profile["excluded_destinations"] = sorted(excluded_ids)
         search_multiple_destinations = bool(profile.get("destination_flexible")) and not profile.get("is_multi_city")
-        explicit_dest_change = bool(explicit_destination and explicit_destination != current_dest_id) or any(
+        explicit_dest_change = bool(profile.pop("_structured_destination_changed", False)) or bool(
+            explicit_destination and explicit_destination != current_dest_id
+        ) or any(
             w in user_lower for w in ["другой город", "поменяй направление", "другая страна", "поехали в", "а если в "]
         )
         
@@ -2648,6 +2672,15 @@ class AgentService:
             await AgentService._save_session(user_id, profile, previous_cart, message, reply)
             return {"text": reply, "state": "NO_CHEAPER_OPTION", "cart": previous_cart,
                     "budget_breakdown": budget_breakdown, "flexible_dates": options}
+        if (profile.get("price_preference") in ("more_expensive", "comfort")
+                and previous_cart.get("hotel_id") == recommended_hotel["id"]
+                and previous_cart.get("total_trip_budget_range_rub", {}).get("max", 0)
+                >= budget_breakdown["total_trip_budget_range_rub"]["max"]):
+            reply = (f"Более дорогого или комфортного варианта в пределах лимита в каталоге нет. "
+                     f"Текущий отель «{recommended_hotel['name']}» сохранён; даты, состав и остальные условия не изменены.")
+            await AgentService._save_session(user_id, profile, previous_cart, message, reply)
+            return {"text": reply, "state": "NO_IMPROVEMENT_OPTION", "cart": previous_cart,
+                    "budget_breakdown": budget_breakdown, "compared_hotels": compared_list[:3]}
         update_trip_dates(budget_breakdown["checkin_date"], profile)
         if budget_breakdown["selected_flexible_date"]:
             profile["date_shifted"] = True
@@ -2723,6 +2756,13 @@ class AgentService:
             elif is_replan_flight:
                 fl_type_str = "только прямой беспосадочный рейс" if profile.get("prefer_direct_flight") else "рейс с комфортной стыковкой"
                 ai_intro = f"Маршрут перестроен: теперь подобран {fl_type_str}:"
+            elif (profile.get("price_preference") in ("more_expensive", "comfort") and old_total_max is not None
+                  and budget_breakdown["total_trip_budget_range_rub"]["max"] > old_total_max):
+                extra = budget_breakdown["total_trip_budget_range_rub"]["max"] - old_total_max
+                ai_intro = (f"За доплату {extra:,} ₽ вы получаете «{recommended_hotel['name']}»: "
+                            f"{recommended_hotel.get('stars', 'более высокий класс')}, питание — {recommended_hotel.get('meals', 'уточняется')}:")
+            elif profile.get("price_preference") in ("more_expensive", "comfort"):
+                ai_intro = f"Выбрал более комфортный вариант «{recommended_hotel['name']}» в пределах лимита:"
             elif is_replan_nights:
                 ai_intro = f"Принято! Изменил длительность тура на {nights} ночей и пересчитал полную стоимость:"
             elif is_replan_dates:
@@ -3026,8 +3066,11 @@ class AgentService:
                 previous_quote = TripStateStore.quote_from_cart(previous_cart)
                 profile.pop("_current_quote_id", None)
                 profile.pop("_resolved_hotel_id", None)
+                profile.pop("_structured_compound_edit", None)
+                profile.pop("_structured_comparison", None)
                 state, quote = TripStateStore.from_legacy(profile, cart)
                 if quote and cart.get("hotel_id") and quote.quote_id != (previous_quote.quote_id if previous_quote else None):
+                    profile.pop("pending_action", None)
                     if previous_quote:
                         quote.previous_quote_id = previous_quote.quote_id
                         cart["budget_breakdown"] = quote.enrich_breakdown(cart["budget_breakdown"])

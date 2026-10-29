@@ -55,8 +55,8 @@ class AgentFixesTest(unittest.IsolatedAsyncioTestCase):
             make_hotel("mid", "Комфорт Отель", 6000),
             make_hotel("cheap", "Эконом Резорт", 3000),
         ]
-        result, _ = await self.run_agent("Сочи бюджет до 150 тысяч", hotels)
-        # All 3 fit into 150k, but the cheapest (3000/night) must be recommended first
+        result, _ = await self.run_agent("Сочи бюджет до 300 тысяч", hotels)
+        # All 3 fit into 300k, but the cheapest (3000/night) must be recommended first
         self.assertEqual(result["cart"]["hotel_id"], "cheap")
         self.assertEqual(result["cart"]["hotel"], "Эконом Резорт")
 
@@ -145,7 +145,7 @@ class AgentFixesTest(unittest.IsolatedAsyncioTestCase):
                 )
 
     async def test_vague_greeting_sea_returns_inspiration_prompt_without_multi_city(self):
-        """Block 3 & 6: 'Хочу на море' returns INSPIRATION / clarification prompt without launching Multi-City."""
+        """Вдохновение сохраняет критерий и pending без сброса текущей поездки."""
         cart = {"destination_id": "turkey", "destination": "Турция (Анталья и Стамбул)", "is_multi_city": True}
         profile = {"interests": ["mountains", "beach"], "is_multi_city": True}
         user = SimpleNamespace(
@@ -158,9 +158,10 @@ class AgentFixesTest(unittest.IsolatedAsyncioTestCase):
             stack.enter_context(patch.object(AgentService, "_save_session", new_callable=AsyncMock))
             result = await AgentService.process_message("test_sea", "Хочу на море")
 
-        self.assertEqual(result["state"], "INSPIRATION_PROMPT")
-        self.assertFalse(result.get("cart", {}).get("is_multi_city", False))
+        self.assertEqual(result["state"], "CLARIFICATION_REQUIRED")
+        self.assertEqual(result["cart"]["destination_id"], "turkey")
         self.assertFalse(user.profile.get("is_multi_city", False))
+        self.assertFalse(result["trip_state"]["preferences"]["is_multi_city"])
         self.assertNotIn("Стамбул", result.get("text", ""))
         self.assertNotIn("Красная Поляна", result.get("text", ""))
 

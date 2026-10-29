@@ -16,7 +16,7 @@ class TripDates(BaseModel):
 
 class Passengers(BaseModel):
     adults_count: int | None = Field(default=None, ge=1, le=30)
-    kids_count: int = Field(default=0, ge=0, le=20)
+    kids_count: int | None = Field(default=None, ge=0, le=20)
     has_kids: bool | None = None
     has_pets: bool = False
 
@@ -33,8 +33,21 @@ class TripPreferences(BaseModel):
     private_room_required: bool = False
     domestic_only: bool = False
     abroad_only: bool = False
+    is_multi_city: bool = False
     rejected_hotels: list[str] = Field(default_factory=list)
     rejected_destinations: list[str] = Field(default_factory=list)
+
+
+class SearchCriteria(BaseModel):
+    scope: Literal["current", "other_destinations", "any", "hotels", "flights", "dates"] = "current"
+    destination_query: str | None = None
+    price_preference: Literal["cheaper", "more_expensive", "comfort", "any"] = "any"
+
+
+class PendingAction(BaseModel):
+    kind: Literal["plan_trip", "search_alternatives", "select_offer"]
+    missing_fields: list[str] = Field(default_factory=list)
+    question: str | None = None
 
 
 class TripState(BaseModel):
@@ -45,11 +58,14 @@ class TripState(BaseModel):
     stops: list[dict[str, Any]] = Field(default_factory=list)
     dates: TripDates = Field(default_factory=TripDates)
     passengers: Passengers = Field(default_factory=Passengers)
+    kids_ages: list[int] = Field(default_factory=list)
     rooms_count: int | None = Field(default=None, ge=1, le=20)
     budget_rub: int | None = Field(default=None, gt=0)
     budget_estimate: Literal["min", "max"] = "max"
     services: TripServices = Field(default_factory=TripServices)
     preferences: TripPreferences = Field(default_factory=TripPreferences)
+    search: SearchCriteria = Field(default_factory=SearchCriteria)
+    pending_action: PendingAction | None = None
     selected_offers: dict[str, Any] = Field(default_factory=dict)
     current_version_id: str | None = None
 
@@ -74,10 +90,11 @@ class TripState(BaseModel):
             ),
             passengers=Passengers(
                 adults_count=profile.get("adults_count") or cart.get("adults_count"),
-                kids_count=profile.get("kids_count", cart.get("kids_count", 0)) or 0,
-                has_kids=profile.get("has_kids") if "has_kids" in profile else (True if profile.get("kids_count", 0) > 0 else None),
+                kids_count=profile.get("kids_count", cart.get("kids_count")),
+                has_kids=profile.get("has_kids") if "has_kids" in profile else (True if (profile.get("kids_count") or 0) > 0 else None),
                 has_pets=bool(profile.get("has_pets", False)),
             ),
+            kids_ages=list(profile.get("kids_ages") or []),
             rooms_count=profile.get("rooms_count") or cart.get("rooms_count"),
             budget_rub=profile.get("budget_rub", cart.get("budget_rub")),
             budget_estimate=profile.get("budget_estimate") or cart.get("budget_estimate") or "max",
@@ -92,9 +109,16 @@ class TripState(BaseModel):
                 private_room_required=bool(profile.get("private_room_required", False)),
                 domestic_only=bool(profile.get("domestic_only", False)),
                 abroad_only=bool(profile.get("abroad_only", False)),
+                is_multi_city=bool(profile.get("is_multi_city", False)),
                 rejected_hotels=list(profile.get("rejected_hotels") or []),
                 rejected_destinations=list(profile.get("rejected_destinations") or []),
             ),
+            search=SearchCriteria(
+                scope=profile.get("search_scope") or ("other_destinations" if profile.get("destination_flexible") else "current"),
+                destination_query=profile.get("destination_query"),
+                price_preference=profile.get("price_preference") or "any",
+            ),
+            pending_action=PendingAction.model_validate(profile["pending_action"]) if profile.get("pending_action") else None,
             selected_offers=selected_offers,
             current_version_id=cart.get("tour_version_id") or profile.get("tour_version_id"),
         )
@@ -110,6 +134,7 @@ class TripState(BaseModel):
             "kids_count": self.passengers.kids_count,
             "has_kids": self.passengers.has_kids,
             "has_pets": self.passengers.has_pets,
+            "kids_ages": list(self.kids_ages),
             "rooms_count": self.rooms_count,
             "budget_rub": self.budget_rub,
             "budget_estimate": self.budget_estimate,
@@ -121,11 +146,17 @@ class TripState(BaseModel):
             "private_room_required": self.preferences.private_room_required,
             "domestic_only": self.preferences.domestic_only,
             "abroad_only": self.preferences.abroad_only,
+            "is_multi_city": self.preferences.is_multi_city,
             "rejected_hotels": list(self.preferences.rejected_hotels),
             "rejected_destinations": list(self.preferences.rejected_destinations),
+            "search_scope": self.search.scope,
+            "destination_flexible": self.search.scope == "other_destinations",
+            "destination_query": self.search.destination_query,
+            "price_preference": self.search.price_preference,
+            "pending_action": self.pending_action.model_dump(mode="json") if self.pending_action else None,
             "tour_version_id": self.current_version_id,
         })
-        for key in ("adults_count", "nights", "rooms_count", "budget_rub", "prefer_direct_flight", "flight_time_pref", "origin_airport", "tour_version_id"):
+        for key in ("adults_count", "kids_count", "nights", "rooms_count", "budget_rub", "prefer_direct_flight", "flight_time_pref", "origin_airport", "tour_version_id", "destination_query", "pending_action"):
             if result.get(key) is None:
                 result.pop(key, None)
         if self.dates.checkin_date and self.dates.checkout_date:
