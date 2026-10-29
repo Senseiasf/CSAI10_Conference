@@ -12,10 +12,12 @@ from app.config import settings
 from app.services.vector_service import generate_text_embedding
 from app.mcp.tools import MCPTools
 from app.services.trip_dates import update_trip_dates
-from app.services.trip_budget import update_trip_budget
+from app.services.trip_budget import update_trip_budget, validate_package_totals
 from app.services.trip_state import (
     current_trip_question, describe_budget_estimate, describe_current_trip,
     estimate_request, is_trip_edit, requested_destination,
+    hotel_selection, matching_hotels, rejected_destinations, wants_cheaper,
+    destination_choice,
 )
 from app.services.booking_stub import detect_booking_action, booking_stub
 from app.services.preference_memory import remembered_preferences
@@ -517,6 +519,8 @@ class AgentService:
         explicit_rooms = re.search(r"\b(\d+)\s*(?:комнат\w*|номер\w*)", user_lower)
         if explicit_rooms and 1 <= int(explicit_rooms.group(1)) <= 20:
             profile["requested_rooms_count"] = int(explicit_rooms.group(1))
+            profile["private_room_required"] = True
+            interests.discard("hostel_dorm")
         if profile.get("requested_rooms_count"):
             profile["rooms_count"] = max(profile["rooms_count"], profile["requested_rooms_count"])
             profile["room_type"] = f"{profile['rooms_count']} отдельных номеров"
@@ -1609,6 +1613,8 @@ class AgentService:
             flight_roundtrip=calculation["flight_total"],
             flight_price_roundtrip=calculation["flight_total"],
             flight_out_price=calculation["flight_out"], flight_ret_price=calculation["flight_ret"],
+            flight_out_per_person_rub=calculation["flight_out"] // travelers,
+            flight_ret_per_person_rub=calculation["flight_ret"] // travelers,
             hotel_per_night=calculation["hotel_rate"], hotel_total=calculation["hotel_total"],
             total_mandatory_rub=calculation["total_mandatory"],
         )
@@ -1625,7 +1631,29 @@ class AgentService:
             "hotel_per_room_night_rub": hotel["price_per_night_rub"],
             "fixed_costs_rub": fixed_costs, "rooms_count": rooms, "travelers_count": travelers,
         }
+        validate_package_totals(breakdown)
         return breakdown
+
+    @staticmethod
+    async def evaluate_hotels(dest_id: str, hotels: list[dict], profile: dict, *, flexible_dates: bool = False) -> list:
+        evaluated = []
+        for hotel in hotels:
+            logistics = await MCPTools.check_logistics_compatibility(
+                airport_code="", hotel_id=hotel["id"], origin_airport_code=profile.get("origin_airport"),
+                prefer_direct_flight=profile.get("prefer_direct_flight"),
+                without_transfer=profile.get("without_transfer", False), flight_time_pref=profile.get("flight_time_pref"),
+            )
+            if not logistics.get("compatible") or "price_rub_roundtrip" not in logistics.get("flight", {}):
+                continue
+            if not profile.get("without_transfer") and "price_rub" not in logistics.get("transfer", {}):
+                continue
+            try:
+                breakdown = AgentService.calculate_package_budget(dest_id, hotel, logistics, profile, flexible_dates=flexible_dates)
+            except ValueError as error:
+                logger.warning("Package price validation failed for hotel %s: %s", hotel["id"], error)
+                continue
+            evaluated.append((hotel, logistics, breakdown))
+        return evaluated
 
     @staticmethod
     def budget_quote(dest_name: str, hotel: dict, breakdown: dict) -> dict:
@@ -1840,6 +1868,11 @@ class AgentService:
         5. Пункт 5 ТЗ: Имитация чекаута и ваучер
         """
         user_lower = message.lower().replace("ё", "е").strip()
+        previous_cart = deepcopy(cart)
+        selected_hotel_query = hotel_selection(message)
+        direct_destination_choice = destination_choice(message) if not selected_hotel_query else None
+        slot_message = "" if selected_hotel_query else user_lower
+        excluded_now = rejected_destinations(message) if not selected_hotel_query else set()
         slot_keys = ("nights", "adults_count", "kids_count", "has_kids", "has_pets",
                      "private_room_required", "origin_airport", "flight_time_pref",
                      "abroad_only", "domestic_only", "requested_rooms_count")
@@ -1869,7 +1902,7 @@ class AgentService:
             return result
 
         previous_budget = profile.get("budget_rub")
-        budget_question = update_trip_budget(user_lower, profile, cart)
+        budget_question = update_trip_budget(slot_message, profile, cart)
         if budget_question:
             profile = AgentService.extract_interests_and_slots(user_lower, profile)
             update_trip_dates(user_lower, profile, cart)
@@ -1901,14 +1934,14 @@ class AgentService:
 
         previous_dates = profile.get("dates")
         previous_calendar = (profile.get("checkin_date"), profile.get("checkout_date"))
-        date_question = update_trip_dates(user_lower, profile, cart)
+        date_question = update_trip_dates(slot_message, profile, cart)
         if date_question:
             await AgentService._save_session(user_id, profile, cart, message, date_question)
             return {"text": date_question, "state": "NEEDS_DATES", "cart": cart}
 
         # 1. Извлечение интересов и обновление профиля пользователя (User Memory)
-        profile = AgentService.extract_interests_and_slots(user_lower, profile)
-        deterministic_trip_edit = is_trip_edit(message) or budget_changed or previous_calendar != (
+        profile = AgentService.extract_interests_and_slots(slot_message, profile)
+        deterministic_trip_edit = is_trip_edit(message) or bool(excluded_now) or bool(direct_destination_choice) or budget_changed or previous_calendar != (
             profile.get("checkin_date"), profile.get("checkout_date")
         ) or any(
             profile.get(key) != previous_slots[key] for key in slot_keys
@@ -2034,7 +2067,7 @@ class AgentService:
 
         # Детерминированный fallback (для mock LLM и unit-тестов):
         # Пункт 4 ТЗ: Анти-15-вопросов на старте (Anti-15-Questions)
-        if AgentService.is_vague_greeting(message, has_dest_in_cart):
+        if not selected_hotel_query and AgentService.is_vague_greeting(message, has_dest_in_cart):
             profile["is_multi_city"] = False
             cart.clear()
             cart.pop("is_multi_city", None)
@@ -2047,7 +2080,7 @@ class AgentService:
             }
 
         # Детерминированный fallback для неизвестных направлений (если оффлайн / mock LLM)
-        unknown_match = AgentService.detect_unknown_destination(message)
+        unknown_match = AgentService.detect_unknown_destination(message) if not selected_hotel_query else None
         if unknown_match and not profile.get("llm_destination_id"):
             alt_id = unknown_match["pilot_alt_id"]
             alt_name = unknown_match["pilot_alt_name"]
@@ -2074,7 +2107,19 @@ class AgentService:
 
         # 4. Пункт 2 ТЗ: Динамическое перепланирование без сброса контекста (Dynamic Re-planning)
         current_dest_id = cart.get("destination_id")
-        explicit_destination = requested_destination(message)
+        explicit_destination = direct_destination_choice
+        excluded_ids = set(profile.get("excluded_destinations", [])) | excluded_now
+        if explicit_destination:
+            excluded_ids.discard(explicit_destination)
+            profile["destination_flexible"] = False
+        elif (not current_dest_id and budget_limit is not None) or current_dest_id in excluded_now or any(
+            phrase in user_lower for phrase in ("направлению пока не знаю", "направление не знаю", "не определились", "любое направление", "другой город", "другое направление")
+        ):
+            profile["destination_flexible"] = True
+        if selected_hotel_query:
+            profile["destination_flexible"] = False
+        profile["excluded_destinations"] = sorted(excluded_ids)
+        search_multiple_destinations = bool(profile.get("destination_flexible")) and not profile.get("is_multi_city")
         explicit_dest_change = bool(explicit_destination and explicit_destination != current_dest_id) or any(
             w in user_lower for w in ["другой город", "поменяй направление", "другая страна", "поехали в", "а если в "]
         )
@@ -2089,7 +2134,7 @@ class AgentService:
             "в любое время", "в любой день", "любое время", "время не важно", "не важно когда",
             "без разницы во сколько", "в любое время суток", "любое время вылета", "когда угодно"
         ])
-        is_replan_cheaper = is_cheapest_requested or any(w in user_lower for w in ["дешевле", "подешевле", "дорого", "снизь цену", "бюджетнее", "экономнее", "сделай дешевле"])
+        is_replan_cheaper = not selected_hotel_query and wants_cheaper(message)
         is_replan_flight_day = any(w in user_lower for w in ["днем", "днём", "в обед", "дневной вылет", "дневным вылетом", "вылет днем", "вылет днём", "вылетать не в 6 утра", "не в 6 утра, а днем", "не в 6 утра, а днём"])
         is_replan_flight_later = any(w in user_lower for w in ["попозже", "самолет попозже", "вылет попозже", "рейс попозже", "не в 6 утра", "не в 6", "не в 7", "не рано", "позже 10", "после 10", "после 12", "вечером", "поздний вылет", "вылетать позже"]) or is_replan_flight_day
         is_replan_flight_morning = any(w in user_lower for w in ["пораньше", "утром", "утренний вылет", "самолет пораньше", "рейс пораньше", "ранний вылет"])
@@ -2107,7 +2152,7 @@ class AgentService:
             is_replan_flight_morning = False
             is_replan_flight = False
 
-        if is_cheapest_requested:
+        if is_replan_cheaper:
             interests = profile.get("interests", [])
             profile["interests"] = [t for t in interests if t not in ("luxury", "extreme_luxury", "luxury_extreme", "splurge")]
             if "budget_friendly" not in profile["interests"]:
@@ -2133,6 +2178,9 @@ class AgentService:
             profile["without_transfer"] = True
         elif llm_ra == "change_destination":
             explicit_dest_change = True
+
+        if is_replan_cheaper or is_replan_hotel or explicit_dest_change:
+            profile.pop("selected_hotel_id", None)
 
         if is_replan_flight_day and not is_any_time:
             profile["flight_time_pref"] = "day"
@@ -2172,10 +2220,14 @@ class AgentService:
         # Определение целевого направления
         matched_destinations = await AgentService.search_destinations_vector(
             message,
-            limit=2,
+            limit=9 if search_multiple_destinations else 2,
             abroad_only=is_abroad_request,
             domestic_only=is_domestic_request
         )
+        if search_multiple_destinations:
+            matched_destinations = [candidate for candidate in matched_destinations if candidate["id"] not in excluded_ids
+                                    and (not is_domestic_request or candidate["id"] in ("sochi", "spb", "altai"))
+                                    and (not is_abroad_request or candidate["id"] not in ("sochi", "spb", "altai"))]
         msg_top_dest = matched_destinations[0] if matched_destinations else None
 
         # Если ИИ точно определил destination_id через Tool Calling
@@ -2185,7 +2237,15 @@ class AgentService:
             if cur_matched:
                 msg_top_dest = cur_matched[0]
 
-        if current_dest_id and not explicit_dest_change and not profile.get("is_multi_city"):
+        if search_multiple_destinations and msg_top_dest:
+            top_dest = msg_top_dest
+            dest_id, dest_name = top_dest["id"], top_dest["name"]
+        elif search_multiple_destinations:
+            reply = "После исключения направлений под ваши условия не осталось вариантов. Какое направление рассмотреть?"
+            cart = {"nights": nights, "dates": profile.get("dates"), "selection_status": "no_matches"}
+            await AgentService._save_session(user_id, profile, cart, message, reply)
+            return {"text": reply, "state": "NO_MATCHES", "cart": cart, "compared_hotels": []}
+        elif current_dest_id and not explicit_dest_change and not profile.get("is_multi_city"):
             # Контекстное перепланирование в рамках текущего города/курорта!
             dest_id = current_dest_id
             cur_matched = await AgentService.search_destinations_vector(dest_id, limit=1)
@@ -2252,7 +2312,7 @@ class AgentService:
         old_hotel_name = cart.get("hotel")
         old_hotel_id = cart.get("hotel_id")
 
-        if is_replan_hotel and old_hotel_id:
+        if is_replan_hotel and old_hotel_id and not selected_hotel_query:
             if old_hotel_id not in rejected_hotels:
                 rejected_hotels.append(old_hotel_id)
                 profile["rejected_hotels"] = rejected_hotels
@@ -2261,17 +2321,61 @@ class AgentService:
             profile.setdefault("interests", []).append("budget_friendly")
 
         # 6. Вызов MCP: Сравнение отелей с учетом тегов, исключений и фильтров
-        hotel_comparison = await MCPTools.compare_hotels(
-            destination_id=dest_id,
-            pet_friendly=profile.get("has_pets"),
-            family_friendly=profile.get("has_kids"),
-            private_room_required=profile.get("private_room_required", False),
-            exclude_hotel_ids=rejected_hotels,
-            preferred_tags=profile.get("interests"),
-            limit=None if budget_limit is not None or is_replan_cheaper else 30,
-        )
+        estimate_key = "min" if profile.get("budget_estimate") == "min" else "max"
+        candidates = matched_destinations if search_multiple_destinations else [top_dest]
+        evaluated_regions = []
+        compared_list = []
+        requested_hotel_id = None
+        for candidate in candidates:
+            hotel_comparison = await MCPTools.compare_hotels(
+                destination_id=candidate["id"], pet_friendly=profile.get("has_pets"),
+                family_friendly=profile.get("has_kids"), private_room_required=profile.get("private_room_required", False),
+                exclude_hotel_ids=rejected_hotels, preferred_tags=profile.get("interests"),
+                limit=None if budget_limit is not None or is_replan_cheaper or selected_hotel_query or profile.get("selected_hotel_id") else 30,
+            )
+            hotels = hotel_comparison.get("compared_hotels", [])
+            if selected_hotel_query:
+                matches = matching_hotels(selected_hotel_query, hotels)
+                if len(matches) != 1:
+                    reply = (f"По названию «{selected_hotel_query}» найдено несколько отелей. Уточните полное название."
+                             if matches else f"Отель «{selected_hotel_query}» не найден среди доступных в текущем направлении с вашими условиями.")
+                    await AgentService._save_session(user_id, profile, previous_cart, message, reply)
+                    return {"text": reply, "state": "HOTEL_NOT_AVAILABLE", "cart": previous_cart}
+                requested_hotel_id = matches[0]["id"]
+                hotels = matches
+            elif profile.get("selected_hotel_id"):
+                hotels = [hotel for hotel in hotels if hotel["id"] == profile["selected_hotel_id"]]
+            compared_list.extend(hotels)
+            evaluated_regions.append((candidate, await AgentService.evaluate_hotels(
+                candidate["id"], hotels, profile,
+                flexible_dates=(is_replan_cheaper and is_any_time and not profile.get("date_shifted")),
+            )))
 
-        compared_list = hotel_comparison.get("compared_hotels", [])
+        if selected_hotel_query:
+            selected_options = evaluated_regions[0][1] if evaluated_regions else []
+            if not selected_options:
+                reply = f"Для отеля «{selected_hotel_query}» не найден совместимый маршрут с известной стоимостью. Текущий вариант сохранён."
+                await AgentService._save_session(user_id, profile, previous_cart, message, reply)
+                return {"text": reply, "state": "HOTEL_NOT_AVAILABLE", "cart": previous_cart}
+            requested_total = selected_options[0][2]["total_trip_budget_range_rub"][estimate_key]
+            if budget_limit is not None and requested_total > budget_limit:
+                reply = (f"Отель «{selected_options[0][0]['name']}»: полная оценка {requested_total:,} ₽, "
+                         f"на {requested_total - budget_limit:,} ₽ выше лимита {budget_limit:,} ₽. Текущий вариант сохранён.")
+                await AgentService._save_session(user_id, profile, previous_cart, message, reply)
+                return {"text": reply, "state": "HOTEL_OVER_BUDGET", "cart": previous_cart}
+
+        evaluated = evaluated_regions[0][1] if evaluated_regions else []
+        if search_multiple_destinations:
+            regional_options = [(candidate, option) for candidate, options in evaluated_regions for option in options]
+            affordable_regions = [(candidate, option) for candidate, option in regional_options if budget_limit is None
+                                  or option[2]["total_trip_budget_range_rub"][estimate_key] <= budget_limit]
+            if affordable_regions or regional_options:
+                top_dest, _ = min(affordable_regions or regional_options,
+                                  key=lambda item: item[1][2]["total_trip_budget_range_rub"][estimate_key])
+                dest_id, dest_name = top_dest["id"], top_dest["name"]
+                evaluated = next(options for candidate, options in evaluated_regions if candidate["id"] == dest_id)
+                cart.update(destination_id=dest_id, destination=dest_name)
+            cart["destination_search"] = {"considered": len(candidates), "affordable_options": len(affordable_regions)}
         recommended_hotel = compared_list[0] if compared_list else None
 
         if not recommended_hotel:
@@ -2305,29 +2409,6 @@ class AgentService:
                 "compared_hotels": [], "cart": cart,
             }
 
-        # Оцениваем полную стоимость каждого кандидата, а не только цену номера.
-        # Проверяем весь отфильтрованный каталог при наличии лимита бюджета.
-        evaluated = []
-        for hotel in compared_list:
-            logistics = await MCPTools.check_logistics_compatibility(
-                airport_code="", hotel_id=hotel["id"], origin_airport_code=profile.get("origin_airport"),
-                prefer_direct_flight=profile.get("prefer_direct_flight"),
-                without_transfer=profile.get("without_transfer", False),
-                flight_time_pref=profile.get("flight_time_pref")
-            )
-            flight = logistics.get("flight", {})
-            transfer = logistics.get("transfer", {})
-            if not logistics.get("compatible") or "price_rub_roundtrip" not in flight:
-                continue
-            if not profile.get("without_transfer") and "price_rub" not in transfer:
-                continue
-            breakdown = AgentService.calculate_package_budget(
-                dest_id, hotel, logistics, profile,
-                flexible_dates=(is_replan_cheaper and is_any_time and not profile.get("date_shifted")),
-            )
-            evaluated.append((hotel, logistics, breakdown))
-
-        estimate_key = profile.get("budget_estimate", "max")
         affordable = [option for option in evaluated if budget_limit is None or
                       option[2]["total_trip_budget_range_rub"][estimate_key] <= budget_limit]
 
@@ -2358,6 +2439,8 @@ class AgentService:
                     "Можно сократить поездку, выбрать другое направление или явно увеличить бюджет."
                 )
                 state = "BUDGET_EXCEEDED"
+                if search_multiple_destinations:
+                    reply_text = f"Проверил {len(candidates)} направлений по вашим условиям.\n\n" + reply_text
             else:
                 reply_text = "Не удалось собрать маршрут с известными ценами перелёта и трансфера. Бронирование пока недоступно."
                 state = "NO_ROUTE"
@@ -2374,12 +2457,40 @@ class AgentService:
             return {"text": reply_text, "state": state, "cart": cart, "compared_hotels": []}
 
         recommended_hotel, logistics_info, budget_breakdown = affordable[0]
+        if requested_hotel_id:
+            profile["selected_hotel_id"] = requested_hotel_id
+        unchanged_conditions = all(profile.get(key) == previous_slots[key] for key in slot_keys)
+        if (is_replan_cheaper and not budget_changed and unchanged_conditions
+                and previous_cart.get("hotel_id") == recommended_hotel["id"]
+                and previous_cart.get("checkin_date") == budget_breakdown["checkin_date"]
+                and previous_cart.get("checkout_date") == budget_breakdown["checkout_date"]
+                and previous_cart.get("total_trip_budget_range_rub") == budget_breakdown["total_trip_budget_range_rub"]):
+            inputs = budget_breakdown["pricing_inputs"]
+            options = AgentService.calculate_flexible_dates_options(
+                dest_id, budget_breakdown["mandatory"]["total_mandatory_rub"], budget_breakdown["checkin_date"], nights,
+                inputs["flight_roundtrip_per_person_rub"], inputs["hotel_per_room_night_rub"],
+                inputs["fixed_costs_rub"], inputs["rooms_count"], inputs["travelers_count"],
+            )
+            bounds = budget_breakdown["total_trip_budget_range_rub"]
+            reply = (f"Более дешёвого варианта среди найденных нет при тех же датах, направлении, "
+                     f"{travelers_count} путешественниках и {profile.get('rooms_count', 1)} номерах. "
+                     f"Текущий отель — «{recommended_hotel['name']}», полная оценка {bounds['min']:,}–{bounds['max']:,} ₽.")
+            cheaper_dates = next((option for option in options if option["savings_rub"] > 0), None)
+            if cheaper_dates:
+                reply += (f"\n\nЕсли разрешите изменить даты: {cheaper_dates['dates_formatted']} — "
+                          f"верхняя оценка {bounds['max'] - cheaper_dates['savings_rub']:,} ₽, "
+                          f"экономия {cheaper_dates['savings_rub']:,} ₽. Для применения: «{cheaper_dates['message']}».")
+            else:
+                reply += "\n\nДля дальнейшего снижения можно сравнить другие направления или изменить длительность."
+            await AgentService._save_session(user_id, profile, previous_cart, message, reply)
+            return {"text": reply, "state": "NO_CHEAPER_OPTION", "cart": previous_cart,
+                    "budget_breakdown": budget_breakdown, "flexible_dates": options}
         update_trip_dates(budget_breakdown["checkin_date"], profile)
         if budget_breakdown["selected_flexible_date"]:
             profile["date_shifted"] = True
             cart["date_shifted"] = True
         compared_list = [x[0] for x in affordable[:3]]
-        policy = "luxury" if is_luxury and not is_cheapest_requested else "budget" if is_cheapest_requested or is_budget or budget_limit is not None else "ltr"
+        policy = "user_choice" if profile.get("selected_hotel_id") else "luxury" if is_luxury and not is_cheapest_requested else "budget" if is_cheapest_requested or is_budget or budget_limit is not None else "ltr"
         ltr_meta.update(top_k=len(compared_list), top_score=recommended_hotel["ltr_score"],
                         top_hotel=recommended_hotel["name"], selection_policy=policy)
         flight_info = logistics_info["flight"]
@@ -2540,15 +2651,20 @@ class AgentService:
         hotel_cost_per_night = priced_mandatory["hotel_per_night"]
         hotel_total_stay = priced_mandatory["hotel_total"]
         quoted_hotel_rate = f"{hotel_cost_per_night:,} ₽"
+        last_two = travelers_count % 100
+        passenger_word = ("пассажир" if travelers_count % 10 == 1 and last_two != 11 else
+                          "пассажира" if travelers_count % 10 in (2, 3, 4) and last_two not in (12, 13, 14) else "пассажиров")
+        out_tickets = f"{priced_mandatory['flight_out_per_person_rub']:,} ₽ × {travelers_count} {passenger_word} = {flight_out_price:,} ₽"
+        return_tickets = f"{priced_mandatory['flight_ret_per_person_rub']:,} ₽ × {travelers_count} {passenger_word} = {flight_ret_price:,} ₽"
 
         response_lines.append(f"🗺️ **Программа и расчёт тура ({nights} ночей):**")
         response_lines.append("")
 
         # 1. Перелет туда
         if layover.get("is_connecting"):
-            response_lines.append(f"1️⃣ 🛫 **Перелёт туда{fl_date_out}:** {flight_code} ({flight_times}), пересадка в {layover.get('city')} ({layover.get('duration_formatted')}) — **{flight_out_price:,} ₽**")
+            response_lines.append(f"1️⃣ 🛫 **Перелёт туда{fl_date_out}:** {flight_code} ({flight_times}), пересадка в {layover.get('city')} ({layover.get('duration_formatted')}) — **{out_tickets}**")
         else:
-            response_lines.append(f"1️⃣ 🛫 **Перелёт туда{fl_date_out}:** Прямой рейс {flight_code} ({flight_times}) — **{flight_out_price:,} ₽**")
+            response_lines.append(f"1️⃣ 🛫 **Перелёт туда{fl_date_out}:** Прямой рейс {flight_code} ({flight_times}) — **{out_tickets}**")
 
         # 2. Трансфер в отель
         if profile.get("without_transfer"):
@@ -2564,7 +2680,7 @@ class AgentService:
         response_lines.append(f"• Питание: {h['meals']} | До моря: {h['distance_to_sea']} | Отмена: {h['cancellation']}")
 
         # 4. Перелет обратно
-        response_lines.append(f"4️⃣ 🛬 **Перелёт обратно{fl_date_ret}:** {ret_airline} {ret_no} ({dest_code} {ret_dep} ➔ {orig_code} {ret_arr}) — **{flight_ret_price:,} ₽**")
+        response_lines.append(f"4️⃣ 🛬 **Перелёт обратно{fl_date_ret}:** {ret_airline} {ret_no} ({dest_code} {ret_dep} ➔ {orig_code} {ret_arr}) — **{return_tickets}**")
         response_lines.append("")
 
         if dest_id in ("turkey", "sochi", "uae", "altai"):

@@ -13,7 +13,8 @@ from app.models import UserSessionModel
 from app.services.agent_service import AgentService
 from app.services.llm_service import LLMService
 from app.services.trip_dates import update_trip_dates
-from app.services.trip_state import requested_destination
+from app.services.trip_budget import validate_package_totals
+from app.services.trip_state import requested_destination, rejected_destinations, hotel_selection, destination_choice
 
 
 def make_user(**overrides):
@@ -28,7 +29,8 @@ def make_user(**overrides):
 
 
 class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
-    def fixture(self, user, *, hotel_rate=1000, transfer_price=2000):
+    def fixture(self, user, *, hotel_rate=1000, transfer_price=2000, flight_price=20000,
+                destination_hotels=None, destination_rows=None):
         stack = ExitStack()
         stack.enter_context(patch.object(AgentService, "get_or_create_session", new=AsyncMock(return_value=user)))
 
@@ -40,6 +42,11 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
         self.save = stack.enter_context(patch.object(AgentService, "_save_session", new=AsyncMock(side_effect=save)))
 
         async def search(query, **kwargs):
+            if destination_rows:
+                if kwargs.get("limit") == 9:
+                    return copy.deepcopy(destination_rows)
+                identifier = query if query in {row["id"] for row in destination_rows} else requested_destination(query)
+                return copy.deepcopy([row for row in destination_rows if row["id"] == identifier] or destination_rows[:1])
             destination = query if query in ("spb", "sochi") else requested_destination(query) or "sochi"
             return [{"id": destination, "name": {"spb": "Санкт-Петербург", "sochi": "Сочи"}[destination], "score": 1.0}]
 
@@ -47,8 +54,11 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
         hotel = {"id": "hotel-1", "name": "Тестовый отель", "city": "Санкт-Петербург", "stars": "4★",
                  "price_per_night_rub": hotel_rate, "price_per_night_formatted": f"{hotel_rate:,} ₽",
                  "meals": "Завтрак", "distance_to_sea": "нет данных", "cancellation": "Бесплатно"}
-        self.compare = stack.enter_context(patch.object(MCPTools, "compare_hotels", new=AsyncMock(return_value={"compared_hotels": [hotel]})))
-        logistics = {"compatible": True, "airport": "LED", "flight": {"price_rub_roundtrip": 20000,
+        async def compare(destination_id, **kwargs):
+            candidates = (destination_hotels or {}).get(destination_id, [hotel])
+            return {"compared_hotels": copy.deepcopy(candidates)}
+        self.compare = stack.enter_context(patch.object(MCPTools, "compare_hotels", new=AsyncMock(side_effect=compare)))
+        logistics = {"compatible": True, "airport": "LED", "flight": {"price_rub_roundtrip": flight_price,
                      "origin_code": "SVO", "origin_name": "Москва", "airline": "Test Air", "flight_no": "T1"},
                      "transfer": {"price_rub": transfer_price, "name": "Трансфер"}, "timeline": {}}
         stack.enter_context(patch.object(MCPTools, "check_logistics_compatibility", new=AsyncMock(return_value=logistics)))
@@ -163,6 +173,22 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
             result = await AgentService.process_message("web:dialogue", "Вместо Питера поехали в Сочи на 8 ночей")
         self.assertEqual(result["cart"]["destination_id"], "sochi")
 
+    async def test_short_city_question_changes_destination_without_free_form_reply(self):
+        user = make_user(budget_rub=1000000)
+        with self.fixture(user):
+            result = await AgentService.process_message("web:screenshot", "А Сочи?")
+            self.dispatch.assert_not_awaited()
+        self.assertEqual(result["cart"]["destination_id"], "sochi")
+        self.assertEqual(result["trip_conditions"]["adults_count"], 3)
+
+    async def test_city_in_advice_question_does_not_change_trip(self):
+        user = make_user(budget_rub=1000000)
+        with self.fixture(user):
+            result = await AgentService.process_message("web:screenshot", "Какая погода в Сочи?")
+            self.dispatch.assert_awaited_once()
+        self.assertEqual(result["state"], "CONSULTATION")
+        self.assertEqual(result["cart"]["destination_id"], "spb")
+
     async def test_hotel_filter_uses_final_calendar_adjusted_price(self):
         user = make_user(nights=1, adults_count=1, rooms_count=1, budget_rub=45000)
         with self.fixture(user, hotel_rate=10000):
@@ -215,6 +241,104 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first["cart"]["total_trip_budget_range_rub"], second["cart"]["total_trip_budget_range_rub"])
         self.assertIn("Более дешёвого варианта среди найденных нет", second["text"])
 
+    @staticmethod
+    def named_hotels():
+        return [{"id": identifier, "name": name, "city": "Сочи", "stars": "3★",
+                 "price_per_night_rub": price, "price_per_night_formatted": f"{price:,} ₽",
+                 "meals": "Завтрак", "distance_to_sea": "150 м", "cancellation": "Бесплатно"}
+                for identifier, name, price in (("golden", "Golden Dolphin Hotel", 3500),
+                                               ("burgas", "Pansionat Burgas", 3510),
+                                               ("medovaya", "Medovaya Hotel", 3860))]
+
+    async def test_screenshot_flights_show_per_person_times_three_without_double_multiplication(self):
+        user = make_user(nights=5, checkin_date="2026-11-12", checkout_date="2026-11-17", budget_rub=180000)
+        with self.fixture(user, hotel_rate=3500, flight_price=13800):
+            result = await AgentService.process_message("web:screenshot", "Едем втроём на 5 ночей, нужно 2 номера")
+        mandatory = result["budget_breakdown"]["mandatory"]
+        self.assertEqual(mandatory["travelers_count"], 3)
+        self.assertEqual(mandatory["flight_out_price"], 19800)
+        self.assertEqual(mandatory["flight_ret_price"], 18300)
+        self.assertIn("6,600 ₽ × 3", result["text"])
+        self.assertIn("6,100 ₽ × 3", result["text"])
+        self.assertIn("3 пассажира", result["text"])
+
+    async def test_unknown_destination_searches_all_allowed_regions_before_exceeding_budget(self):
+        user = make_user(nights=5, budget_rub=180000)
+        user.current_cart = {}
+        rows = [{"id": identifier, "name": name, "score": score}
+                for identifier, name, score in (("maldives", "Мальдивы", 1.0), ("turkey", "Турция", .9), ("sochi", "Сочи", .8))]
+        hotels = self.named_hotels()
+        overpriced = {**hotels[0], "id": "costly", "price_per_night_rub": 30000}
+        with self.fixture(user, destination_rows=rows,
+                          destination_hotels={"maldives": [overpriced], "turkey": [overpriced], "sochi": hotels}):
+            result = await AgentService.process_message("web:screenshot", "По направлению пока не знаю, едем втроём на 5 ночей, нужно будет 2 номера, бюджет 180.000")
+        self.assertEqual(result["cart"]["destination_id"], "sochi")
+        self.assertLessEqual(result["budget_breakdown"]["total_trip_budget_range_rub"]["max"], 180000)
+        self.assertEqual(result["trip_conditions"]["adults_count"], 3)
+
+    async def test_rejected_region_is_excluded_from_budget_search(self):
+        user = make_user(nights=5, budget_rub=180000, destination_flexible=True)
+        user.current_cart.update(destination_id="maldives", destination="Мальдивы")
+        rows = [{"id": "maldives", "name": "Мальдивы", "score": 1.0},
+                {"id": "sochi", "name": "Сочи", "score": .8}]
+        with self.fixture(user, destination_rows=rows, destination_hotels={"sochi": self.named_hotels()}):
+            result = await AgentService.process_message("web:screenshot", "А если не Мальдивы?")
+        self.assertEqual(result["cart"]["destination_id"], "sochi")
+        self.assertIn("maldives", user.profile["excluded_destinations"])
+
+    async def test_named_hotel_is_selected_and_retained_until_cheaper_request(self):
+        user = make_user(budget_rub=1000000)
+        with self.fixture(user, destination_hotels={"spb": self.named_hotels()}):
+            first = await AgentService.process_message("web:screenshot", "Пересчитай на 5 ночей")
+            self.assertEqual(first["cart"]["hotel_id"], "golden")
+            selected = await AgentService.process_message("web:screenshot", "Выбери Medovaya Hotel")
+            self.assertEqual(selected["cart"]["hotel_id"], "medovaya")
+            updated = await AgentService.process_message("web:screenshot", "А на 8 ночей?")
+            self.assertEqual(updated["cart"]["hotel_id"], "medovaya")
+            cheaper = await AgentService.process_message("web:screenshot", "Как уменьшить общую стоимость поездки?")
+            self.dispatch.assert_not_awaited()
+        self.assertEqual(cheaper["cart"]["hotel_id"], "golden")
+        self.assertLess(cheaper["cart"]["total_trip_budget_range_rub"]["max"], updated["cart"]["total_trip_budget_range_rub"]["max"])
+        self.assertEqual(cheaper["cart"]["nights"], 8)
+        self.assertEqual(cheaper["trip_conditions"]["adults_count"], 3)
+        self.assertEqual(cheaper["trip_conditions"]["rooms_count"], 2)
+
+    async def test_missing_named_hotel_does_not_silently_select_something_else(self):
+        user = make_user(budget_rub=1000000)
+        with self.fixture(user, destination_hotels={"spb": self.named_hotels()}):
+            first = await AgentService.process_message("web:screenshot", "Пересчитай на 5 ночей")
+            result = await AgentService.process_message("web:screenshot", "Выбери Missing Hotel")
+        self.assertEqual(result["state"], "HOTEL_NOT_AVAILABLE")
+        self.assertEqual(result["cart"]["hotel_id"], first["cart"]["hotel_id"])
+
+    async def test_named_hotel_above_ceiling_does_not_replace_an_affordable_plan(self):
+        user = make_user(budget_rub=180000)
+        hotels = self.named_hotels()
+        hotels.append({**hotels[0], "id": "luxury", "name": "Expensive Hotel", "price_per_night_rub": 100000})
+        with self.fixture(user, destination_hotels={"spb": hotels}):
+            first = await AgentService.process_message("web:screenshot", "Пересчитай на 5 ночей")
+            result = await AgentService.process_message("web:screenshot", "Выбери Expensive Hotel")
+        self.assertEqual(result["state"], "HOTEL_OVER_BUDGET")
+        self.assertEqual(result["cart"]["hotel_id"], first["cart"]["hotel_id"])
+        self.assertEqual(user.profile["budget_rub"], 180000)
+
+    async def test_city_in_hotel_name_does_not_change_destination(self):
+        user = make_user(budget_rub=1000000)
+        hotels = self.named_hotels() + [{**self.named_hotels()[0], "id": "city-name", "name": "Сочи Парк Hotel"}]
+        with self.fixture(user, destination_hotels={"spb": hotels}):
+            result = await AgentService.process_message("web:screenshot", "Выбери Сочи Парк Hotel")
+        self.assertEqual(result["cart"]["destination_id"], "spb")
+        self.assertEqual(result["cart"]["hotel_id"], "city-name")
+
+    async def test_no_cheaper_option_returns_a_clear_short_reply(self):
+        user = make_user(budget_rub=1000000)
+        with self.fixture(user):
+            await AgentService.process_message("web:screenshot", "Пересчитай на 5 ночей")
+            result = await AgentService.process_message("web:screenshot", "Как уменьшить общую стоимость поездки?")
+        self.assertEqual(result["state"], "NO_CHEAPER_OPTION")
+        self.assertNotIn("Программа и расчёт тура", result["text"])
+        self.assertIn("Более дешёвого", result["text"])
+
 
 class StatePersistenceTest(unittest.IsolatedAsyncioTestCase):
     async def test_history_append_is_detected_by_sqlalchemy_and_keeps_old_messages(self):
@@ -233,6 +357,38 @@ class StatePersistenceTest(unittest.IsolatedAsyncioTestCase):
 
 
 class ExplicitSlotsTest(unittest.TestCase):
+    def test_generic_hotel_requests_are_not_mistaken_for_hotel_names(self):
+        for message in ("Выбери спокойный отель в Сочи для двоих", "Выбери отель в Дубае рядом с метро",
+                        "Выбери семейный отель в ОАЭ с детским бассейном", "Выбери загородный отель для двоих",
+                        "Выбери тихий отель с бассейном и сауной на Алтае"):
+            with self.subTest(message=message):
+                self.assertIsNone(hotel_selection(message))
+        self.assertEqual(hotel_selection('Выбери «Отель в облаках»'), "Отель в облаках")
+        self.assertEqual(hotel_selection('Выбери отель «Отель в облаках»'), "Отель в облаках")
+        self.assertEqual(destination_choice("Выбери тихий отель с бассейном на Алтае"), "altai")
+
+    def test_price_validator_rejects_missing_or_double_counted_tickets(self):
+        profile = dict(nights=5, adults_count=3, rooms_count=2, checkin_date="2026-11-12")
+        hotel = {"price_per_night_rub": 3500, "meals": "Завтрак"}
+        logistics = {"flight": {"price_rub_roundtrip": 13800}, "transfer": {"price_rub": 1440}}
+        correct = AgentService.calculate_package_budget("sochi", hotel, logistics, profile)
+        validate_package_totals(correct)
+        for price in (6600, 59400):
+            with self.subTest(price=price):
+                broken = copy.deepcopy(correct)
+                broken["mandatory"]["flight_out_price"] = price
+                with self.assertRaises(ValueError):
+                    validate_package_totals(broken)
+
+    def test_price_validator_rejects_inconsistent_full_range(self):
+        profile = dict(nights=5, adults_count=3, rooms_count=2, checkin_date="2026-11-12")
+        hotel = {"price_per_night_rub": 3500, "meals": "Завтрак"}
+        logistics = {"flight": {"price_rub_roundtrip": 13800}, "transfer": {"price_rub": 1440}}
+        broken = AgentService.calculate_package_budget("sochi", hotel, logistics, profile)
+        broken["total_trip_budget_range_rub"]["max"] -= 1
+        with self.assertRaises(ValueError):
+            validate_package_totals(broken)
+
     def test_origin_is_not_destination(self):
         self.assertEqual(requested_destination("Из Санкт-Петербурга в Сочи"), "sochi")
         self.assertIsNone(requested_destination("Вылет из Сочи"))
@@ -241,6 +397,8 @@ class ExplicitSlotsTest(unittest.TestCase):
         self.assertIsNone(requested_destination("Вылет из Санкт-Петербурга"))
         self.assertIsNone(requested_destination("Маленький бюджет"))
         self.assertIsNone(requested_destination("Сочини план"))
+        self.assertIsNone(requested_destination("А если не на Мальдивы?"))
+        self.assertEqual(rejected_destinations("А если не на Мальдивы?"), {"maldives"})
 
     def test_descriptive_words_do_not_change_party_or_pets(self):
         profile = {"adults_count": 2}
@@ -258,6 +416,15 @@ class ExplicitSlotsTest(unittest.TestCase):
         AgentService.extract_interests_and_slots("нужно 2 комнаты", profile)
         AgentService.extract_interests_and_slots("на этот раз на 8 ночей", profile)
         self.assertEqual(profile["rooms_count"], 2)
+
+    def test_request_for_two_rooms_does_not_mean_two_dormitory_beds(self):
+        profile = {}
+        AgentService.extract_interests_and_slots("Едем втроём, нужно будет 2 номера", profile)
+        self.assertEqual(profile["adults_count"], 3)
+        self.assertEqual(profile["rooms_count"], 2)
+        self.assertTrue(profile["private_room_required"])
+        AgentService.extract_interests_and_slots("Сделай подешевле", profile)
+        self.assertTrue(profile["private_room_required"])
 
     def test_numeric_date_range_sets_nights(self):
         profile = {"nights": 7}

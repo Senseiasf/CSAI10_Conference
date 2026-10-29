@@ -9,6 +9,34 @@ MONEY = AMOUNT + UNIT + r"\s*(?:₽|руб\w*)?"
 CHEAPER = r"(?:дешевле|подешевле|бюджетнее|экономнее|сниз\w*\s+(?:цену|бюджет)|уменьш\w*\s+(?:цену|бюджет))"
 
 
+def validate_package_totals(breakdown: dict) -> None:
+    """Reject inconsistent package arithmetic before it can be recommended."""
+    mandatory = breakdown["mandatory"]
+    travelers = mandatory["travelers_count"]
+    if travelers < 1 or mandatory["rooms_count"] < 1 or breakdown["nights"] < 1:
+        raise ValueError("Invalid traveler, room or night count")
+    money_fields = ("flight_out_price", "flight_ret_price", "flight_out_per_person_rub", "flight_ret_per_person_rub",
+                    "flight_roundtrip", "flight_price_roundtrip", "hotel_per_night", "hotel_total", "transfer", "pet_total",
+                    "total_mandatory_rub")
+    if any(type(mandatory[field]) is not int or mandatory[field] < 0 for field in money_fields):
+        raise ValueError("Package prices must be nonnegative whole rubles")
+    for direction in ("out", "ret"):
+        if mandatory[f"flight_{direction}_price"] != mandatory[f"flight_{direction}_per_person_rub"] * travelers:
+            raise ValueError("Flight price does not include every traveler exactly once")
+    flight_total = mandatory["flight_out_price"] + mandatory["flight_ret_price"]
+    if mandatory["flight_roundtrip"] != flight_total or mandatory["flight_price_roundtrip"] != flight_total:
+        raise ValueError("Round-trip flight total is inconsistent")
+    if mandatory["hotel_total"] != mandatory["hotel_per_night"] * breakdown["nights"] * mandatory["rooms_count"]:
+        raise ValueError("Hotel total is inconsistent")
+    total = flight_total + mandatory["hotel_total"] + mandatory["transfer"] + mandatory["pet_total"]
+    if mandatory["total_mandatory_rub"] != total:
+        raise ValueError("Mandatory package total is inconsistent")
+    bounds = breakdown["total_trip_budget_range_rub"]
+    onsite = breakdown["onsite_flexible"]["total_onsite_range_rub"]
+    if any(bounds[key] != total + onsite[key] for key in ("min", "max")) or bounds["min"] > bounds["max"]:
+        raise ValueError("Full trip price range is inconsistent")
+
+
 def update_trip_budget(message: str, profile: dict, cart: dict) -> str | None:
     """Store a total ceiling; return a question when the requested scope is unclear."""
     text = message.lower()

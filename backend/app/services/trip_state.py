@@ -10,11 +10,12 @@ DESTINATION_KEYWORDS = {
     "maldives": ("maldives", "мальдив", "мале"),
     "egypt": ("egypt", "египет", "шарм", "хургад", "синай"),
     "spb": ("spb", "спб", "питер", "петербург", "санкт-петербург"),
-    "altai": ("altai", "алтай", "манжерок", "телецк", "горно-алтайск"),
+    "altai": ("altai", "алтай", "алтае", "алтая", "алтаю", "манжерок", "телецк", "горно-алтайск"),
     "georgia": ("georgia", "грузи", "тбилиси", "батуми", "гудаури", "казбеги"),
 }
 EXACT_ALIASES = set(DESTINATION_KEYWORDS) | {
     "тай", "самуи", "оаэ", "спб", "сочи", "мале", "абу-даби", "тбилиси", "батуми", "гудаури", "казбеги",
+    "алтае", "алтая", "алтаю",
 }
 
 
@@ -30,7 +31,7 @@ def requested_destination(message: str) -> str | None:
         prefix = text[:match.start()]
         # Match the whole city once, so "Петербург" inside an origin such as
         # "из Санкт-Петербурга" cannot become a second destination match.
-        if re.search(r"\b(?:(?:из|с)(?:\s+города)?|вместо|кроме|не(?:\s+в)?)\s*$", prefix):
+        if re.search(r"\b(?:(?:из|с)(?:\s+города)?|вместо|кроме|не(?:\s+(?:в|на))?)\s*$", prefix):
             continue
         matches.append((match.start(), aliases[match.group(1)]))
     return max(matches)[1] if matches else None
@@ -40,6 +41,8 @@ def is_trip_edit(message: str) -> bool:
     text = message.lower().replace("ё", "е")
     return bool(re.search(
         r"дешев|подешев|бюджет|лимит|дорого|экономнее|снизь\s+цену|"
+        r"(?:уменьш\w*|сниз\w*|сократ\w*)\s+(?:(?:общ\w*|полную)\s+)?(?:стоимост\w*|цен\w*|расход\w*)|"
+        r"\b(?:выбери|выберите|выбираю|переключи)\b|"
         r"(?:другой|поменяй|смени)\s+(?:отель|город|номер|направление)|"
         r"трансфер|только\s+прямой|без\s+пересадок|вылет|рейс\s+попозже|"
         r"\d+\s*(?:ноч|дн|сут|взросл|человек|дет|ребен|номер|комнат)|"
@@ -48,6 +51,59 @@ def is_trip_edit(message: str) -> bool:
         r"на\s+(?:неделю|месяц|выходные)|с\s+(?:собак|кошк|питомц)|без\s+(?:детей|собаки|кошки|питомц)",
         text,
     ))
+
+
+def destination_choice(message: str) -> str | None:
+    text = message.lower().replace("ё", "е").strip()
+    advice = re.match(r"^(?:а\s+)?(?:почему|откуда|что|как|расскажи|какая|какой|какие|нужна|сколько)\b", text)
+    if advice and not re.search(r"\b(?:подбери|собери|поедем|хочу|выбери|смени|поменяй)\b", text):
+        return None
+    return requested_destination(message)
+
+
+def wants_cheaper(message: str) -> bool:
+    text = message.lower().replace("ё", "е")
+    return bool(re.search(
+        r"дешев|подешев|бюджетнее|экономнее|сэконом|дорого|"
+        r"(?:уменьш\w*|сниз\w*|сократ\w*)\s+(?:(?:общ\w*|полную)\s+)?(?:стоимост\w*|цен\w*|расход\w*)",
+        text,
+    ))
+
+
+def hotel_selection(message: str) -> str | None:
+    match = re.match(r"\s*(?:выбери(?:те)?|выбираю|переключи(?:сь)?\s+на)\s+(.+?)\s*[.!?]?\s*$", message, re.IGNORECASE)
+    if not match:
+        return None
+    raw_query = re.sub(r"^(?:отель|гостиницу)\s+", "", match[1], flags=re.IGNORECASE)
+    is_quoted = raw_query.lstrip().startswith(('«', '"', '“'))
+    query = raw_query.strip(' «»"“”.!?')
+    generic_request = re.search(r"\b(?:отел\w*|гостиниц\w*|резорт\w*)\s+(?:в|на|для|с|у|рядом|где)\b", match[1], re.IGNORECASE)
+    if generic_request and not is_quoted:
+        return None
+    if not is_quoted and requested_destination(query) and len(query.split()) <= 2 and not re.search(r"отел|hotel|гостиниц", query, re.IGNORECASE):
+        return None
+    if query.casefold() in ("другой", "другой отель", "подешевле", "самый дешевый", "самый дешёвый"):
+        return None
+    return query or None
+
+
+def matching_hotels(query: str, hotels: list[dict]) -> list[dict]:
+    def normalize(value):
+        return re.sub(r"[^\w]+", " ", value.casefold().replace("ё", "е")).strip()
+    name = normalize(query)
+    exact = [hotel for hotel in hotels if name in (normalize(hotel["name"]), normalize(hotel["id"]))]
+    return exact or [hotel for hotel in hotels if len(name) >= 4 and name in normalize(hotel["name"])]
+
+
+def rejected_destinations(message: str) -> set[str]:
+    text = message.lower().replace("ё", "е")
+    rejected = set()
+    for destination, keywords in DESTINATION_KEYWORDS.items():
+        for keyword in keywords:
+            suffix = r"\b" if keyword in EXACT_ALIASES else r"\w*\b"
+            if re.search(r"\b(?:не\s+(?:(?:в|на)\s+)?|кроме\s+|без\s+)" + re.escape(keyword) + suffix, text):
+                rejected.add(destination)
+    return rejected
 
 
 def estimate_request(message: str) -> str | None:
