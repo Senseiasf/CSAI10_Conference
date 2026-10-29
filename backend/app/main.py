@@ -26,6 +26,7 @@ from app.services.calendar_service import CalendarService
 from app.services.preference_memory import remembered_preferences, preference_summary
 from app.services.compliance_service import ComplianceService
 from app.services.ltr_service import LTRService
+from app.services.llm_service import LLMService
 from app.bot.telegram_bot import start_telegram_bot
 
 logging.basicConfig(
@@ -108,6 +109,7 @@ async def health_check():
             "postgres": pg_ok,
             "neo4j": neo_ok,
             "llm_mode": "mock" if settings.is_mock_llm else settings.OPENAI_MODEL,
+            "llm": LLMService.get_diagnostics(),
             "graph_stats": graph_stats,
             "ltr_ranker": LTRService.get_status()
         }

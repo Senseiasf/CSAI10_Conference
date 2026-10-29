@@ -12,6 +12,8 @@ from app.mcp.tools import MCPTools
 from app.models import UserSessionModel
 from app.services.agent_service import AgentService
 from app.services.llm_service import LLMService
+from app.domain.dialogue import DialogueDecision, DialogueIntent
+from app.services.dialogue_parser import DialogueParser
 from app.services.trip_dates import update_trip_dates
 from app.services.trip_budget import validate_package_totals
 from app.services.trip_state import requested_destination, rejected_destinations, hotel_selection, destination_choice, transfer_preference
@@ -261,9 +263,10 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_city_in_advice_question_does_not_change_trip(self):
         user = make_user(budget_rub=1000000)
-        with self.fixture(user):
+        with self.fixture(user), patch.object(DialogueParser, "parse", new=AsyncMock(
+                return_value=DialogueDecision(intent=DialogueIntent.QUESTION, answer="Старый ответ без пересчёта"))) as parse:
             result = await AgentService.process_message("web:screenshot", "Какая погода в Сочи?")
-            self.dispatch.assert_awaited_once()
+            parse.assert_awaited_once()
         self.assertEqual(result["state"], "CONSULTATION")
         self.assertEqual(result["cart"]["destination_id"], "spb")
 
@@ -401,10 +404,11 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
             with self.subTest(intro=intro):
                 user = make_user(budget_rub=1000000)
                 user.current_cart = {"destination_id": "sochi", "destination": "Сочи"}
-                with self.fixture(user, destination_rows=rows, destination_hotels={"sochi": self.named_hotels()}):
-                    self.dispatch.return_value = {"action": "plan", "destination_id": "sochi", "ai_reply_intro": intro}
+                with self.fixture(user, destination_rows=rows, destination_hotels={"sochi": self.named_hotels()}), patch.object(
+                        DialogueParser, "parse", new=AsyncMock(return_value=DialogueDecision(
+                            intent=DialogueIntent.PLAN, narrative=intro))) as parse:
                     result = await AgentService.process_message("web:route-name", "Покажи подходящий вариант")
-                    self.dispatch.assert_awaited_once()
+                    parse.assert_awaited_once()
                 self.assertNotIn(intro, result["text"])
                 self.assertNotIn("Аудит агента", result["text"])
                 self.assertIn("🌴 **Сочи**", result["text"])

@@ -204,13 +204,40 @@ def resolve_origin_airport(origin_str: Optional[str]) -> Optional[str]:
     return None
 
 
+class LLMServiceError(RuntimeError):
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+        self.public_message = message
+
+
 class LLMService:
     _client: Optional[AsyncOpenAI] = None
+    _last_error: Optional[Dict[str, str]] = None
+
+    @classmethod
+    def get_diagnostics(cls) -> Dict[str, Any]:
+        configuration_error = settings.llm_configuration_error
+        error = cls._last_error
+        status = "ready" if settings.is_mock_llm else "configured"
+        if configuration_error:
+            status = "configuration_error"
+            error = {"code": "configuration", "message": configuration_error}
+        elif error:
+            status = "error"
+        return {
+            "mode": settings.LLM_MODE,
+            "model": settings.OPENAI_MODEL,
+            "status": status,
+            "error": error,
+        }
 
     @classmethod
     def get_client(cls) -> Optional[AsyncOpenAI]:
         if settings.is_mock_llm:
             return None
+        if settings.llm_configuration_error:
+            raise LLMServiceError("configuration", settings.llm_configuration_error)
         if cls._client is None:
             cls._client = AsyncOpenAI(
                 api_key=settings.OPENAI_API_KEY,
@@ -218,6 +245,32 @@ class LLMService:
                 timeout=15.0
             )
         return cls._client
+
+    @classmethod
+    def _public_exception(cls, exc: Exception) -> str:
+        message = str(exc)
+        if settings.OPENAI_API_KEY:
+            message = message.replace(settings.OPENAI_API_KEY, "<redacted>")
+        return message[:500]
+
+    @classmethod
+    async def check_live_connection(cls) -> Dict[str, Any]:
+        client = cls.get_client()
+        if client is None:
+            return cls.get_diagnostics()
+        try:
+            await client.chat.completions.create(
+                model=settings.OPENAI_MODEL,
+                messages=[{"role": "user", "content": "Ответь: ok"}],
+                max_tokens=1,
+                temperature=0,
+            )
+        except Exception as exc:
+            public_message = cls._public_exception(exc)
+            cls._last_error = {"code": "api", "message": public_message}
+            raise LLMServiceError("api", public_message) from exc
+        cls._last_error = None
+        return {**cls.get_diagnostics(), "status": "ready"}
 
     @classmethod
     def is_conversational_question(cls, text: str) -> bool:
@@ -260,7 +313,11 @@ class LLMService:
         - consult_travel_inquiry: консультация по визам, валюте, достопримечательностям
         - confirm_cart_checkout: покупка / бронирование
         """
-        client = cls.get_client()
+        try:
+            client = cls.get_client()
+        except LLMServiceError as exc:
+            cls._last_error = {"code": exc.code, "message": exc.public_message}
+            return None
         if not client:
             return None
 
@@ -386,7 +443,9 @@ class LLMService:
 
             return None
         except Exception as e:
-            logger.warning("Ошибка dispatch_intent в DeepSeek Flash: %s", e)
+            public_message = cls._public_exception(e)
+            logger.warning("Ошибка dispatch_intent в DeepSeek Flash: %s", public_message)
+            cls._last_error = {"code": "api", "message": public_message}
             return None
 
     @classmethod
@@ -471,7 +530,7 @@ class LLMService:
         system_prompt = (
             "Ты — умный AI-консультант по туризму сервиса Ostrovok. "
             "Отвечай на вопросы пользователя вежливо, экспертно и лаконично. "
-            "Наш сервис умеет мгновенно бронировать под ключ 9 направлений: "
+            "Наш сервис умеет планировать поездки под ключ по 9 направлениям: "
             "Сочи, ОАЭ (Дубай), Турция (Анталья/Стамбул), Таиланд (Пхукет), Мальдивы, Египет, Санкт-Петербург, Алтай и Грузия (Тбилиси/Гудаури/Казбеги). "
             "Дай точный ответ на вопрос и в конце ненавязчиво предложи рассчитать поездку с отелем, перелетом и трансфером."
         )
@@ -498,3 +557,28 @@ class LLMService:
         except Exception as e:
             logger.warning("Ошибка консультации DeepSeek Flash: %s", e)
             return None
+
+    @classmethod
+    async def narrate_quote_difference(cls, difference: Dict[str, Any]) -> str:
+        fallback = difference["text"]
+        if settings.is_mock_llm:
+            return fallback
+        try:
+            client = cls.get_client()
+            if client is None:
+                return fallback
+            response = await client.chat.completions.create(
+                model=settings.OPENAI_MODEL,
+                messages=[
+                    {"role": "system", "content": "Перефразируй объяснение разницы цены в одном предложении. Не изменяй числа и не выполняй новых расчётов."},
+                    {"role": "user", "content": json.dumps(difference, ensure_ascii=False)},
+                ],
+                max_tokens=180,
+                temperature=0,
+            )
+            return (response.choices[0].message.content or "").strip() or fallback
+        except Exception as exc:
+            public_message = cls._public_exception(exc)
+            cls._last_error = {"code": "api", "message": public_message}
+            logger.warning("Ошибка формулировки разницы цены: %s", public_message)
+            return fallback
