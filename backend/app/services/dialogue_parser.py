@@ -14,7 +14,7 @@ from app.services.trip_dates import update_trip_dates
 from app.services.trip_logistics import is_logistics_question
 from app.services.trip_state import (
     current_trip_question, destination_choice, estimate_request, hotel_selection, is_trip_edit,
-    matching_hotels, transfer_preference,
+    matching_hotels, rejected_destinations, transfer_preference, wants_cheaper,
 )
 
 
@@ -219,7 +219,9 @@ class DialogueParser:
                 search=SearchCriteriaDecision(scope="hotels", price_preference="more_expensive"),
             )
         multi_city_request = bool(re.search(r"тур по городам|комбинированн|мульти|несколько городов", lower))
-        if is_trip_edit(message):
+        pending_budget = bool(state.pending_action and "budget_rub" in state.pending_action.missing_fields)
+        if (is_trip_edit(message) or multi_city_request or pending_budget or rejected_destinations(message)
+                or re.search(r"\b(?:собак\w*|кошк\w*|питомц\w*|пес|пса|псом)\b", lower)):
             selected_query = hotel_selection(message)
             if selected_query:
                 offers = context.get("alternative_offers") or []
@@ -232,14 +234,21 @@ class DialogueParser:
                     if len(offers) != 1:
                         return DialogueDecision(intent=DialogueIntent.CLARIFY, clarification="Какой именно отель вы имеете в виду?", references=["selected_hotel"])
                 matches = matching_hotels(selected_query, offers)
-                if len(matches) == 1:
-                    return DialogueDecision(intent=DialogueIntent.SELECT_OFFER, changes=[
-                        StateChange(field="hotel_id", operation=ChangeOperation.SET, value=matches[0]["id"]),
-                    ])
                 if len(matches) > 1:
                     return DialogueDecision(intent=DialogueIntent.CLARIFY, clarification="Какой именно отель вы имеете в виду?", references=["hotel_name"])
+                hotel_id = matches[0]["id"] if matches else selected_query
+                return DialogueDecision(intent=DialogueIntent.SELECT_OFFER, changes=[
+                    StateChange(field="hotel_id", operation=ChangeOperation.SET, value=hotel_id),
+                ])
             if direct_destination:
                 changes.append(StateChange(field="destination_id", operation=ChangeOperation.SET, value=direct_destination))
+            if multi_city_request:
+                changes.append(StateChange(field="is_multi_city", operation=ChangeOperation.SET, value=True))
+            if interests:
+                changes.append(StateChange(field="interests", operation=ChangeOperation.SET, value=interests))
+            rejected = rejected_destinations(message)
+            if rejected:
+                changes.append(StateChange(field="rejected_destinations", operation=ChangeOperation.ADD, value=sorted(rejected)))
             transfer = transfer_preference(message)
             if transfer is not None:
                 changes.append(StateChange(field="without_transfer", operation=ChangeOperation.SET, value=transfer))
@@ -254,22 +263,76 @@ class DialogueParser:
                 adults = re.search(r"\bнас\s+(\d+)\b|\b(\d+)\s*взросл", lower)
                 if adults:
                     changes.append(StateChange(field="adults_count", operation=ChangeOperation.SET, value=int(adults.group(1) or adults.group(2))))
+                elif re.search(r"\b(?:вдвоем|двое взрослых|два взрослых)\b", lower):
+                    changes.append(StateChange(field="adults_count", operation=ChangeOperation.SET, value=2))
+                elif re.search(r"\b(?:втроем|три взрослых|трое взрослых)\b", lower):
+                    changes.append(StateChange(field="adults_count", operation=ChangeOperation.SET, value=3))
+                elif re.search(r"\b(?:вчетвером|четыре взрослых|четверо взрослых)\b", lower):
+                    changes.append(StateChange(field="adults_count", operation=ChangeOperation.SET, value=4))
+            kids = re.search(r"\b(\d+)\s*(?:ребен\w*|детей|дет\w*|малыш\w*)", lower)
+            if kids:
+                changes.append(StateChange(field="kids_count", operation=ChangeOperation.SET, value=int(kids.group(1))))
+            elif re.search(r"\bбез\s+(?:детей|ребенка)\b", lower):
+                changes.append(StateChange(field="kids_count", operation=ChangeOperation.SET, value=0))
+            rooms = re.search(r"\b(\d+)\s*(?:комнат\w*|номер\w*)", lower)
+            if rooms:
+                changes.append(StateChange(field="rooms_count", operation=ChangeOperation.SET, value=int(rooms.group(1))))
+                changes.append(StateChange(field="private_room_required", operation=ChangeOperation.SET, value=True))
+            if re.search(r"\b(?:не\s+хостел\w*|без\s+хостел\w*|отдельн\w*\s+номер\w*|собственн\w*\s+ванн\w*)", lower):
+                changes.append(StateChange(field="private_room_required", operation=ChangeOperation.SET, value=True))
             date_profile = deepcopy(state.apply_to_profile({}))
-            update_trip_dates(message, date_profile, context.get("cart") or {})
+            date_question = update_trip_dates(message, date_profile, context.get("cart") or {})
+            if date_question:
+                return DialogueDecision(intent=DialogueIntent.CLARIFY, clarification=date_question,
+                                        search=SearchCriteriaDecision(missing_fields=["checkin_date"]))
             for field in ("checkin_date", "checkout_date"):
                 if date_profile.get(field) and date_profile.get(field) != getattr(state.dates, field):
                     changes.append(StateChange(field=field, operation=ChangeOperation.SET, value=date_profile[field]))
-            if re.search(r"\bс\s+(?:собак|кошк|питомц)", lower):
+            if not nights and date_profile.get("nights") != state.dates.nights:
+                changes.append(StateChange(field="nights", operation=ChangeOperation.SET, value=date_profile["nights"]))
+            if re.search(r"\b(?:собак\w*|кошк\w*|питомц\w*|пес|пса|псом)\b", lower) and not re.search(r"\bбез\s+(?:собаки|кошки|питомц\w*|животных)\b", lower):
                 changes.append(StateChange(field="has_pets", operation=ChangeOperation.SET, value=True))
             if re.search(r"\bбез\s+(?:собаки|кошки|питомц\w*|животных)\b", lower):
                 changes.append(StateChange(field="has_pets", operation=ChangeOperation.SET, value=False))
+            if re.search(r"\b(?:только\s+прямой|прямой\s+рейс|без\s+пересадок)\b", lower):
+                changes.append(StateChange(field="prefer_direct_flight", operation=ChangeOperation.SET, value=True))
+            elif re.search(r"\b(?:с\s+пересадкой|стыковочный)\b", lower):
+                changes.append(StateChange(field="prefer_direct_flight", operation=ChangeOperation.SET, value=False))
+            flight_time = None
+            if re.search(r"днем|днём|в\s+обед|дневн\w*\s+вылет", lower):
+                flight_time = "day"
+            elif re.search(r"попозже|не\s+в\s+[67]\b|не\s+рано|после\s+(?:10|12)|поздний\s+вылет", lower):
+                flight_time = "later"
+            elif re.search(r"вечером|вечерн\w*\s+вылет|ночью", lower):
+                flight_time = "evening"
+            elif re.search(r"пораньше|утром|утренн\w*\s+вылет|ранний\s+вылет", lower):
+                flight_time = "morning"
+            if flight_time:
+                changes.append(StateChange(field="flight_time_pref", operation=ChangeOperation.SET, value=flight_time))
             budget_profile = deepcopy(state.apply_to_profile({}))
-            update_trip_budget(message, budget_profile, context.get("cart") or {})
+            if pending_budget:
+                budget_profile["awaiting_budget"] = True
+            budget_question = update_trip_budget(message, budget_profile, context.get("cart") or {})
+            if budget_question:
+                if not changes:
+                    changes.append(StateChange(field="replan_action", operation=ChangeOperation.SET, value="modify"))
+                return DialogueDecision(intent=DialogueIntent.MODIFY, changes=changes, clarification=budget_question,
+                                        search=SearchCriteriaDecision(missing_fields=["budget_rub"]))
             if budget_profile.get("budget_rub") != state.budget_rub:
                 changes.append(StateChange(field="budget_rub", operation=ChangeOperation.SET, value=budget_profile["budget_rub"]))
+            search = None
+            if wants_cheaper(message):
+                search = SearchCriteriaDecision(scope="current", price_preference="cheaper",
+                                                flexible_dates=bool(re.search(r"в\s+любое\s+время|в\s+любой\s+день|когда\s+угодно", lower)))
+            elif rejected:
+                search = SearchCriteriaDecision(scope="other_destinations")
+            elif re.search(r"другой\s+отель|поменяй\s+отель|смени\s+отель|другой\s+вариант\s+проживания|другие\s+варианты", lower):
+                search = SearchCriteriaDecision(scope="hotels")
+                changes.append(StateChange(field="replan_action", operation=ChangeOperation.SET, value="change_hotel"))
             if not changes:
                 changes.append(StateChange(field="replan_action", operation=ChangeOperation.SET, value="modify"))
-            return DialogueDecision(intent=DialogueIntent.PLAN if multi_city_request else DialogueIntent.MODIFY, changes=changes)
+            return DialogueDecision(intent=DialogueIntent.PLAN if multi_city_request else DialogueIntent.MODIFY,
+                                    changes=changes, search=search)
 
         changes = [StateChange(field="interests", operation=ChangeOperation.SET, value=interests)] if interests else []
         if direct_destination:
@@ -279,7 +342,7 @@ class DialogueParser:
         if budget_profile.get("budget_rub") != state.budget_rub:
             changes.append(StateChange(field="budget_rub", operation=ChangeOperation.SET, value=budget_profile["budget_rub"]))
         vague = re.search(r"хоч\w*|посовету|помоги|куда|отдохн|отпуск|путешеств|море|горы|солнц", lower)
-        specific_plan = bool(direct_destination or re.search(r"тур по городам|комбинированн|мульти|несколько городов", lower))
+        specific_plan = bool(direct_destination or multi_city_request)
         if vague and not specific_plan and state.preferences.is_multi_city:
             changes.append(StateChange(field="is_multi_city", operation=ChangeOperation.SET, value=False))
         missing = self._mock_missing(state) if vague and not specific_plan else []
@@ -296,11 +359,19 @@ class DialogueParser:
             interests.append("beach")
         if re.search(r"горы|горн|альп|лыж|хайкинг|треккинг", message):
             interests.append("mountains")
+        if re.search(r"истор|экскурси|достопримечательн|музе|культура", message):
+            interests.append("history_culture")
+        if re.search(r"спа|spa|релакс|массаж|велнес", message):
+            interests.append("spa_wellness")
+        if re.search(r"дешев|эконом|подешев|недорог|бюджетн", message):
+            interests.append("budget_friendly")
+        if re.search(r"люкс|премиум|вилл|5\s*звезд|пять\s*звезд|deluxe|vip|роскошн|раскошел|лучший\s+отель", message):
+            interests.append("luxury")
         return interests
 
     def _mock_missing(self, state: TripState) -> list[str]:
         missing = []
-        if not (state.destination_id or state.search.destination_query or state.preferences.interests):
+        if not (state.destination_id or state.preferences.interests):
             missing.append("direction")
         if not state.dates.checkin_date:
             missing.append("checkin_date")

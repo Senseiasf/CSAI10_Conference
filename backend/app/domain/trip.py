@@ -38,16 +38,11 @@ class TripPreferences(BaseModel):
     rejected_destinations: list[str] = Field(default_factory=list)
 
 
-class SearchCriteria(BaseModel):
-    scope: Literal["current", "other_destinations", "any", "hotels", "flights", "dates"] = "current"
-    destination_query: str | None = None
-    price_preference: Literal["cheaper", "more_expensive", "comfort", "any"] = "any"
-
-
 class PendingAction(BaseModel):
     kind: Literal["plan_trip", "search_alternatives", "select_offer"]
     missing_fields: list[str] = Field(default_factory=list)
     question: str | None = None
+    attempts: int = 0
 
 
 class TripState(BaseModel):
@@ -64,10 +59,11 @@ class TripState(BaseModel):
     budget_estimate: Literal["min", "max"] = "max"
     services: TripServices = Field(default_factory=TripServices)
     preferences: TripPreferences = Field(default_factory=TripPreferences)
-    search: SearchCriteria = Field(default_factory=SearchCriteria)
     pending_action: PendingAction | None = None
     selected_offers: dict[str, Any] = Field(default_factory=dict)
     current_version_id: str | None = None
+    revision: int = 0
+    explicit_fields: list[str] = Field(default_factory=list)
 
     @classmethod
     def from_legacy(cls, profile: dict | None, cart: dict | None) -> "TripState":
@@ -111,16 +107,13 @@ class TripState(BaseModel):
                 abroad_only=bool(profile.get("abroad_only", False)),
                 is_multi_city=bool(profile.get("is_multi_city", False)),
                 rejected_hotels=list(profile.get("rejected_hotels") or []),
-                rejected_destinations=list(profile.get("rejected_destinations") or []),
-            ),
-            search=SearchCriteria(
-                scope=profile.get("search_scope") or ("other_destinations" if profile.get("destination_flexible") else "current"),
-                destination_query=profile.get("destination_query"),
-                price_preference=profile.get("price_preference") or "any",
+                rejected_destinations=list(profile.get("rejected_destinations") or profile.get("excluded_destinations") or []),
             ),
             pending_action=PendingAction.model_validate(profile["pending_action"]) if profile.get("pending_action") else None,
             selected_offers=selected_offers,
             current_version_id=cart.get("tour_version_id") or profile.get("tour_version_id"),
+            revision=profile.get("_trip_revision", 0),
+            explicit_fields=list(profile.get("_explicit_fields") or []),
         )
 
     def apply_to_profile(self, profile: dict | None = None) -> dict:
@@ -149,14 +142,17 @@ class TripState(BaseModel):
             "is_multi_city": self.preferences.is_multi_city,
             "rejected_hotels": list(self.preferences.rejected_hotels),
             "rejected_destinations": list(self.preferences.rejected_destinations),
-            "search_scope": self.search.scope,
-            "destination_flexible": self.search.scope == "other_destinations",
-            "destination_query": self.search.destination_query,
-            "price_preference": self.search.price_preference,
+            "excluded_destinations": list(self.preferences.rejected_destinations),
             "pending_action": self.pending_action.model_dump(mode="json") if self.pending_action else None,
             "tour_version_id": self.current_version_id,
+            "_trip_revision": self.revision,
+            "_explicit_fields": list(self.explicit_fields),
         })
-        for key in ("adults_count", "kids_count", "nights", "rooms_count", "budget_rub", "prefer_direct_flight", "flight_time_pref", "origin_airport", "tour_version_id", "destination_query", "pending_action"):
+        for key in ("search_scope", "destination_flexible", "destination_query", "price_preference"):
+            result.pop(key, None)
+        if self.budget_rub is not None:
+            result.pop("awaiting_budget", None)
+        for key in ("adults_count", "kids_count", "nights", "rooms_count", "budget_rub", "prefer_direct_flight", "flight_time_pref", "origin_airport", "tour_version_id", "pending_action"):
             if result.get(key) is None:
                 result.pop(key, None)
         if self.dates.checkin_date and self.dates.checkout_date:

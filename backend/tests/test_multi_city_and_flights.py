@@ -396,7 +396,7 @@ class DaytimeFlightReplanningTest(unittest.IsolatedAsyncioTestCase):
             result = await AgentService.process_message("test-day", "хочу вылетать не в 6 утра, а днем")
 
         self.assertEqual(logistics_mock.call_args.kwargs.get("flight_time_pref"), "day")
-        self.assertIn("никаких подъёмов в 6 утра", result["text"])
+        self.assertIn("время вылета", result["text"])
         self.assertIn("13:40", result["text"])
         self.assertIn("Турция (Анталья)", result["text"])
         self.assertIn("Составь тур по городам", result["text"])

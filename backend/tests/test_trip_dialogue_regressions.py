@@ -236,16 +236,15 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result["trip_conditions"]["has_pets"])
         self.assertEqual(result["cart"]["destination_id"], "spb")
 
-    async def test_unclear_budget_does_not_keep_an_old_offer_with_new_conditions(self):
+    async def test_unclear_budget_preserves_selected_offer_and_saves_other_conditions(self):
         user = make_user(budget_rub=1000000)
         with self.fixture(user):
-            await AgentService.process_message("web:dialogue", "Пересчитай на 11 ночей")
+            selected = await AgentService.process_message("web:dialogue", "Пересчитай на 11 ночей")
             result = await AgentService.process_message("web:dialogue", "А на 8 ночей с бюджетом сто тысяч?")
-        self.assertEqual(result["state"], "NEEDS_BUDGET")
-        self.assertEqual(result["cart"]["nights"], 8)
-        self.assertEqual(result["cart"]["checkout_date"], "2027-10-23")
-        self.assertNotIn("hotel", result["cart"])
-        self.assertNotIn("budget_quote", result["cart"])
+        self.assertEqual(result["state"], "CLARIFICATION_REQUIRED")
+        self.assertEqual(result["trip_state"]["dates"]["nights"], 8)
+        self.assertEqual(result["cart"], selected["cart"])
+        self.assertIn("hotel", result["cart"])
 
     async def test_explicit_destination_change_still_works(self):
         user = make_user(budget_rub=1000000)

@@ -115,11 +115,12 @@ class DialogueContextTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(result["dialogue_decision"]["intent"], "search_alternatives")
         self.assertEqual(result["trip_state"]["budget_rub"], 180000)
-        self.assertEqual(result["trip_state"]["search"]["scope"], "other_destinations")
-        self.assertEqual(result["trip_state"]["search"]["price_preference"], "any")
+        self.assertEqual(result["search_request"]["scope"], "other_destinations")
+        self.assertIsNone(result["search_request"]["price_preference"])
+        self.assertNotIn("search", result["trip_state"])
         self.assertEqual(result["trip_state"]["dates"]["nights"], 5)
         self.assertEqual(result["cart"], selected)
-        self.assertTrue(calls[0][0]["destination_flexible"])
+        self.assertEqual(calls[0][0]["_structured_decision"]["search"]["scope"], "other_destinations")
 
     async def test_more_expensive_is_a_criterion_not_a_budget_change(self):
         session = self.harness.make_session(profile={"budget_rub": 180000})
@@ -131,7 +132,8 @@ class DialogueContextTest(unittest.IsolatedAsyncioTestCase):
             self.harness.save(session),
         )
         self.assertEqual(result["trip_state"]["budget_rub"], 180000)
-        self.assertEqual(result["trip_state"]["search"]["price_preference"], "more_expensive")
+        self.assertEqual(result["search_request"]["price_preference"], "more_expensive")
+        self.assertNotIn("search", result["trip_state"])
 
     async def test_reset_requires_explicit_new_trip(self):
         selected = {"destination_id": "sochi", "hotel_id": "hotel-1"}
@@ -146,7 +148,7 @@ class DialogueContextTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reset["cart"], {})
 
     async def test_llm_failure_keeps_pending_action(self):
-        pending = {"kind": "plan_trip", "missing_fields": ["budget_rub"], "question": "Бюджет?"}
+        pending = {"kind": "plan_trip", "missing_fields": ["budget_rub"], "question": "Бюджет?", "attempts": 0}
         session = self.harness.make_session(profile={"pending_action": pending, "nights": 5}, cart={"hotel_id": "hotel-1"})
         parser = AsyncMock()
         parser.parse.side_effect = DialogueParserError("api", "provider unavailable")

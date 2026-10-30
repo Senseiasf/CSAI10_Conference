@@ -37,6 +37,7 @@ class SearchCriteriaDecision(BaseModel):
     scope: Literal["current", "other_destinations", "any", "hotels", "flights", "dates"] | None = None
     destination_query: str | None = None
     price_preference: Literal["cheaper", "more_expensive", "comfort", "any"] | None = None
+    flexible_dates: bool = False
     missing_fields: list[str] = Field(default_factory=list)
 
 
