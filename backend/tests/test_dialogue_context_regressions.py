@@ -96,9 +96,9 @@ class DialogueContextTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(changes["adults_count"], 3)
         self.assertEqual(result["trip_state"]["dates"]["nights"], 5)
         self.assertEqual(result["trip_state"]["passengers"]["adults_count"], 3)
-        self.assertIn("длительность", result["text"])
-        self.assertIn("число взрослых", result["text"])
-        self.assertNotIn("Даты поездки успешно обновлены", result["text"])
+        self.assertEqual(result["text"], "План проверен")
+        self.assertNotIn("Изменения:", result["text"])
+        self.assertNotIn("длительность", result["text"])
 
     async def test_budget_and_other_destinations_are_separate_from_price_preference(self):
         selected = {"destination_id": "spb", "destination": "Санкт-Петербург", "hotel_id": "hotel-1", "hotel": "Hotel 1"}

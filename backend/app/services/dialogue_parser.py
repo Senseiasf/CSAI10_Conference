@@ -13,7 +13,7 @@ from app.domain.trip import TripQuote, TripState
 from app.services.booking_stub import detect_booking_action
 from app.services.llm_service import LLMService, LLMServiceError
 from app.services.trip_budget import update_trip_budget
-from app.services.trip_dates import update_trip_dates
+from app.services.trip_dates import relative_date_shift, update_trip_dates
 from app.services.trip_logistics import is_logistics_question
 from app.services.trip_state import (
     current_trip_question, destination_choice, estimate_request, hotel_selection, is_trip_edit,
@@ -30,7 +30,7 @@ DIALOGUE_DECISION_TOOL = [{
             "type": "object",
             "additionalProperties": False,
             "properties": {
-                "intent": {"type": "string", "enum": ["question", "comparison", "modify_trip", "plan_trip", "search_alternatives", "select_offer", "correction", "new_trip", "booking", "clarify"]},
+                "intent": {"type": "string", "enum": ["question", "comparison", "modify_trip", "plan_trip", "search_alternatives", "select_offer", "correction", "new_trip", "booking", "clarify", "invalid_or_joke_request"]},
                 "topic": {"type": ["string", "null"]},
                 "mode": {"type": ["string", "null"], "enum": ["min", "max", None]},
                 "changes": {
@@ -105,12 +105,14 @@ class DialogueParser:
         if client is None:
             raise DialogueParserError("configuration", "Live parser требует LLM_MODE=live")
         now = datetime.now(ZoneInfo(settings.TRIP_TIMEZONE))
+        available_hotels = self._available_hotels(context, state)
         payload = {
             "trip_state": state.model_dump(mode="json"),
             "trip_quote": quote.model_dump(mode="json") if quote else None,
             "selected_tour": deepcopy((context.get("cart") or {})),
             "selected_offers": context.get("selected_offers") or state.selected_offers,
-            "alternative_offers": context.get("alternative_offers") or (context.get("cart") or {}).get("compared_hotels") or [],
+            "alternative_offers": available_hotels,
+            "available_hotels": [{"id": hotel.get("id"), "name": hotel.get("name")} for hotel in available_hotels],
             "conversation": (context.get("conversation_history") or [])[-3:],
             "expected_clarification": state.pending_action.model_dump(mode="json") if state.pending_action else None,
             "date_context": {
@@ -134,10 +136,15 @@ class DialogueParser:
             "search.scope, search.destination_query, search.price_preference и search.flexible_dates относятся только к этому сообщению, не сохраняй их как StateChange. "
             "Даты возвращай в ISO по date_context; без года выбирай ближайшую будущую дату. 'Ближайшие выходные' — ближайшая суббота и 2 ночи до понедельника. "
             "Не меняй даты при изменении бюджета, направления или уровня цены. Гибкие даты разрешай только при явном разрешении пользователя. "
-            "Для нового диапазона верни checkin_date и checkout_date; для изменения длительности верни nights. Зависимые значения пересчитает и проверит код. "
-            "Ссылки 'тот отель', 'первый вариант' разрешай только по alternative_offers/selected_offers до hotel_id; если неоднозначно — clarify. "
+            "Для нового диапазона верни checkin_date и checkout_date; для изменения длительности верни nights. "
+            "Для относительного переноса уже известных дат верни ровно одно изменение date_shift_days со знаком: +7 для 'на неделю позже', -3 для 'на 3 дня раньше', +2 для 'на пару дней позже'. "
+            "Ссылки на отели разрешай по available_hotels: сопоставляй опечатки, части названий, русскую транслитерацию английских слов, описания и порядковые ссылки с конкретным hotel_id. Не требуй точного написания. "
             "Для отказа от трансфера без других правок верни ровно одну операцию field=without_transfer, operation=set, value=true. "
-            "Допустимые поля: destination_id, checkin_date, checkout_date, nights, adults_count, kids_count, kids_ages, has_pets, rooms_count, "
+            "Понимай живой русский язык и сленг без морализаторства: 'убухаться', 'оторваться', 'потусить', 'бары и клубы' означают interests=['nightlife','all_inclusive']; "
+            "'выгорел', 'чтобы никто не трогал' — interests=['relaxation','nature','spa_wellness']. Пиши narrative живо и по делу, без JSON, think, applied_changes и технических рассуждений. "
+            "При смене несовместимого типа отдыха (море на горы, лес или экскурсии) обнови interests, очисти destination_id и выбери search.scope=any с подходящим destination_query, сохранив даты и бюджет. "
+            "СИЗО, тюрьма, дурка, ад, Луна, шаурмичная и подобные шуточные или не-туристические места не являются destination: верни intent=invalid_or_joke_request, changes=[], вежливый answer с туристической альтернативой. "
+            "Допустимые поля: destination_id, checkin_date, checkout_date, date_shift_days, nights, adults_count, kids_count, kids_ages, has_pets, rooms_count, "
             "budget_rub, without_transfer, prefer_direct_flight, flight_time_pref, origin_airport, private_room_required, interests, "
             "hotel_id, rejected_destinations, rejected_hotels, is_multi_city, replan_action. "
             "Для вопроса о пересадке topic=connection_risk, о сохранённом плане topic=current_trip, о границе цены topic=budget_estimate. "
@@ -173,6 +180,18 @@ class DialogueParser:
         except Exception as exc:
             raise DialogueParserError("api", self._safe_error(exc)) from exc
 
+    def _available_hotels(self, context: dict, state: TripState) -> list[dict]:
+        offers = []
+        offers.extend(context.get("alternative_offers") or (context.get("cart") or {}).get("compared_hotels") or [])
+        offers.extend(context.get("catalog_offers") or [])
+        if state.selected_offers.get("hotel_id"):
+            offers.append({"id": state.selected_offers["hotel_id"], "name": state.selected_offers.get("hotel")})
+        unique = {}
+        for offer in offers:
+            if offer.get("id") and offer.get("name"):
+                unique[offer["id"]] = deepcopy(offer)
+        return list(unique.values())
+
     def _resolve_hotel_reference(self, decision: DialogueDecision, offers: list[dict]) -> DialogueDecision:
         for change in decision.changes:
             if change.field != "hotel_id" or not isinstance(change.value, str):
@@ -181,8 +200,7 @@ class DialogueParser:
             candidates = [offer for offer in offers if offer.get("id")]
             if any(offer["id"] == value for offer in candidates):
                 continue
-            normalized = value.casefold().strip()
-            matches = [offer for offer in candidates if normalized in str(offer.get("name", "")).casefold()]
+            matches = matching_hotels(value, candidates)
             if len(matches) == 1:
                 change.value = matches[0]["id"]
             elif len(matches) > 1:
@@ -191,10 +209,16 @@ class DialogueParser:
 
     def _parse_mock(self, message: str, state: TripState, context: dict) -> DialogueDecision:
         lower = message.lower().replace("ё", "е").strip()
+        if re.search(r"\b(?:сизо|тюрьм\w*|дурк\w*|психушк\w*|на\s+луну|в\s+ад\b|шаурмичн\w*)\b", lower):
+            return DialogueDecision(
+                intent=DialogueIntent.INVALID,
+                answer="Туда мы туры, к счастью, не возим! Зато можем организовать отличный побег на свободу — к морю, в горы или в уютный загородный отель. Куда бы вам хотелось по-настоящему?",
+            )
         if re.search(r"\b(?:новая поездка|начать заново|сбрось поездку|другое путешествие)\b", lower):
             return DialogueDecision(intent=DialogueIntent.NEW_TRIP)
         booking_action = detect_booking_action(message)
-        if booking_action in ("cancel", "reschedule") or (booking_action and not is_trip_edit(message)):
+        explicit_booking_edit = booking_action == "reschedule" and re.search(r"\bброн\w*\b", lower)
+        if booking_action == "cancel" or explicit_booking_edit or (booking_action and not is_trip_edit(message) and relative_date_shift(message) is None):
             return DialogueDecision(intent=DialogueIntent.BOOKING, topic=booking_action)
         if is_logistics_question(message):
             return DialogueDecision(intent=DialogueIntent.QUESTION, topic="connection_risk")
@@ -215,16 +239,32 @@ class DialogueParser:
         interests = self._mock_interests(lower)
         if interests and re.search(r"\bя же\b|\bвсе-таки\b|\bвсё-таки\b|\bлучше\b|\bдавай\b", lower):
             changes.append(StateChange(field="interests", operation=ChangeOperation.SET, value=interests))
+            landscape = set(interests) & {"beach", "mountains", "nature", "history_culture"}
+            previous_landscape = set(state.preferences.interests) & {"beach", "mountains", "nature", "history_culture"}
+            narrative = None
+            search = SearchCriteriaDecision(missing_fields=self._mock_missing(state))
+            if landscape and landscape != previous_landscape:
+                changes.append(StateChange(field="destination_id", operation=ChangeOperation.CLEAR))
+                query = "горные курорты Красная Поляна Роза Хутор Архыз Домбай Гудаури Алтай" if "mountains" in landscape else " ".join(interests)
+                search = SearchCriteriaDecision(scope="any", destination_query=query)
+                if "mountains" in landscape:
+                    narrative = "Отличная идея! Меняем морское побережье на горные вершины — подобрал для вас маршруты в горах с сохранением ваших дат и бюджета:"
+                elif "nature" in landscape:
+                    narrative = "Хороший выбор для перезагрузки! Переключаю поиск на лес, озёра и спокойную природу, сохраняя остальные условия:"
+                else:
+                    narrative = "Меняю формат отдыха и подбираю новое направление, а ваши даты, состав и бюджет сохраняю:"
             return DialogueDecision(
                 intent=DialogueIntent.CORRECTION,
                 changes=changes,
-                search=SearchCriteriaDecision(missing_fields=self._mock_missing(state)),
+                search=search,
                 references=["previous_message"],
+                narrative=narrative,
             )
         other_destinations_request = bool(re.search(r"друг\w*\s+(?:направлен|город|стран)|другие\s+направления", lower))
         upgrade_request = bool(re.search(r"\bдороже\b|\bкомфортнее\b|\bполучше\b|\bболее\s+(?:дорог|комфорт|лучш)", lower))
         multi_city_request = bool(re.search(r"тур по городам|комбинированн|мульти|несколько городов", lower))
         pending_budget = bool(state.pending_action and "budget_rub" in state.pending_action.missing_fields)
+        date_shift = relative_date_shift(message)
         date_probe = deepcopy(state.apply_to_profile({}))
         date_probe_question = update_trip_dates(message, date_probe, context.get("cart") or {})
         date_detected = bool(date_probe_question) or any(
@@ -239,7 +279,15 @@ class DialogueParser:
                 or re.search(r"\b(?:собак\w*|кошк\w*|питомц\w*|пес|пса|псом)\b", lower)):
             selected_query = hotel_selection(message)
             if selected_query:
-                offers = context.get("alternative_offers") or []
+                offers = self._available_hotels(context, state)
+                ordinal = re.fullmatch(r"(первый|второй|третий)(?:\s+вариант|\s+отель)?", selected_query.lower())
+                if ordinal:
+                    index = {"первый": 0, "второй": 1, "третий": 2}[ordinal.group(1)]
+                    if index >= len(offers):
+                        return DialogueDecision(intent=DialogueIntent.CLARIFY, clarification="Такого варианта в текущей выдаче нет. Какой отель выбрать?")
+                    return DialogueDecision(intent=DialogueIntent.SELECT_OFFER, changes=[
+                        StateChange(field="hotel_id", operation=ChangeOperation.SET, value=offers[index]["id"]),
+                    ])
                 if re.fullmatch(r"(?:тот|этот|прежний|текущий)\s+отель", selected_query.lower()):
                     hotel_id = state.selected_offers.get("hotel_id")
                     if hotel_id:
@@ -267,7 +315,7 @@ class DialogueParser:
             transfer = transfer_preference(message)
             if transfer is not None:
                 changes.append(StateChange(field="without_transfer", operation=ChangeOperation.SET, value=transfer))
-            nights = re.search(r"\b(\d{1,2})\s*(?:ноч|дн|сут)", lower)
+            nights = re.search(r"\b(\d{1,2})\s*(?:ноч|дн|сут)", lower) if date_shift is None else None
             if nights:
                 changes.append(StateChange(field="nights", operation=ChangeOperation.SET, value=int(nights.group(1))))
             friends = re.search(r"\bс\s+(двумя|тремя|четырьмя|\d+)\s+друз", lower)
@@ -303,11 +351,14 @@ class DialogueParser:
                                             search=SearchCriteriaDecision(missing_fields=["checkin_date"]))
                 return DialogueDecision(intent=DialogueIntent.CLARIFY, clarification=date_question,
                                         search=SearchCriteriaDecision(missing_fields=["checkin_date"]))
-            for field in ("checkin_date", "checkout_date"):
-                if date_profile.get(field) and date_profile.get(field) != getattr(state.dates, field):
-                    changes.append(StateChange(field=field, operation=ChangeOperation.SET, value=date_profile[field]))
-            if not nights and date_profile.get("nights") != state.dates.nights:
-                changes.append(StateChange(field="nights", operation=ChangeOperation.SET, value=date_profile["nights"]))
+            if date_shift is not None:
+                changes.append(StateChange(field="date_shift_days", operation=ChangeOperation.SET, value=date_shift))
+            else:
+                for field in ("checkin_date", "checkout_date"):
+                    if date_profile.get(field) and date_profile.get(field) != getattr(state.dates, field):
+                        changes.append(StateChange(field=field, operation=ChangeOperation.SET, value=date_profile[field]))
+                if not nights and date_profile.get("nights") != state.dates.nights:
+                    changes.append(StateChange(field="nights", operation=ChangeOperation.SET, value=date_profile["nights"]))
             if re.search(r"\b(?:собак\w*|кошк\w*|питомц\w*|пес|пса|псом)\b", lower) and not re.search(r"\bбез\s+(?:собаки|кошки|питомц\w*|животных)\b", lower):
                 changes.append(StateChange(field="has_pets", operation=ChangeOperation.SET, value=True))
             if re.search(r"\bбез\s+(?:собаки|кошки|питомц\w*|животных)\b", lower):
@@ -383,8 +434,12 @@ class DialogueParser:
             interests.append("mountains")
         if re.search(r"истор|экскурси|достопримечательн|музе|культура", message):
             interests.append("history_culture")
-        if re.search(r"спа|spa|релакс|массаж|велнес", message):
+        if re.search(r"спа|spa|релакс|массаж|велнес|выгорел|никто\s+не\s+трогал|уединен", message):
             interests.append("spa_wellness")
+        if re.search(r"лес|озер|природ|тихо|уединен|выгорел|никто\s+не\s+трогал", message):
+            interests.append("nature")
+        if re.search(r"убуха|оторва|потус|тусов|ночн\w*\s+жизн|бары|клубы|all\s*inclusive|олл\s*инклюзив", message):
+            interests.extend(["nightlife", "all_inclusive"])
         if re.search(r"дешев|эконом|подешев|недорог|бюджетн", message):
             interests.append("budget_friendly")
         if re.search(r"люкс|премиум|вилл|5\s*звезд|пять\s*звезд|deluxe|vip|роскошн|раскошел|лучший\s+отель", message):

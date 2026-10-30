@@ -461,7 +461,8 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["cart"], selected)
         self.assertEqual(result["alternative_cart"]["destination_id"], "sochi")
         self.assertLessEqual(result["alternative_cart"]["total_trip_budget_range_rub"]["max"], 180000)
-        self.assertIn("Сохранены: даты", result["text"])
+        self.assertIn("даты", result["preserved_conditions"])
+        self.assertNotIn("Сохранены: даты", result["text"])
 
     async def test_rejected_region_is_excluded_from_budget_search(self):
         user = make_user(nights=5, budget_rub=300000, destination_flexible=True)

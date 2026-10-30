@@ -8,10 +8,11 @@ from app.domain.trip import PendingAction, TripQuote, TripState
 from app.services.booking_stub import booking_stub, detect_booking_action
 from app.services.dialogue_parser import DialogueParser, DialogueParserError, decision_context
 from app.services.llm_service import LLMService
+from app.mcp.tools import MCPTools
 from app.services.quote_service import compare_quotes
 from app.services.trip_dates import DateResolutionError, TripDateResolver
 from app.services.trip_logistics import connection_summary, describe_saved_logistics
-from app.services.trip_state import describe_budget_estimate, describe_current_trip
+from app.services.trip_state import describe_budget_estimate, describe_current_trip, hotel_selection
 from app.services.trip_state_store import TripStateStore
 
 
@@ -50,12 +51,14 @@ class TripController:
         previous_state = state.model_copy(deep=True)
 
         try:
-            decision = await self.parser.parse(
-                message,
-                state,
-                decision_context(session, state, cart),
-                quote,
-            )
+            context = decision_context(session, state, cart)
+            if hotel_selection(message) and state.destination_id:
+                try:
+                    catalog = await MCPTools.compare_hotels(destination_id=state.destination_id, limit=None)
+                    context["catalog_offers"] = catalog.get("compared_hotels", [])
+                except Exception:
+                    context["catalog_offers"] = []
+            decision = await self.parser.parse(message, state, context, quote)
             LLMService._last_error = None
             if decision.intent == DialogueIntent.NEW_TRIP:
                 state = TripState()
@@ -106,7 +109,7 @@ class TripController:
                 "dialogue_decision": None,
             }
 
-        if decision.intent in (DialogueIntent.QUESTION, DialogueIntent.CLARIFY):
+        if decision.intent in (DialogueIntent.QUESTION, DialogueIntent.CLARIFY, DialogueIntent.INVALID):
             for key in (
                 "_structured_decision", "_structured_changed_fields", "_structured_budget_changed",
                 "_structured_dates_changed", "_structured_destination_changed",
@@ -211,9 +214,9 @@ class TripController:
                 "",
                 final_state.destination_name,
             )
-        prefix = "\n\n".join(part for part in (summary, narrative) if part)
-        if prefix:
-            result["text"] = prefix + ("\n\n" + result.get("text", "") if result.get("text") else "")
+        if narrative:
+            result["text"] = narrative + ("\n\n" + result.get("text", "") if result.get("text") else "")
+        result["text"] = LLMService.clean_response_text(result.get("text"))
         result["applied_changes"] = applied_changes
         result["preserved_conditions"] = preserved_conditions
         result["turn_summary"] = summary
@@ -235,6 +238,8 @@ class TripController:
         return self._enrich(result, decision, profile, final_cart, final_quote, state=final_state)
 
     def _read_only_result(self, decision: DialogueDecision, profile: dict, cart: dict, message: str) -> dict:
+        if decision.intent == DialogueIntent.INVALID:
+            return {"text": decision.answer or "Выберем настоящее туристическое направление.", "state": "INVALID_DESTINATION", "cart": cart}
         if decision.intent == DialogueIntent.CLARIFY:
             return {
                 "text": decision.clarification or decision.answer or "Уточните, пожалуйста, запрос.",
@@ -420,9 +425,12 @@ class TripController:
 
     def apply_changes(self, state: TripState, changes: list[StateChange]) -> TripState:
         updated = state.model_copy(deep=True)
+        shifts = [change for change in changes if change.field == "date_shift_days"]
+        if len(shifts) > 1:
+            raise TripValidationError("Укажите один относительный перенос дат.")
         for change in changes:
             self._validate_change(change)
-            if change.field == "replan_action":
+            if change.field in ("replan_action", "date_shift_days"):
                 continue
             value = change.value
             if change.operation == ChangeOperation.CLEAR:
@@ -460,17 +468,19 @@ class TripController:
             else:
                 setattr(updated, change.field, value)
         date_fields = {change.field for change in changes} & {"checkin_date", "checkout_date", "nights"}
-        if date_fields:
-            try:
+        try:
+            if shifts:
+                updated.dates = TripDateResolver().shift(state.dates, shifts[0].value)
+            if date_fields:
                 updated.dates = TripDateResolver().resolve(state.dates, updated.dates, date_fields)
-            except DateResolutionError as exc:
-                raise TripValidationError(str(exc)) from exc
+        except DateResolutionError as exc:
+            raise TripValidationError(str(exc)) from exc
         self._validate_state(updated)
         return updated
 
     def _validate_change(self, change: StateChange) -> None:
         allowed = {
-            "destination_id", "checkin_date", "checkout_date", "nights", "adults_count", "kids_count",
+            "destination_id", "checkin_date", "checkout_date", "date_shift_days", "nights", "adults_count", "kids_count",
             "has_pets", "rooms_count", "budget_rub", "without_transfer", "prefer_direct_flight",
             "flight_time_pref", "origin_airport", "private_room_required", "interests", "hotel_id",
             "rejected_destinations", "rejected_hotels", "replan_action", "kids_ages", "is_multi_city",
@@ -484,6 +494,8 @@ class TripController:
         if change.operation == ChangeOperation.CLEAR:
             return
         value = change.value
+        if change.field == "date_shift_days" and (type(value) is not int or value == 0):
+            raise TripValidationError("Перенос дат должен быть ненулевым целым числом дней.")
         if change.field in ("nights", "adults_count", "kids_count", "rooms_count", "budget_rub") and (
             type(value) is not int
             or (change.field == "kids_count" and value < 0)

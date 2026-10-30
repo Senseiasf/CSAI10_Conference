@@ -66,8 +66,8 @@ class AgentLTRIntegrationTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("AI-консьерж", result["text"])
         self.assertIn("ltr_ranking", [step["stage"] for step in result["reasoning_steps"]])
         self.assertIn("Оценено 5 пакетов", next(step["detail"] for step in result["reasoning_steps"] if step["stage"] == "filtering"))
-        self.assertIn('class="agent-reasoning"', result["text"])
-        self.assertIn("ML-ранжирование", result["text"])
+        self.assertNotIn('class="agent-reasoning"', result["text"])
+        self.assertNotIn("ML-ранжирование", result["text"])
         self.assertIn("trip_conditions", result)
         self.assertEqual(result["logistics"]["timeline"]["checkin_wait_minutes"], 540)
 

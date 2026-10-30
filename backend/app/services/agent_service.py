@@ -692,8 +692,9 @@ class AgentService:
         (например, когда модель упоминает Турцию при туре в Сочи).
         При обнаружении несоответствия заменяет реплику на проверенную системную.
         """
+        intro = LLMService.clean_response_text(intro)
         if not intro:
-            return default_intro
+            return LLMService.clean_response_text(default_intro)
         intro_lower = intro.lower()
         if re.search(r"аудит\s+агента|smart\s+filter|pet[ -]контроль", intro_lower):
             return default_intro
@@ -1441,18 +1442,7 @@ class AgentService:
         if flexible_dates:
             reasoning_steps.append({"stage": "dates", "title": "Календарь выгоды", "detail": f"Проверены соседние даты (±2 дня): экономия до {flexible_dates[0]['savings_rub']:,} ₽."})
 
-        reasoning_html = [
-            f"<details class=\"agent-reasoning\">",
-            f"<summary>🧠 <b>Ход рассуждений агента ({len(reasoning_steps)} проверок)</b></summary>",
-            f"<div class=\"reasoning-body\">"
-        ]
-        for idx, s in enumerate(reasoning_steps, 1):
-            reasoning_html.append(f"<div class=\"reasoning-step\"><span class=\"step-num\">{idx}.</span> <strong>{s['title']}:</strong> {s['detail']}</div>")
-        reasoning_html.append("</div>")
-        reasoning_html.append("</details>")
-        reasoning_block = "\n".join(reasoning_html)
-
-        reply_text = f"{reasoning_block}\n\n" + "\n".join(response_lines)
+        reply_text = "\n".join(response_lines).strip()
 
         # Сохранение в корзину
         cart["destination_id"] = dest_id
@@ -1676,6 +1666,51 @@ class AgentService:
         }
 
     @staticmethod
+    def render_saved_trip_plan(profile: dict, cart: dict, intro: str) -> str:
+        breakdown = cart["budget_breakdown"]
+        mandatory = breakdown["mandatory"]
+        logistics = cart.get("logistics") or {}
+        flight = logistics.get("flight") or {}
+        return_flight = flight.get("return_flight") or {}
+        transfer = logistics.get("transfer") or {}
+        hotel = next((item for item in cart.get("compared_hotels", []) if item.get("id") == cart.get("hotel_id")), {})
+        lines = [
+            intro.strip(),
+            "",
+            f"🌴 **{cart.get('destination', 'Ваша поездка')}**",
+            f"📅 **Даты поездки:** {cart.get('dates') or breakdown['checkin_date'] + ' — ' + breakdown['checkout_date']}",
+            "",
+            f"🗺️ **Программа и расчёт тура ({breakdown['nights']} ночей):**",
+            "",
+            f"1️⃣ 🛫 **Перелёт туда:** {flight.get('airline', 'Авиакомпания')} {flight.get('flight_no', '')} "
+            f"({flight.get('origin_code', 'MOW')} {flight.get('departure_time', 'время уточняется')} ➔ "
+            f"{logistics.get('airport', 'аэропорт прибытия')} {flight.get('arrival_time', 'время уточняется')}) — "
+            f"**{mandatory['flight_out_price']:,} ₽**",
+        ]
+        if profile.get("without_transfer"):
+            lines.append("2️⃣ 🧳 **Трансфер в отель исключён.** Самостоятельная дорога оплачивается отдельно и в расчёт не входит — **0 ₽**.")
+        else:
+            lines.append(f"2️⃣ 🚗 **Трансфер в отель:** {transfer.get('name', 'Трансфер')} — **{mandatory['transfer']:,} ₽**")
+        lines.extend([
+            f"3️⃣ 🏨 **Проживание в отеле:** **«{cart['hotel']}»** ({hotel.get('stars', 'класс уточняется')}) — "
+            f"**{mandatory['hotel_per_night']:,} ₽/ночь**, всего **{mandatory['hotel_total']:,} ₽**",
+            f"• Питание: {hotel.get('meals', 'уточняется')} | Отмена: {hotel.get('cancellation', 'по тарифу')}",
+            f"4️⃣ 🛬 **Перелёт обратно:** {return_flight.get('airline', flight.get('airline', 'Авиакомпания'))} "
+            f"{return_flight.get('flight_no', '')} ({return_flight.get('origin_code', logistics.get('airport', 'DEST'))} "
+            f"{return_flight.get('departure_time', 'время уточняется')} ➔ {return_flight.get('dest_code', flight.get('origin_code', 'MOW'))} "
+            f"{return_flight.get('arrival_time', 'время уточняется')}) — **{mandatory['flight_ret_price']:,} ₽**",
+            "",
+            f"💰 **Расчёт стоимости всей поездки{' без трансфера' if profile.get('without_transfer') else ''}:**",
+            f"• 🔴 **Обязательные расходы (перелёты + проживание{'' if profile.get('without_transfer') else ' + трансфер'}):** "
+            f"**{mandatory['total_mandatory_rub']:,} ₽**",
+            f"• 🟢 **Расходы на месте:** {breakdown['onsite_flexible']['total_onsite_range_rub']['min']:,} – "
+            f"{breakdown['onsite_flexible']['total_onsite_range_rub']['max']:,} ₽",
+            f"💵 **ИТОГО под ключ:** **{breakdown['total_trip_budget_range_rub']['min']:,} – "
+            f"{breakdown['total_trip_budget_range_rub']['max']:,} ₽**",
+        ])
+        return "\n".join(lines).strip()
+
+    @staticmethod
     def change_saved_transfer(profile: dict, cart: dict, without_transfer: bool) -> Optional[dict]:
         """Edit only the included transfer of an already quoted single-hotel trip."""
         if not cart.get("hotel_id") or cart.get("is_multi_city") or not cart.get("logistics") or not cart.get("pricing_inputs"):
@@ -1765,12 +1800,9 @@ class AgentService:
             elif step.get("stage") == "logistics":
                 step["detail"] = logistics.get("logistics_status", "Состыковано")
         profile["without_transfer"] = without_transfer
-        bounds = updated["total_trip_budget_range_rub"]
-        action = ("Трансфер уже исключён." if current_transfer.get("type") == "self" else "Трансфер исключён из расчёта.") if without_transfer else "Трансфер возвращён в план."
-        reply = (f"{action} Отель «{updated['hotel']}», рейсы, даты {updated['dates']}, состав и номера сохранены.\n\n"
-                 f"Обязательные расходы: {updated['total_mandatory_rub']:,} ₽. Полная оценка: {bounds['min']:,}–{bounds['max']:,} ₽.")
-        if without_transfer:
-            reply += f"\n\nИз включённых расходов убрано {old_price:,} ₽. Самостоятельную дорогу организуете и оплачиваете отдельно; её стоимость здесь не учтена."
+        intro = ("Убрал трансфер из плана и пересчитал стоимость — вот обновлённый маршрут:" if without_transfer
+                 else "Вернул трансфер в план и пересчитал стоимость — вот обновлённый маршрут:")
+        reply = AgentService.render_saved_trip_plan(profile, updated, intro)
         return {"text": reply, "state": "TRANSFER_REMOVED" if without_transfer else "TRANSFER_INCLUDED", "cart": updated,
                 "logistics": logistics, "budget_breakdown": breakdown, "reasoning_steps": updated.get("reasoning_steps", []),
                 "flexible_dates": updated.get("flexible_dates", [])}
@@ -3060,18 +3092,7 @@ class AgentService:
         if flexible_dates:
             reasoning_steps.append({"stage": "dates", "title": "Календарь выгоды", "detail": f"Проверены соседние даты (±2 дня): максимальная выгода до {flexible_dates[0]['savings_rub']:,} ₽."})
 
-        reasoning_html = [
-            "<details class=\"agent-reasoning\">",
-            f"<summary>🧠 <b>Ход рассуждений агента ({len(reasoning_steps)} проверок)</b></summary>",
-            "<div class=\"reasoning-body\">"
-        ]
-        for idx, s in enumerate(reasoning_steps, 1):
-            reasoning_html.append(f"<div class=\"reasoning-step\"><span class=\"step-num\">{idx}.</span> <strong>{s['title']}:</strong> {s['detail']}</div>")
-        reasoning_html.append("</div>")
-        reasoning_html.append("</details>")
-        reasoning_block = "\n".join(reasoning_html)
-
-        reply_text = f"{reasoning_block}\n\n" + "\n".join(response_lines)
+        reply_text = "\n".join(response_lines).strip()
 
         cart["rooms_count"] = rooms_cnt
         cart["room_type"] = profile.get("room_type", "Стандарт")

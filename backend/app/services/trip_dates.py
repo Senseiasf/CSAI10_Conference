@@ -14,7 +14,7 @@ NIGHT_WORDS = {"ночь", "ночи", "ночей", "сутки", "суток"}
 WEEK_WORDS = {"неделя", "недели", "недель", "неделю"}
 DIRECTIONS = {"позже": 1, "вперед": 1, "вперёд": 1, "раньше": -1, "назад": -1}
 NUMBER_WORDS = {
-    "один": 1, "одну": 1, "два": 2, "две": 2, "три": 3, "четыре": 4,
+    "один": 1, "одну": 1, "два": 2, "две": 2, "пару": 2, "три": 3, "четыре": 4,
     "пять": 5, "шесть": 6, "семь": 7, "восемь": 8, "девять": 9, "десять": 10,
 }
 
@@ -26,6 +26,15 @@ class DateResolutionError(ValueError):
 class TripDateResolver:
     def __init__(self, today: date | None = None):
         self.today = today or date.today()
+
+    def shift(self, dates: TripDates, days: int) -> TripDates:
+        if not dates.checkin_date or not dates.checkout_date:
+            raise DateResolutionError("Сначала укажите даты поездки, а затем период сдвига.")
+        checkin = date.fromisoformat(dates.checkin_date) + timedelta(days=days)
+        checkout = date.fromisoformat(dates.checkout_date) + timedelta(days=days)
+        if checkin < self.today:
+            raise DateResolutionError("Новая дата заезда уже прошла. Укажите другой перенос.")
+        return TripDates(checkin_date=checkin.isoformat(), checkout_date=checkout.isoformat(), nights=dates.nights)
 
     def resolve(self, previous: TripDates, candidate: TripDates, changed_fields: Iterable[str]) -> TripDates:
         changed = set(changed_fields)
@@ -270,6 +279,13 @@ def _number(token: str) -> int | None:
     return NUMBER_WORDS.get(token)
 
 
+def relative_date_shift(message: str) -> int | None:
+    text = message.lower().replace("ё", "е")
+    tokens = [_clean_token(token) for token in text.split()]
+    shift = _relative_shift([token for token in tokens if token])
+    return shift[0] * shift[1] if shift else None
+
+
 def _relative_shift(tokens: list[str]) -> tuple[int, int] | None:
     for index, token in enumerate(tokens):
         if token in DIRECTIONS:
@@ -284,6 +300,11 @@ def _relative_shift(tokens: list[str]) -> tuple[int, int] | None:
                     return amount, direction
                 if any(word in WEEK_WORDS for word in following):
                     return amount * 7, direction
+            before = tokens[max(0, index - 2):index]
+            if any(word in WEEK_WORDS for word in before):
+                return 7, direction
+            if any(word in DAY_WORDS for word in before):
+                return 1, direction
     return None
 
 

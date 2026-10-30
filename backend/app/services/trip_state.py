@@ -1,5 +1,6 @@
 """Recognize explicit trip edits and answer questions from saved trip facts."""
 import re
+from difflib import SequenceMatcher
 
 
 DESTINATION_KEYWORDS = {
@@ -101,17 +102,60 @@ def hotel_selection(message: str) -> str | None:
         return None
     if not is_quoted and requested_destination(query) and len(query.split()) <= 2 and not re.search(r"отел|hotel|гостиниц", query, re.IGNORECASE):
         return None
-    if query.casefold() in ("другой", "другой отель", "подешевле", "самый дешевый", "самый дешёвый"):
+    if query.casefold() in ("другой", "другой отель", "подешевле", "отель подешевле", "самый дешевый", "самый дешёвый"):
         return None
     return query or None
 
 
 def matching_hotels(query: str, hotels: list[dict]) -> list[dict]:
+    transliteration = {
+        "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e",
+        "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m",
+        "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u",
+        "ф": "f", "х": "h", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "sch", "ъ": "",
+        "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya",
+    }
+    generic = {"otel", "gostinitsa", "pansionat", "rezort", "hotel", "resort", "v", "na"}
+
     def normalize(value):
-        return re.sub(r"[^\w]+", " ", value.casefold().replace("ё", "е")).strip()
-    name = normalize(query)
-    exact = [hotel for hotel in hotels if name in (normalize(hotel["name"]), normalize(hotel["id"]))]
-    return exact or [hotel for hotel in hotels if len(name) >= 4 and name in normalize(hotel["name"])]
+        text = value.casefold().replace("ё", "е")
+        text = "".join(transliteration.get(char, char) for char in text)
+        return re.sub(r"[^a-z0-9]+", " ", text).strip()
+
+    def tokens(value):
+        return [token for token in normalize(value).split() if token not in generic]
+
+    query_name = normalize(query)
+    query_tokens = tokens(query)
+    if not query_name:
+        return []
+    exact = [hotel for hotel in hotels if query_name in (normalize(hotel.get("name", "")), normalize(hotel.get("id", "")))]
+    if exact:
+        return exact
+    scored = []
+    for hotel in hotels:
+        name = normalize(hotel.get("name", ""))
+        name_tokens = tokens(hotel.get("name", ""))
+        if not name:
+            continue
+        if query_name in name or name in query_name:
+            score = 0.96
+        elif query_tokens and all(token in name_tokens for token in query_tokens):
+            score = 0.93
+        else:
+            ratio = SequenceMatcher(None, query_name, name).ratio()
+            keyword_ratio = max(
+                (SequenceMatcher(None, token, candidate).ratio()
+                 for token in query_tokens for candidate in name_tokens),
+                default=0.0,
+            )
+            score = max(ratio, keyword_ratio)
+        if score >= 0.62:
+            scored.append((score, hotel))
+    if not scored:
+        return []
+    best = max(score for score, _ in scored)
+    return [hotel for score, hotel in scored if score >= best - 0.04]
 
 
 def rejected_destinations(message: str) -> set[str]:

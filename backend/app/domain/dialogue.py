@@ -15,6 +15,7 @@ class DialogueIntent(StrEnum):
     NEW_TRIP = "new_trip"
     BOOKING = "booking"
     CLARIFY = "clarify"
+    INVALID = "invalid_or_joke_request"
 
 
 class ChangeOperation(StrEnum):

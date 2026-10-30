@@ -82,9 +82,9 @@ LLM_TOOLS = [
                         "type": "array",
                         "items": {
                             "type": "string",
-                            "enum": ["beach", "mountains", "spa_wellness", "history_culture", "family_kids", "pet_friendly", "luxury", "extreme_luxury", "budget_friendly"]
+                            "enum": ["beach", "mountains", "spa_wellness", "history_culture", "family_kids", "pet_friendly", "luxury", "extreme_luxury", "budget_friendly", "nightlife", "all_inclusive", "nature", "relaxation"]
                         },
-                        "description": "Предпочтения: beach, mountains, spa_wellness, history_culture, family_kids, pet_friendly, luxury, extreme_luxury, budget_friendly"
+                        "description": "Живые предпочтения, включая nightlife/all_inclusive для тусовок и nature/relaxation/spa_wellness для уединённого отдыха"
                     },
                     "unknown_destination": {
                         "type": "object",
@@ -98,7 +98,7 @@ LLM_TOOLS = [
                     },
                     "ai_reply_intro": {
                         "type": "string",
-                        "description": "Краткая (1-2 предложения) живая и вежливая реплика ИИ перед карточкой тура, отражающая учет пожеланий туриста. ВНИМАНИЕ: Она ОБЯЗАНА строго соответствовать выбранному destination_id! Если тур в Сочи — пиши ТОЛЬКО про Сочи, если в Турцию — ТОЛЬКО про Турцию. Не упоминай другие страны!"
+                        "description": "Краткая живая реплика тревел-эксперта перед карточкой тура, с учётом сленга и настроения туриста, без морализаторства. Не выводи think, JSON, applied_changes или рассуждения. Текст должен строго соответствовать destination_id и не упоминать другие направления."
                     }
                 }
             }
@@ -214,6 +214,21 @@ class LLMServiceError(RuntimeError):
 class LLMService:
     _client: Optional[AsyncOpenAI] = None
     _last_error: Optional[Dict[str, str]] = None
+
+    @staticmethod
+    def clean_response_text(text: Optional[str]) -> str:
+        if not text:
+            return ""
+        cleaned = re.sub(r"<think\b[^>]*>.*?</think>", "", text, flags=re.IGNORECASE | re.DOTALL)
+        cleaned = re.sub(r"<details\b[^>]*class=[\"'][^\"']*agent-reasoning[^\"']*[\"'][^>]*>.*?</details>", "", cleaned, flags=re.IGNORECASE | re.DOTALL)
+        cleaned = re.sub(r"```(?:json|javascript|js)?\s*\{.*?\}\s*```", "", cleaned, flags=re.IGNORECASE | re.DOTALL)
+        cleaned = re.sub(
+            r"^(?:\s*(?:applied_changes|change_explanation|turn_summary|reasoning|мысли|размышления)\s*:\s*.*\n?)+",
+            "",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        return cleaned.strip()
 
     @classmethod
     def get_diagnostics(cls) -> Dict[str, Any]:
@@ -508,7 +523,7 @@ class LLMService:
                 temperature=0.7
             )
             content = resp.choices[0].message.content or ""
-            return content.strip() or None
+            return cls.clean_response_text(content) or None
         except Exception as e:
             logger.warning("Ошибка генерации совета DeepSeek Flash: %s", e)
             return None
@@ -553,7 +568,7 @@ class LLMService:
                 temperature=0.7
             )
             content = resp.choices[0].message.content or ""
-            return content.strip() or None
+            return cls.clean_response_text(content) or None
         except Exception as e:
             logger.warning("Ошибка консультации DeepSeek Flash: %s", e)
             return None
@@ -576,7 +591,7 @@ class LLMService:
                 max_tokens=180,
                 temperature=0,
             )
-            return (response.choices[0].message.content or "").strip() or fallback
+            return cls.clean_response_text(response.choices[0].message.content) or fallback
         except Exception as exc:
             public_message = cls._public_exception(exc)
             cls._last_error = {"code": "api", "message": public_message}
