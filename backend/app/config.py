@@ -29,7 +29,6 @@ class Settings(BaseSettings):
     
     # LLM (OpenAI-compatible / DeepSeek)
     LLM_MODE: Literal["mock", "live"] = "mock"
-    DIALOGUE_HANDLER: Literal["legacy", "v2"] = "v2"
     OPENAI_API_KEY: str = ""
     OPENAI_BASE_URL: str = "https://api.deepseek.com"
     OPENAI_MODEL: str = "deepseek-flash"

@@ -1969,18 +1969,13 @@ class AgentService:
             cart["destination"] = single_destination_name("sochi", cart.get("destination", "Сочи"), cart.get("hotel_city"))
             if cart.get("budget_quote"):
                 cart["budget_quote"]["destination"] = cart["destination"]
-        if getattr(settings, "DIALOGUE_HANDLER", "v2") == "v2":
-            session_obj.current_cart = deepcopy(cart)
-            result = await TripController().handle(
-                user_id, message, session_obj,
-                AgentService._process_message,
-                AgentService._save_session,
-                progress_callback,
-            )
-        else:
-            result = await AgentService._process_message(
-                user_id, message, profile, cart, session_obj, progress_callback
-            )
+        session_obj.current_cart = deepcopy(cart)
+        result = await TripController().handle(
+            user_id, message, session_obj,
+            AgentService._process_message,
+            AgentService._save_session,
+            progress_callback,
+        )
         effective_profile = result.pop("_effective_profile", profile)
         if not result.get("booking_action"):
             # Только условия поиска: служебные поля и история профиля в UI не нужны.

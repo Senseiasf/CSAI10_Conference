@@ -131,7 +131,10 @@ class TripController:
             question = decision.clarification or self.missing_question(missing)
             state.pending_action = PendingAction(kind=kind, missing_fields=missing, question=question, attempts=attempts)
             profile = state.apply_to_profile(profile)
-            reply = ("Прежние условия сохранены. " if attempts else "") + question
+            if attempts >= 2:
+                reply = "Новых данных пока нет. Чтобы не повторять вопрос, укажите недостающие условия или напишите «начать заново». " + question
+            else:
+                reply = ("Прежние условия сохранены. " if attempts else "") + question
             result = {"text": reply, "state": "CLARIFICATION_REQUIRED", "cart": cart,
                       "pending_action": state.pending_action.model_dump(mode="json"),
                       "applied_changes": self.applied_changes(previous_state, state)}

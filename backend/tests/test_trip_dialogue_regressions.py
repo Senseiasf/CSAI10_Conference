@@ -441,6 +441,28 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
         self.assertLessEqual(result["budget_breakdown"]["total_trip_budget_range_rub"]["max"], 300000)
         self.assertEqual(result["trip_conditions"]["adults_count"], 3)
 
+    async def test_budget_and_other_destinations_preserve_all_trip_conditions(self):
+        user = make_user(nights=5, budget_rub=120000)
+        selected = copy.deepcopy(user.current_cart)
+        rows = [{"id": "spb", "name": "Санкт-Петербург", "score": 1.0},
+                {"id": "sochi", "name": "Сочи", "score": .8}]
+        affordable = {**self.named_hotels()[0], "price_per_night_rub": 0}
+        with self.fixture(user, destination_rows=rows, destination_hotels={"sochi": [affordable]}, flight_price=1000):
+            result = await AgentService.process_message(
+                "web:budget-directions", "У меня бюджет 180 000, может есть другие направления?"
+            )
+        self.assertEqual(result["trip_state"]["budget_rub"], 180000)
+        self.assertEqual(result["trip_state"]["dates"], {
+            "checkin_date": "2027-10-15", "checkout_date": "2027-10-26", "nights": 5,
+        })
+        self.assertEqual(result["search_request"]["scope"], "other_destinations")
+        self.assertIsNone(result["search_request"]["price_preference"])
+        self.assertNotIn("budget_friendly", result["trip_state"]["preferences"]["interests"])
+        self.assertEqual(result["cart"], selected)
+        self.assertEqual(result["alternative_cart"]["destination_id"], "sochi")
+        self.assertLessEqual(result["alternative_cart"]["total_trip_budget_range_rub"]["max"], 180000)
+        self.assertIn("Сохранены: даты", result["text"])
+
     async def test_rejected_region_is_excluded_from_budget_search(self):
         user = make_user(nights=5, budget_rub=300000, destination_flexible=True)
         user.current_cart.update(destination_id="maldives", destination="Мальдивы")
@@ -448,7 +470,8 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
                 {"id": "sochi", "name": "Сочи", "score": .8}]
         with self.fixture(user, destination_rows=rows, destination_hotels={"sochi": self.named_hotels()}):
             result = await AgentService.process_message("web:screenshot", "А если не Мальдивы?")
-        self.assertEqual(result["cart"]["destination_id"], "sochi")
+        self.assertEqual(result["cart"]["destination_id"], "maldives")
+        self.assertEqual(result["alternative_cart"]["destination_id"], "sochi")
         self.assertIn("maldives", user.profile["excluded_destinations"])
 
     async def test_named_hotel_is_selected_and_retained_until_cheaper_request(self):

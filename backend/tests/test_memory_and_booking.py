@@ -6,8 +6,10 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 from app.main import app
+from app.domain.dialogue import DialogueDecision, DialogueIntent
 from app.services.agent_service import AgentService
 from app.services.booking_stub import detect_booking_action
+from app.services.dialogue_parser import DialogueParser
 from app.services.llm_service import LLMService
 from app.services.preference_memory import remembered_preferences
 from app.mcp.tools import MCPTools
@@ -52,10 +54,9 @@ class BookingStubsTest(unittest.IsolatedAsyncioTestCase):
         user = SimpleNamespace(profile={}, current_cart={}, conversation_history=[])
         with (patch.object(AgentService, "get_or_create_session", new=AsyncMock(return_value=user)),
               patch.object(AgentService, "_save_session", new_callable=AsyncMock),
-              patch("app.services.agent_service.settings") as settings,
-              patch.object(LLMService, "dispatch_intent", new=AsyncMock(return_value={"action": "cancel_booking"})),
+              patch.object(DialogueParser, "parse", new=AsyncMock(
+                  return_value=DialogueDecision(intent=DialogueIntent.BOOKING, topic="cancel"))),
               patch.object(MCPTools, "checkout_cart", new_callable=AsyncMock) as checkout):
-            settings.is_mock_llm = False
             result = await AgentService.process_message("web:llm-test", "Убери мой ранее оформленный заказ")
         self.assertEqual(result["booking_action"]["action"], "cancel")
         checkout.assert_not_awaited()

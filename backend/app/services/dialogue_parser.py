@@ -221,22 +221,8 @@ class DialogueParser:
                 search=SearchCriteriaDecision(missing_fields=self._mock_missing(state)),
                 references=["previous_message"],
             )
-        if re.search(r"друг\w*\s+(?:направлен|город|стран)|другие\s+направления", lower):
-            budget_profile = deepcopy(state.apply_to_profile({}))
-            cart = context.get("cart") or {}
-            update_trip_budget(message, budget_profile, cart)
-            if budget_profile.get("budget_rub") != state.budget_rub:
-                changes.append(StateChange(field="budget_rub", operation=ChangeOperation.SET, value=budget_profile["budget_rub"]))
-            return DialogueDecision(
-                intent=DialogueIntent.SEARCH_ALTERNATIVES,
-                changes=changes,
-                search=SearchCriteriaDecision(scope="other_destinations"),
-            )
-        if re.search(r"\bдороже\b|\bкомфортнее\b|\bболее\s+(?:дорог|комфорт|лучш)", lower):
-            return DialogueDecision(
-                intent=DialogueIntent.SEARCH_ALTERNATIVES,
-                search=SearchCriteriaDecision(scope="hotels", price_preference="more_expensive"),
-            )
+        other_destinations_request = bool(re.search(r"друг\w*\s+(?:направлен|город|стран)|другие\s+направления", lower))
+        upgrade_request = bool(re.search(r"\bдороже\b|\bкомфортнее\b|\bболее\s+(?:дорог|комфорт|лучш)", lower))
         multi_city_request = bool(re.search(r"тур по городам|комбинированн|мульти|несколько городов", lower))
         pending_budget = bool(state.pending_action and "budget_rub" in state.pending_action.missing_fields)
         date_probe = deepcopy(state.apply_to_profile({}))
@@ -249,6 +235,7 @@ class DialogueParser:
             )
         )
         if (is_trip_edit(message) or multi_city_request or pending_budget or rejected_destinations(message) or date_detected
+                or other_destinations_request or upgrade_request
                 or re.search(r"\b(?:собак\w*|кошк\w*|питомц\w*|пес|пса|псом)\b", lower)):
             selected_query = hotel_selection(message)
             if selected_query:
@@ -352,18 +339,22 @@ class DialogueParser:
             if budget_profile.get("budget_rub") != state.budget_rub:
                 changes.append(StateChange(field="budget_rub", operation=ChangeOperation.SET, value=budget_profile["budget_rub"]))
             search = None
-            if wants_cheaper(message):
-                search = SearchCriteriaDecision(scope="current", price_preference="cheaper",
+            scope = "other_destinations" if other_destinations_request or rejected else "hotels" if upgrade_request else "current"
+            if upgrade_request:
+                search = SearchCriteriaDecision(scope=scope, price_preference="more_expensive")
+            elif wants_cheaper(message):
+                search = SearchCriteriaDecision(scope=scope, price_preference="cheaper",
                                                 flexible_dates=bool(re.search(r"в\s+любое\s+время|в\s+любой\s+день|когда\s+угодно", lower)))
-            elif rejected:
+            elif other_destinations_request or rejected:
                 search = SearchCriteriaDecision(scope="other_destinations")
             elif re.search(r"другой\s+отель|поменяй\s+отель|смени\s+отель|другой\s+вариант\s+проживания|другие\s+варианты", lower):
                 search = SearchCriteriaDecision(scope="hotels")
                 changes.append(StateChange(field="replan_action", operation=ChangeOperation.SET, value="change_hotel"))
             if not changes:
                 changes.append(StateChange(field="replan_action", operation=ChangeOperation.SET, value="modify"))
-            return DialogueDecision(intent=DialogueIntent.PLAN if multi_city_request else DialogueIntent.MODIFY,
-                                    changes=changes, search=search)
+            intent = (DialogueIntent.SEARCH_ALTERNATIVES if other_destinations_request or upgrade_request or rejected
+                      else DialogueIntent.PLAN if multi_city_request else DialogueIntent.MODIFY)
+            return DialogueDecision(intent=intent, changes=changes, search=search)
 
         changes = [StateChange(field="interests", operation=ChangeOperation.SET, value=interests)] if interests else []
         if direct_destination:

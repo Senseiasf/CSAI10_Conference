@@ -1,5 +1,6 @@
 import copy
 import unittest
+from datetime import date, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -167,6 +168,49 @@ class DialogueContextTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result["trip_state"]["passengers"]["has_pets"])
         self.assertEqual(result["trip_state"]["dates"]["checkin_date"], "2027-11-10")
         self.assertEqual(result["trip_state"]["dates"]["nights"], 5)
+
+    async def test_natural_date_followup_completes_pending_trip(self):
+        pending = {"kind": "plan_trip", "missing_fields": ["checkin_date"], "question": "Когда едете?", "attempts": 0}
+        session = self.harness.make_session(
+            profile={"destination_id": "sochi", "nights": 5, "adults_count": 2, "pending_action": pending},
+            cart={"destination_id": "sochi", "destination": "Сочи"},
+        )
+        result = await TripController().handle(
+            "web:natural-date", "1 ноября", session,
+            self.harness.plan(session, []), self.harness.save(session),
+        )
+        expected = date(date.today().year, 11, 1)
+        if expected < date.today():
+            expected = expected.replace(year=expected.year + 1)
+        self.assertEqual(result["trip_state"]["dates"]["checkin_date"], expected.isoformat())
+        self.assertEqual(result["trip_state"]["dates"]["checkout_date"], (expected + timedelta(days=5)).isoformat())
+        self.assertIsNone(result["trip_state"]["pending_action"])
+
+    async def test_weekend_followup_sets_real_dates(self):
+        session = self.harness.make_session(profile={"destination_id": "sochi", "adults_count": 2})
+        result = await TripController().handle(
+            "web:weekend", "ближайшие выходные", session,
+            self.harness.plan(session, []), self.harness.save(session),
+        )
+        expected = date.today() + timedelta(days=(5 - date.today().weekday()) % 7)
+        self.assertEqual(result["trip_state"]["dates"]["checkin_date"], expected.isoformat())
+        self.assertEqual(result["trip_state"]["dates"]["checkout_date"], (expected + timedelta(days=2)).isoformat())
+        self.assertEqual(result["trip_state"]["dates"]["nights"], 2)
+
+    async def test_repeated_empty_clarification_changes_response_instead_of_looping(self):
+        session = self.harness.make_session()
+        controller = TripController()
+        first = await controller.handle("web:loop", "Хочется к морю", session,
+                                        self.harness.plan(session, []), self.harness.save(session))
+        second = await controller.handle("web:loop", "продолжим", session,
+                                         self.harness.plan(session, []), self.harness.save(session))
+        third = await controller.handle("web:loop", "продолжим", session,
+                                        self.harness.plan(session, []), self.harness.save(session))
+        self.assertEqual(first["state"], "CLARIFICATION_REQUIRED")
+        self.assertEqual(second["trip_state"]["pending_action"]["attempts"], 1)
+        self.assertEqual(third["trip_state"]["pending_action"]["attempts"], 2)
+        self.assertNotEqual(second["text"], third["text"])
+        self.assertIn("Новых данных пока нет", third["text"])
 
 
 class PresentationAndPlanningTest(unittest.IsolatedAsyncioTestCase):
