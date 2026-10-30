@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OPENAI_BASE_URL: str = "https://api.deepseek.com"
     OPENAI_MODEL: str = "deepseek-flash"
+    TRIP_TIMEZONE: str = "Europe/Moscow"
 
     @property
     def is_mock_llm(self) -> bool:

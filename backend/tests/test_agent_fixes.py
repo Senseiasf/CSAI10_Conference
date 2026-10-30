@@ -165,14 +165,12 @@ class AgentFixesTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("Стамбул", result.get("text", ""))
         self.assertNotIn("Красная Поляна", result.get("text", ""))
 
-    def test_month_without_day_plans_tour_on_15th(self):
-        """Block 4 & 6: 'Хочу в Турцию в ноябре на 7 ночей' sets checkin to 15th without blocking."""
+    def test_month_without_day_requires_exact_day(self):
         from app.services.trip_dates import update_trip_dates
         profile = {}
         err = update_trip_dates("Хочу в Турцию в ноябре на 7 ночей", profile, {})
-        self.assertIsNone(err)
-        self.assertTrue(profile.get("checkin_date", "").endswith("-11-15"))
-        self.assertEqual(profile.get("nights"), 7)
+        self.assertIsNotNone(err)
+        self.assertNotIn("checkin_date", profile)
 
     def test_unified_pricing_math_between_base_and_flexible_dates(self):
         """Block 4 & 6: calculate_real_trip_cost_by_date matches calculate_flexible_dates_options savings exactly."""

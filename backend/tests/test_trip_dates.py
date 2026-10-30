@@ -1,6 +1,8 @@
 import unittest
+from datetime import date
 
-from app.services.trip_dates import update_trip_dates
+from app.domain.trip import TripDates
+from app.services.trip_dates import TripDateResolver, update_trip_dates
 
 
 class TripDatesTest(unittest.TestCase):
@@ -76,6 +78,40 @@ class TripDatesTest(unittest.TestCase):
         self.assertIsNone(update_trip_dates("Сдвинь поездку на 2 дня позже", profile, cart))
         self.assertEqual(profile["checkin_date"], "2026-11-17")
         self.assertEqual(profile["checkout_date"], "2026-11-24")
+
+    def test_natural_dates_use_injected_today(self):
+        for message, expected in (("1 ноября", "2026-11-01"), ("01.11.26", "2026-11-01")):
+            with self.subTest(message=message):
+                profile = {"nights": 5}
+                self.assertIsNone(update_trip_dates(message, profile, today=date(2026, 10, 30)))
+                self.assertEqual(profile["checkin_date"], expected)
+                self.assertEqual(profile["checkout_date"], "2026-11-06")
+
+    def test_nearest_weekend_is_saturday_to_monday(self):
+        profile = {}
+        self.assertIsNone(update_trip_dates("ближайшие выходные", profile, today=date(2026, 10, 30)))
+        self.assertEqual(profile["checkin_date"], "2026-10-31")
+        self.assertEqual(profile["checkout_date"], "2026-11-02")
+        self.assertEqual(profile["nights"], 2)
+
+    def test_budget_message_does_not_change_dates(self):
+        profile = {"checkin_date": "2026-11-10", "checkout_date": "2026-11-15", "nights": 5}
+        before = dict(profile)
+        self.assertIsNone(update_trip_dates("бюджет 180 000, другие направления", profile, today=date(2026, 10, 30)))
+        self.assertEqual(profile, before)
+
+    def test_structured_checkin_recalculates_checkout_atomically(self):
+        previous = TripDates(checkin_date="2026-11-10", checkout_date="2026-11-17", nights=7)
+        candidate = previous.model_copy(update={"checkin_date": "2026-11-01"})
+        resolved = TripDateResolver(date(2026, 10, 30)).resolve(previous, candidate, {"checkin_date"})
+        self.assertEqual(resolved.checkout_date, "2026-11-08")
+        self.assertEqual(previous.checkout_date, "2026-11-17")
+
+    def test_structured_past_date_is_rejected(self):
+        previous = TripDates(checkin_date="2026-11-10", checkout_date="2026-11-17", nights=7)
+        candidate = previous.model_copy(update={"checkin_date": "2026-10-01"})
+        with self.assertRaises(ValueError):
+            TripDateResolver(date(2026, 10, 30)).resolve(previous, candidate, {"checkin_date"})
 
 
 if __name__ == "__main__":

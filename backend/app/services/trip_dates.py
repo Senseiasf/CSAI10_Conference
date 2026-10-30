@@ -1,22 +1,172 @@
-"""Calendar updates independent of databases and language model providers."""
-import re
 from copy import deepcopy
 from datetime import date, timedelta
+from typing import Iterable
+
+from app.domain.trip import TripDates
 
 
-RU_MONTHS = {
+MONTHS = {
     "янв": 1, "фев": 2, "мар": 3, "апр": 4, "ма": 5, "июн": 6,
-    "июл": 7, "авг": 8, "сен": 9, "окт": 10, "ноя": 11, "дек": 12
+    "июл": 7, "авг": 8, "сен": 9, "окт": 10, "ноя": 11, "дек": 12,
+}
+DAY_WORDS = {"день", "дня", "дней", "сутки", "суток"}
+NIGHT_WORDS = {"ночь", "ночи", "ночей", "сутки", "суток"}
+WEEK_WORDS = {"неделя", "недели", "недель", "неделю"}
+DIRECTIONS = {"позже": 1, "вперед": 1, "вперёд": 1, "раньше": -1, "назад": -1}
+NUMBER_WORDS = {
+    "один": 1, "одну": 1, "два": 2, "две": 2, "три": 3, "четыре": 4,
+    "пять": 5, "шесть": 6, "семь": 7, "восемь": 8, "девять": 9, "десять": 10,
 }
 
 
-def update_trip_dates(message: str, profile: dict, cart: dict | None = None) -> str | None:
-    """Apply calendar changes atomically; invalid input leaves old dates intact."""
+class DateResolutionError(ValueError):
+    pass
+
+
+class TripDateResolver:
+    def __init__(self, today: date | None = None):
+        self.today = today or date.today()
+
+    def resolve(self, previous: TripDates, candidate: TripDates, changed_fields: Iterable[str]) -> TripDates:
+        changed = set(changed_fields)
+        checkin = self._parse_iso(candidate.checkin_date, "заезда") if candidate.checkin_date else None
+        checkout = self._parse_iso(candidate.checkout_date, "выезда") if candidate.checkout_date else None
+        nights = candidate.nights
+
+        if "checkin_date" in changed and checkin and checkin < self.today:
+            raise DateResolutionError("Дата заезда уже прошла. Укажите дату в будущем.")
+        if "checkin_date" in changed:
+            if "checkout_date" not in changed:
+                checkout = checkin + timedelta(days=nights) if checkin and nights else None
+            if "nights" not in changed and checkin and checkout:
+                nights = (checkout - checkin).days
+        elif "checkout_date" in changed:
+            if "nights" not in changed and checkin and checkout:
+                nights = (checkout - checkin).days
+        elif "nights" in changed and checkin and nights:
+            checkout = checkin + timedelta(days=nights)
+
+        if checkin and checkout:
+            derived_nights = (checkout - checkin).days
+            if derived_nights <= 0:
+                raise DateResolutionError("Дата выезда должна быть позже даты заезда.")
+            if nights is not None and nights != derived_nights:
+                raise DateResolutionError("Даты заезда и выезда не совпадают с указанным числом ночей.")
+            nights = derived_nights
+        if nights is not None and not 1 <= nights <= 60:
+            raise DateResolutionError("Укажите длительность поездки от 1 до 60 ночей.")
+        return TripDates(
+            checkin_date=checkin.isoformat() if checkin else None,
+            checkout_date=checkout.isoformat() if checkout else None,
+            nights=nights,
+        )
+
+    def _parse_iso(self, value: str, label: str) -> date:
+        try:
+            return date.fromisoformat(value)
+        except (TypeError, ValueError) as exc:
+            raise DateResolutionError(f"Некорректная дата {label}.") from exc
+
+
+def update_trip_dates(message: str, profile: dict, cart: dict | None = None, today: date | None = None) -> str | None:
     next_profile = deepcopy(profile)
     next_cart = deepcopy(cart) if cart is not None else None
-    question = _update_trip_dates(message, next_profile, next_cart)
-    if question:
-        return question
+    previous = TripDates(
+        checkin_date=profile.get("checkin_date") or (cart or {}).get("checkin_date"),
+        checkout_date=profile.get("checkout_date") or (cart or {}).get("checkout_date"),
+        nights=profile.get("nights") or (cart or {}).get("nights"),
+    )
+    candidate = previous.model_copy(deep=True)
+    changed: set[str] = set()
+    text = message.lower().replace("ё", "е")
+    tokens = [_clean_token(token) for token in text.split()]
+    tokens = [token for token in tokens if token]
+    resolver = TripDateResolver(today)
+
+    shift = _relative_shift(tokens)
+    weekend = any(token.startswith(("выходн", "уикенд")) for token in tokens) or "weekend" in tokens
+    numeric_dates = [(index, parsed) for index, token in enumerate(tokens) if (parsed := _numeric_date(token, resolver.today))]
+    russian_range = _russian_range(tokens, resolver.today)
+    russian_single = None if russian_range else _russian_single(tokens, resolver.today)
+    duration, duration_index = _duration(tokens)
+    if not numeric_dates and any(_looks_like_date(token) for token in tokens):
+        return "Такой даты нет в календаре. Укажите корректную дату."
+
+    try:
+        if shift:
+            amount, direction = shift
+            if not previous.checkin_date:
+                return "С какой даты сдвигаем поездку? Укажите дату заезда."
+            start = date.fromisoformat(previous.checkin_date) + timedelta(days=amount * direction)
+            candidate.checkin_date = start.isoformat()
+            changed.add("checkin_date")
+        elif len(numeric_dates) >= 2:
+            (first_index, start), (second_index, end) = numeric_dates[:2]
+            if not _is_range_separator(tokens[first_index + 1:second_index]):
+                return "Уточните даты заезда и выезда."
+            candidate.checkin_date = start.isoformat()
+            candidate.checkout_date = end.isoformat()
+            changed.update(("checkin_date", "checkout_date"))
+        elif russian_range:
+            start, end = russian_range
+            candidate.checkin_date = start.isoformat()
+            candidate.checkout_date = end.isoformat()
+            changed.update(("checkin_date", "checkout_date"))
+        elif numeric_dates:
+            candidate.checkin_date = numeric_dates[0][1].isoformat()
+            changed.add("checkin_date")
+        elif russian_single:
+            candidate.checkin_date = russian_single.isoformat()
+            changed.add("checkin_date")
+        elif weekend:
+            days_to_saturday = (5 - resolver.today.weekday()) % 7
+            candidate.checkin_date = (resolver.today + timedelta(days=days_to_saturday)).isoformat()
+            changed.add("checkin_date")
+            if duration is None:
+                candidate.nights = 2
+                changed.add("nights")
+        elif _month_mentioned(tokens):
+            return "Уточните день заезда, например: «1 ноября»."
+
+        if duration is not None and not shift:
+            if "checkout_date" in changed:
+                checkin = date.fromisoformat(candidate.checkin_date)
+                checkout = date.fromisoformat(candidate.checkout_date)
+                if (checkout - checkin).days != duration:
+                    return "Даты заезда и выезда не совпадают с указанным числом ночей."
+            candidate.nights = duration
+            changed.add("nights")
+        elif duration_index is not None and not shift:
+            return "Укажите длительность поездки от 1 до 60 ночей."
+
+        if not changed:
+            if any(token in ("сдвинь", "сдвиньте") for token in tokens) or "другие даты" in text:
+                return "Укажите новую дату заезда или на сколько дней сдвинуть поездку."
+            return None
+        resolved = resolver.resolve(previous, candidate, changed)
+    except (DateResolutionError, ValueError, OverflowError) as exc:
+        if isinstance(exc, DateResolutionError):
+            return str(exc)
+        return "Такой даты нет в календаре. Укажите корректные даты поездки."
+
+    next_profile.update(
+        checkin_date=resolved.checkin_date,
+        checkout_date=resolved.checkout_date,
+        nights=resolved.nights,
+    )
+    if resolved.checkin_date and resolved.checkout_date:
+        next_profile["dates"] = _format_range(resolved)
+    elif resolved.nights:
+        next_profile["dates"] = f"{resolved.nights} ночей"
+    if next_cart is not None:
+        next_cart.update(checkin_date=resolved.checkin_date, checkout_date=resolved.checkout_date)
+        if "dates" in next_profile:
+            next_cart["dates"] = next_profile["dates"]
+        if shift:
+            next_cart["date_shifted"] = True
+    if shift:
+        next_profile["date_shifted"] = True
+        next_profile["date_shift_days"] = shift[0] * shift[1]
     profile.clear()
     profile.update(next_profile)
     if cart is not None:
@@ -25,173 +175,137 @@ def update_trip_dates(message: str, profile: dict, cart: dict | None = None) -> 
     return None
 
 
-def _update_trip_dates(message: str, profile: dict, cart: dict | None = None) -> str | None:
-    """Update supported dates; return a clarification instead of guessing a shift."""
-    text = message.lower()
-    range_nights = None
-    full_dates = list(re.finditer(r"\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}\.\d{1,2}\.\d{4})\b", text))
-    if len(full_dates) >= 2 and re.fullmatch(r"\s*(?:по|до|—|–|-)\s*", text[full_dates[0].end():full_dates[1].start()]):
-        try:
-            parsed = [date.fromisoformat(item.group()) if "-" in item.group()
-                      else date(*map(int, item.group().split(".")[::-1])) for item in full_dates[:2]]
-        except ValueError:
-            return "Такой даты нет в календаре. Укажите даты заезда и выезда в формате ДД.ММ.ГГГГ."
-        range_nights = (parsed[1] - parsed[0]).days
-        if not 1 <= range_nights <= 60:
-            return "Дата выезда должна быть позже заезда; длительность поездки — от 1 до 60 ночей."
-    shift = re.search(
-        r"(?:на\s+)?(\d+)\s*(?:дня|дней|день)\s*(позже|раньше|вперед|вперёд|назад)", text
-    ) or re.search(r"(позже|раньше|вперед|вперёд|назад)\s+на\s+(\d+)\s*(?:дня|дней|день)", text)
-    week_shift = re.search(r"(?:на\s+)?недел\w*\s*(позже|раньше|вперед|вперёд|назад)", text) or re.search(r"(позже|раньше|вперед|вперёд|назад)\s+на\s+недел\w*", text)
-    if shift or week_shift:
-        if week_shift and not shift:
-            amount = 7
-            raw_dir = week_shift.group(1)
-        else:
-            values = shift.groups()
-            amount = int(next(v for v in values if v.isdigit()))
-            raw_dir = next(v for v in values if not v.isdigit())
-        direction = "раньше" if raw_dir in ("раньше", "назад") else "позже"
-        if not profile.get("checkin_date"):
-            if cart and cart.get("checkin_date"):
-                profile["checkin_date"] = cart["checkin_date"]
-                profile["checkout_date"] = cart.get("checkout_date")
-            elif cart and (cart.get("destination") or cart.get("hotel") or cart.get("dates")):
-                base_dt = date.today() + timedelta(days=14)
-                nights_cnt = profile.get("nights", cart.get("nights", 7))
-                profile["checkin_date"] = base_dt.isoformat()
-                profile["checkout_date"] = (base_dt + timedelta(days=nights_cnt)).isoformat()
-                profile["dates"] = f"{base_dt:%d.%m.%Y} — {base_dt + timedelta(days=nights_cnt):%d.%m.%Y} ({nights_cnt} ночей)"
-        if not profile.get("checkin_date"):
-            return "С какой даты сдвигаем поездку? Укажите дату заезда в формате ДД.ММ.ГГГГ."
-        start = date.fromisoformat(profile["checkin_date"])
-        try:
-            start += timedelta(days=amount * (-1 if direction == "раньше" else 1))
-        except OverflowError:
-            return "Слишком большой сдвиг. Укажите новую дату заезда в формате ДД.ММ.ГГГГ."
-        profile["date_shifted"] = True
-        profile["date_shift_days"] = amount * (-1 if direction == "раньше" else 1)
-        if cart:
-            cart["date_shifted"] = True
-    else:
-        iso = re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", text)
-        dotted = re.search(r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b", text)
-        ru_range = re.search(
-            r"(?:с\s+)?(\d{1,2})\s*(?:-|по|до)\s*(\d{1,2})\s*(янв\w*|фев\w*|мар\w*|апр\w*|ма[йея]\w*|июн\w*|июл\w*|авг\w*|сен\w*|окт\w*|ноя\w*|дек\w*)(?:\s*(\d{4}))?",
-            text
-        )
-        ru_single = re.search(
-            r"(?:заезд\s+|с\s+|на\s+)?(\d{1,2})\s*(янв\w*|фев\w*|мар\w*|апр\w*|ма[йея]\w*|июн\w*|июл\w*|авг\w*|сен\w*|окт\w*|ноя\w*|дек\w*)(?:\s*(\d{4}))?",
-            text
-        ) if not ru_range else None
-        dotted_short = re.search(r"\b(\d{1,2})\.(\d{1,2})\b", text) if (not dotted and not iso and not ru_range and not ru_single) else None
+def _clean_token(token: str) -> str:
+    return token.strip(" \t\n\r,!?;()[]{}«»\"'")
 
-        if iso or dotted:
-            parts = [int(x) for x in (iso or dotted).groups()]
-            try:
-                start = date(*parts) if iso else date(parts[2], parts[1], parts[0])
-            except ValueError:
-                return "Такой даты нет в календаре. Укажите дату заезда в формате ДД.ММ.ГГГГ."
-        elif ru_range:
-            d1, d2, m_str, y_str = ru_range.groups()
-            m_num = next((v for k, v in RU_MONTHS.items() if m_str.startswith(k)), None)
-            y_num = int(y_str) if y_str else date.today().year
-            try:
-                start = date(y_num, m_num, int(d1))
-                if y_str is None and start < date.today():
-                    start = date(y_num + 1, m_num, int(d1))
-                end = date(start.year, m_num, int(d2))
-                range_nights = (end - start).days
-                if range_nights <= 0:
-                    return "Дата выезда должна быть позже даты заезда."
-            except ValueError:
-                return "Такой даты нет в календаре. Укажите дату заезда в формате ДД.ММ.ГГГГ."
-        elif ru_single:
-            d1, m_str, y_str = ru_single.groups()
-            m_num = next((v for k, v in RU_MONTHS.items() if m_str.startswith(k)), None)
-            y_num = int(y_str) if y_str else date.today().year
-            try:
-                start = date(y_num, m_num, int(d1))
-                if y_str is None and start < date.today():
-                    start = date(y_num + 1, m_num, int(d1))
-            except ValueError:
-                return "Такой даты нет в календаре. Укажите дату заезда в формате ДД.ММ.ГГГГ."
-        elif dotted_short:
-            d1, m1 = [int(x) for x in dotted_short.groups()]
-            y_num = date.today().year
-            try:
-                start = date(y_num, m1, d1)
-                if start < date.today():
-                    start = date(y_num + 1, m1, d1)
-            except ValueError:
-                return "Такой даты нет в календаре. Укажите дату заезда в формате ДД.ММ.ГГГГ."
-        else:
-            month_match = re.search(r"\b(январ|феврал|март|апрел|ма[йея]|июн|июл|август|сентябр|октябр|ноябр|декабр)\w*", text)
-            if month_match:
-                # Если сообщение является коротким вопросом-уточнением к уже собранному туру
-                is_short_clarification = (
-                    len(text.split()) <= 5
-                    and profile.get("checkin_date") is not None
-                    and not any(k in text.lower() for k in ["тур", "отель", "сочи", "турци", "пхукет", "тай", "оаэ", "египет", "мальдив", "питер", "алтай", "грузи"])
-                    and not re.search(r"\b\d+\s*(?:ноч|дн)", text)
-                )
-                if is_short_clarification:
-                    return "На какую дату планируем заезд? Укажите её в формате ДД.ММ.ГГГГ."
-                else:
-                    m_prefix = month_match.group(1)
-                    m_num = next((v for k, v in RU_MONTHS.items() if m_prefix.startswith(k)), None)
-                    if m_num:
-                        y_num = date.today().year
-                        try:
-                            start = date(y_num, m_num, 15)
-                            if start < date.today():
-                                start = date(y_num + 1, m_num, 15)
-                        except ValueError:
-                            return "Такой даты нет в календаре. Укажите дату заезда в формате ДД.ММ.ГГГГ."
-                    else:
-                        return "На какую дату планируем заезд? Укажите её в формате ДД.ММ.ГГГГ."
-            else:
-                is_flight_time = any(w in text for w in ("вылет", "самолет", "самолёт", "рейс", "утр", "вечер", "в 6", "в 7", "время", "попозже", "пораньше")) and not any(w in text for w in ("дату", "даты", "заезд", "выезд", "дня позже", "дней позже", "дня раньше", "дней раньше", "сдвинь поездку", "сдвинь даты"))
-                if not is_flight_time and any(w in text for w in ("позже", "раньше", "сдвинь", "другие даты")):
-                    return "Укажите новую дату заезда (ДД.ММ.ГГГГ) или на сколько дней сдвинуть поездку."
-                start = date.fromisoformat(profile["checkin_date"]) if profile.get("checkin_date") else None
 
-    # A relative date shift must not change the length of the stay.
-    if not shift:
-        duration = re.search(r"(?:на\s+)?(\d+)\s*(?:ноч\w*|дн\w*|сут\w*)", text)
-        nights = int(duration.group(1)) if duration else None
-        if range_nights is not None:
-            if nights is not None and nights != range_nights:
-                return "Даты заезда и выезда не совпадают с указанным числом ночей. Уточните даты или длительность поездки."
-            nights = range_nights
-        if nights is not None and not 1 <= nights <= 60:
-            return "Укажите длительность поездки от 1 до 60 ночей."
-        if nights is None:
-            for phrases, value in (
-                (("две недели", "2 недели"), 14),
-                (("три недели", "3 недели"), 21),
-                (("выходн", "уикенд", "weekend", "пару дней"), 2),
-                (("на неделю", "неделю", "неделя"), 7),
-                (("на месяц",), 30),
-                (("на день", "на сутки"), 1),
-            ):
-                if any(phrase in text for phrase in phrases):
-                    nights = value
-                    break
-        if nights is not None:
-            profile["nights"] = nights
+def _looks_like_date(token: str) -> bool:
+    if len(token) == 10 and token[4] == token[7] == "-":
+        return token[:4].isdigit() and token[5:7].isdigit() and token[8:].isdigit()
+    parts = token.split(".")
+    if len(parts) not in (2, 3) or not all(part.isdigit() for part in parts):
+        return False
+    return 1 <= int(parts[0]) <= 31 and 1 <= int(parts[1]) <= 12
 
-    nights = profile.get("nights", 7)
-    if start:
-        try:
-            end = start + timedelta(days=nights)
-        except OverflowError:
-            return "Дата выезда выходит за пределы календаря. Укажите другую дату заезда."
-        profile.update(checkin_date=start.isoformat(), checkout_date=end.isoformat())
-        profile["dates"] = f"{start:%d.%m.%Y} — {end:%d.%m.%Y} ({nights} ночей)"
-        if cart:
-            cart.update(checkin_date=start.isoformat(), checkout_date=end.isoformat())
-            cart["dates"] = profile["dates"]
-    else:
-        profile["dates"] = f"{nights} ночей"
+
+def _numeric_date(token: str, today: date) -> date | None:
+    try:
+        if len(token) == 10 and token[4] == token[7] == "-":
+            return date.fromisoformat(token)
+        parts = token.split(".")
+        if len(parts) not in (2, 3) or not all(part.isdigit() for part in parts):
+            return None
+        day, month = int(parts[0]), int(parts[1])
+        year = today.year if len(parts) == 2 else int(parts[2])
+        if len(parts) == 3 and len(parts[2]) == 2:
+            year += 2000
+        result = date(year, month, day)
+        if len(parts) == 2 and result < today:
+            result = date(year + 1, month, day)
+        return result
+    except ValueError:
+        return None
+
+
+def _month_number(token: str) -> int | None:
+    if token in ("май", "мая", "мае", "маю"):
+        return 5
+    for prefix, number in MONTHS.items():
+        if prefix != "ма" and token.startswith(prefix):
+            return number
     return None
+
+
+def _year_after(tokens: list[str], index: int) -> int | None:
+    if index + 1 < len(tokens) and tokens[index + 1].isdigit() and len(tokens[index + 1]) == 4:
+        return int(tokens[index + 1])
+    return None
+
+
+def _russian_single(tokens: list[str], today: date) -> date | None:
+    for index in range(len(tokens) - 1):
+        if not tokens[index].isdigit():
+            continue
+        month = _month_number(tokens[index + 1])
+        if not month:
+            continue
+        year = _year_after(tokens, index + 1) or today.year
+        try:
+            result = date(year, month, int(tokens[index]))
+            if _year_after(tokens, index + 1) is None and result < today:
+                result = date(year + 1, month, int(tokens[index]))
+            return result
+        except ValueError:
+            return None
+    return None
+
+
+def _russian_range(tokens: list[str], today: date) -> tuple[date, date] | None:
+    for index in range(len(tokens) - 3):
+        if not (tokens[index].isdigit() and tokens[index + 1] in ("по", "до", "-") and tokens[index + 2].isdigit()):
+            continue
+        month = _month_number(tokens[index + 3])
+        if not month:
+            continue
+        year = _year_after(tokens, index + 3) or today.year
+        try:
+            start = date(year, month, int(tokens[index]))
+            end = date(year, month, int(tokens[index + 2]))
+            if _year_after(tokens, index + 3) is None and start < today:
+                start = date(year + 1, month, start.day)
+                end = date(year + 1, month, end.day)
+            return start, end
+        except ValueError:
+            return None
+    return None
+
+
+def _is_range_separator(tokens: list[str]) -> bool:
+    return len(tokens) == 1 and tokens[0] in ("по", "до", "-", "—", "–")
+
+
+def _number(token: str) -> int | None:
+    if token.isdigit():
+        return int(token)
+    return NUMBER_WORDS.get(token)
+
+
+def _relative_shift(tokens: list[str]) -> tuple[int, int] | None:
+    for index, token in enumerate(tokens):
+        if token in DIRECTIONS:
+            direction = DIRECTIONS[token]
+            window = tokens[max(0, index - 3):index] + tokens[index + 1:index + 4]
+            for position, item in enumerate(window):
+                amount = _number(item)
+                if amount is None:
+                    continue
+                following = window[position + 1:position + 3]
+                if any(word in DAY_WORDS for word in following):
+                    return amount, direction
+                if any(word in WEEK_WORDS for word in following):
+                    return amount * 7, direction
+    return None
+
+
+def _duration(tokens: list[str]) -> tuple[int | None, int | None]:
+    for index, token in enumerate(tokens):
+        amount = _number(token)
+        if amount is None or index + 1 >= len(tokens):
+            continue
+        unit = tokens[index + 1]
+        following = tokens[index + 2:index + 4]
+        if unit in WEEK_WORDS:
+            return amount * 7, index
+        if unit in NIGHT_WORDS and not any(word in DIRECTIONS for word in following):
+            return amount, index
+    return None, None
+
+
+def _month_mentioned(tokens: list[str]) -> bool:
+    return any(_month_number(token) for token in tokens)
+
+
+def _format_range(dates: TripDates) -> str:
+    start = date.fromisoformat(dates.checkin_date)
+    end = date.fromisoformat(dates.checkout_date)
+    return f"{start:%d.%m.%Y} — {end:%d.%m.%Y} ({dates.nights} ночей)"

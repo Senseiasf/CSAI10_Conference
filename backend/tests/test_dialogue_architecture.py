@@ -168,12 +168,16 @@ class DialogueContractTest(unittest.IsolatedAsyncioTestCase):
         client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=AsyncMock(return_value=response))))
         with (patch.object(LLMService, "get_client", return_value=client),
               patch("app.services.dialogue_parser.settings", SimpleNamespace(
-                  is_mock_llm=False, OPENAI_MODEL="test-model", OPENAI_API_KEY="test-key"))):
+                  is_mock_llm=False, OPENAI_MODEL="test-model", OPENAI_API_KEY="test-key",
+                  TRIP_TIMEZONE="Europe/Moscow"))):
             decision = await DialogueParser().parse("Хватит ли времени на пересадку?", TripState())
         self.assertEqual(decision.intent, DialogueIntent.QUESTION)
         self.assertEqual(decision.topic, "connection_risk")
         self.assertEqual(decision.changes, [])
         self.assertEqual(client.chat.completions.create.call_args.kwargs["model"], "test-model")
+        payload = client.chat.completions.create.call_args.kwargs["messages"][1]["content"]
+        self.assertIn("date_context", payload)
+        self.assertIn("weekend_rule", payload)
 
 
 class RouteAndQuoteTest(unittest.TestCase):

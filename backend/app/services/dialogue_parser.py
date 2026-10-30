@@ -1,7 +1,9 @@
 import json
 import re
 from copy import deepcopy
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from pydantic import ValidationError
 
@@ -50,6 +52,7 @@ DIALOGUE_DECISION_TOOL = [{
                         "scope": {"type": ["string", "null"], "enum": ["current", "other_destinations", "any", "hotels", "flights", "dates", None]},
                         "destination_query": {"type": ["string", "null"]},
                         "price_preference": {"type": ["string", "null"], "enum": ["cheaper", "more_expensive", "comfort", "any", None]},
+                        "flexible_dates": {"type": "boolean"},
                         "missing_fields": {"type": "array", "items": {"type": "string"}},
                     },
                 },
@@ -100,6 +103,7 @@ class DialogueParser:
         client = LLMService.get_client()
         if client is None:
             raise DialogueParserError("configuration", "Live parser требует LLM_MODE=live")
+        now = datetime.now(ZoneInfo(settings.TRIP_TIMEZONE))
         payload = {
             "trip_state": state.model_dump(mode="json"),
             "trip_quote": quote.model_dump(mode="json") if quote else None,
@@ -108,6 +112,12 @@ class DialogueParser:
             "alternative_offers": context.get("alternative_offers") or (context.get("cart") or {}).get("compared_hotels") or [],
             "conversation": (context.get("conversation_history") or [])[-3:],
             "expected_clarification": state.pending_action.model_dump(mode="json") if state.pending_action else None,
+            "date_context": {
+                "today": now.date().isoformat(),
+                "weekday": now.date().weekday(),
+                "timezone": settings.TRIP_TIMEZONE,
+                "weekend_rule": "ближайшая суббота, 2 ночи, выезд в понедельник",
+            },
         }
         prompt = (
             "Ты основной языковой обработчик туристического диалога. Верни только DialogueDecision через инструмент. "
@@ -119,11 +129,15 @@ class DialogueParser:
             "Отсутствие операции сохраняет прежнее значение, явное false отменяет условие, null в set означает неизвестное и требует уточнения. "
             "Не сбрасывай поездку и не повторяй начальную анкету. Краткий ответ продолжает expected_clarification; 'всё то же' использует TripState, а не догадки из истории. "
             "Разделяй budget_rub (лимит), стоимость и search.price_preference. Больший лимит не означает экономию или трату всей суммы. "
+            "search.scope, search.destination_query, search.price_preference и search.flexible_dates относятся только к этому сообщению, не сохраняй их как StateChange. "
+            "Даты возвращай в ISO по date_context; без года выбирай ближайшую будущую дату. 'Ближайшие выходные' — ближайшая суббота и 2 ночи до понедельника. "
+            "Не меняй даты при изменении бюджета, направления или уровня цены. Гибкие даты разрешай только при явном разрешении пользователя. "
+            "Для нового диапазона верни checkin_date и checkout_date; для изменения длительности верни nights. Зависимые значения пересчитает и проверит код. "
             "Ссылки 'тот отель', 'первый вариант' разрешай только по alternative_offers/selected_offers до hotel_id; если неоднозначно — clarify. "
             "Для отказа от трансфера без других правок верни ровно одну операцию field=without_transfer, operation=set, value=true. "
             "Допустимые поля: destination_id, checkin_date, checkout_date, nights, adults_count, kids_count, kids_ages, has_pets, rooms_count, "
             "budget_rub, without_transfer, prefer_direct_flight, flight_time_pref, origin_airport, private_room_required, interests, "
-            "hotel_id, rejected_destinations, rejected_hotels, price_preference, search_scope, destination_query, is_multi_city, replan_action. "
+            "hotel_id, rejected_destinations, rejected_hotels, is_multi_city, replan_action. "
             "Для вопроса о пересадке topic=connection_risk, о сохранённом плане topic=current_trip, о границе цены topic=budget_estimate. "
             "Не выдумывай цены, наличие, свойства отелей, разрешение проживания с животными или успешное выполнение действий. Денежные расчёты выполняет код."
         )
@@ -220,7 +234,16 @@ class DialogueParser:
             )
         multi_city_request = bool(re.search(r"тур по городам|комбинированн|мульти|несколько городов", lower))
         pending_budget = bool(state.pending_action and "budget_rub" in state.pending_action.missing_fields)
-        if (is_trip_edit(message) or multi_city_request or pending_budget or rejected_destinations(message)
+        date_probe = deepcopy(state.apply_to_profile({}))
+        date_probe_question = update_trip_dates(message, date_probe, context.get("cart") or {})
+        date_detected = bool(date_probe_question) or any(
+            date_probe.get(field) != value for field, value in (
+                ("checkin_date", state.dates.checkin_date),
+                ("checkout_date", state.dates.checkout_date),
+                ("nights", state.dates.nights),
+            )
+        )
+        if (is_trip_edit(message) or multi_city_request or pending_budget or rejected_destinations(message) or date_detected
                 or re.search(r"\b(?:собак\w*|кошк\w*|питомц\w*|пес|пса|псом)\b", lower)):
             selected_query = hotel_selection(message)
             if selected_query:
@@ -280,9 +303,12 @@ class DialogueParser:
                 changes.append(StateChange(field="private_room_required", operation=ChangeOperation.SET, value=True))
             if re.search(r"\b(?:не\s+хостел\w*|без\s+хостел\w*|отдельн\w*\s+номер\w*|собственн\w*\s+ванн\w*)", lower):
                 changes.append(StateChange(field="private_room_required", operation=ChangeOperation.SET, value=True))
-            date_profile = deepcopy(state.apply_to_profile({}))
-            date_question = update_trip_dates(message, date_profile, context.get("cart") or {})
+            date_profile = date_probe
+            date_question = date_probe_question
             if date_question:
+                if changes:
+                    return DialogueDecision(intent=DialogueIntent.MODIFY, changes=changes, clarification=date_question,
+                                            search=SearchCriteriaDecision(missing_fields=["checkin_date"]))
                 return DialogueDecision(intent=DialogueIntent.CLARIFY, clarification=date_question,
                                         search=SearchCriteriaDecision(missing_fields=["checkin_date"]))
             for field in ("checkin_date", "checkout_date"):

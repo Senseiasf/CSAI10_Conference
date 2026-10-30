@@ -9,6 +9,7 @@ from app.services.booking_stub import booking_stub, detect_booking_action
 from app.services.dialogue_parser import DialogueParser, DialogueParserError, decision_context
 from app.services.llm_service import LLMService
 from app.services.quote_service import compare_quotes
+from app.services.trip_dates import DateResolutionError, TripDateResolver
 from app.services.trip_logistics import connection_summary, describe_saved_logistics
 from app.services.trip_state import describe_budget_estimate, describe_current_trip
 from app.services.trip_state_store import TripStateStore
@@ -347,6 +348,12 @@ class TripController:
                 updated.preferences.is_multi_city = bool(value)
             else:
                 setattr(updated, change.field, value)
+        date_fields = {change.field for change in changes} & {"checkin_date", "checkout_date", "nights"}
+        if date_fields:
+            try:
+                updated.dates = TripDateResolver().resolve(state.dates, updated.dates, date_fields)
+            except DateResolutionError as exc:
+                raise TripValidationError(str(exc)) from exc
         self._validate_state(updated)
         return updated
 
