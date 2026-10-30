@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from app.config import settings
 from app.domain.dialogue import ChangeOperation, DialogueDecision, DialogueIntent, SearchCriteriaDecision, StateChange
 from app.domain.trip import TripQuote, TripState
+from app.services.booking_stub import detect_booking_action
 from app.services.llm_service import LLMService, LLMServiceError
 from app.services.trip_budget import update_trip_budget
 from app.services.trip_dates import update_trip_dates
@@ -29,7 +30,7 @@ DIALOGUE_DECISION_TOOL = [{
             "type": "object",
             "additionalProperties": False,
             "properties": {
-                "intent": {"type": "string", "enum": ["question", "comparison", "modify_trip", "plan_trip", "search_alternatives", "select_offer", "correction", "new_trip", "clarify"]},
+                "intent": {"type": "string", "enum": ["question", "comparison", "modify_trip", "plan_trip", "search_alternatives", "select_offer", "correction", "new_trip", "booking", "clarify"]},
                 "topic": {"type": ["string", "null"]},
                 "mode": {"type": ["string", "null"], "enum": ["min", "max", None]},
                 "changes": {
@@ -125,6 +126,7 @@ class DialogueParser:
             "search_alternatives ищет новые варианты, не подменяя выбранный тур; select_offer выбирает вариант по ID; "
             "correction исправляет предыдущее условие; new_trip разрешён только при явном запросе начать новую поездку; "
             "modify_trip меняет условия; plan_trip продолжает подбор; clarify задаёт точечный вопрос. "
+            "Для операций с бронью используй intent=booking и topic=book/cancel/reschedule; если в том же сообщении меняются условия, верни и все changes. "
             "Одно сообщение может содержать несколько изменений — верни все операции вместе. 'С двумя друзьями' означает троих взрослых включая автора. "
             "Отсутствие операции сохраняет прежнее значение, явное false отменяет условие, null в set означает неизвестное и требует уточнения. "
             "Не сбрасывай поездку и не повторяй начальную анкету. Краткий ответ продолжает expected_clarification; 'всё то же' использует TripState, а не догадки из истории. "
@@ -191,6 +193,9 @@ class DialogueParser:
         lower = message.lower().replace("ё", "е").strip()
         if re.search(r"\b(?:новая поездка|начать заново|сбрось поездку|другое путешествие)\b", lower):
             return DialogueDecision(intent=DialogueIntent.NEW_TRIP)
+        booking_action = detect_booking_action(message)
+        if booking_action in ("cancel", "reschedule") or (booking_action and not is_trip_edit(message)):
+            return DialogueDecision(intent=DialogueIntent.BOOKING, topic=booking_action)
         if is_logistics_question(message):
             return DialogueDecision(intent=DialogueIntent.QUESTION, topic="connection_risk")
         if current_trip_question(message):

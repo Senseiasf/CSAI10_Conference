@@ -159,7 +159,9 @@ class BudgetSelectionTest(unittest.IsolatedAsyncioTestCase):
                   "total_trip_budget_range_rub": {"max": 200000}},
         )
         checkout.assert_not_awaited()
-        self.assertEqual(result["state"], "BOOKING_UNAVAILABLE")
+        self.assertEqual(result["state"], "BUDGET_EXCEEDED")
+        self.assertEqual(result["cart"]["hotel"], "Old")
+        self.assertNotEqual(result["alternative_cart"]["hotel"], "Old")
 
     async def test_no_route_does_not_use_invented_flight_price(self):
         result, _, _, _ = await self.run_agent("Сочи до 100 тысяч", [hotel("hotel", 3000)], compatible=False)

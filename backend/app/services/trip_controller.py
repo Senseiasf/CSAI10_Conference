@@ -26,6 +26,7 @@ STATE_CHANGING_INTENTS = {
     DialogueIntent.SELECT_OFFER,
     DialogueIntent.CORRECTION,
     DialogueIntent.NEW_TRIP,
+    DialogueIntent.BOOKING,
 }
 ALTERNATIVE_INTENTS = {DialogueIntent.COMPARISON, DialogueIntent.SEARCH_ALTERNATIVES}
 
@@ -48,12 +49,6 @@ class TripController:
         state, quote = TripStateStore.load(session)
         previous_state = state.model_copy(deep=True)
 
-        booking_action = detect_booking_action(message)
-        if booking_action:
-            result = booking_stub(booking_action, cart)
-            await save_session(user_id, profile, cart, message, result["text"])
-            return self._enrich(result, None, profile, cart, quote, state=state)
-
         try:
             decision = await self.parser.parse(
                 message,
@@ -69,7 +64,7 @@ class TripController:
                 quote = None
             if decision.intent in STATE_CHANGING_INTENTS and decision.changes:
                 state = self.apply_changes(state, decision.changes)
-            if decision.intent in STATE_CHANGING_INTENTS:
+            if decision.intent in STATE_CHANGING_INTENTS and (decision.changes or decision.intent == DialogueIntent.NEW_TRIP):
                 state.revision = previous_state.revision + 1
                 state.explicit_fields = sorted(set(state.explicit_fields) | {
                     change.field for change in decision.changes if change.field != "replan_action"
@@ -78,8 +73,6 @@ class TripController:
             if decision.intent == DialogueIntent.CLARIFY:
                 state.pending_action = self.pending_for_decision(decision, state)
                 profile = state.apply_to_profile(profile)
-            if decision.narrative:
-                profile["llm_ai_intro"] = decision.narrative
             hotel_change = next((change for change in decision.changes if change.field == "hotel_id"), None)
             if hotel_change:
                 profile["_resolved_hotel_id"] = hotel_change.value
@@ -135,24 +128,29 @@ class TripController:
         if missing:
             kind = "search_alternatives" if decision.intent == DialogueIntent.SEARCH_ALTERNATIVES else "plan_trip"
             attempts = (state.pending_action.attempts + 1) if state.pending_action else 0
-            state.pending_action = PendingAction(kind=kind, missing_fields=missing, question=self.missing_question(missing), attempts=attempts)
+            question = decision.clarification or self.missing_question(missing)
+            state.pending_action = PendingAction(kind=kind, missing_fields=missing, question=question, attempts=attempts)
             profile = state.apply_to_profile(profile)
-            reply = state.pending_action.question
-            result = {"text": reply, "state": "CLARIFICATION_REQUIRED", "cart": cart, "pending_action": state.pending_action.model_dump(mode="json")}
+            reply = ("Прежние условия сохранены. " if attempts else "") + question
+            result = {"text": reply, "state": "CLARIFICATION_REQUIRED", "cart": cart,
+                      "pending_action": state.pending_action.model_dump(mode="json"),
+                      "applied_changes": self.applied_changes(previous_state, state)}
             session.profile = deepcopy(profile)
             session.current_cart = deepcopy(cart)
             await save_session(user_id, profile, cart, message, reply)
+            return self._enrich(result, decision, profile, cart, quote, state=state)
+        if (decision.intent == DialogueIntent.BOOKING
+                and not any(change.field != "replan_action" for change in decision.changes)
+                and not decision.search):
+            action = decision.topic if decision.topic in ("book", "cancel", "reschedule") else "book"
+            result = booking_stub(action, cart)
+            await save_session(user_id, profile, cart, message, result["text"])
             return self._enrich(result, decision, profile, cart, quote, state=state)
         if decision.intent in STATE_CHANGING_INTENTS:
             state.pending_action = None
             if decision.intent not in ALTERNATIVE_INTENTS:
                 state.search_results = {}
             profile = state.apply_to_profile(profile)
-        if (decision.intent != DialogueIntent.PLAN
-                and any(change.field != "replan_action" for change in decision.changes)
-                and not profile.get("llm_ai_intro")):
-            profile["llm_ai_intro"] = self.change_explanation(decision.changes)
-
         original_profile = deepcopy(profile)
         original_cart = deepcopy(cart)
         profile["_skip_llm_dispatch"] = True
@@ -190,12 +188,32 @@ class TripController:
             "_structured_destination_changed", "_comparison_only", "destination_flexible",
         ):
             profile.pop(key, None)
+        final_state = self._state_after_execution(state, profile, final_cart)
+        applied_changes = self.applied_changes(previous_state, final_state)
+        preserved_conditions = self.preserved_conditions(previous_state, final_state)
+        summary = self.turn_explanation(decision, applied_changes, preserved_conditions)
+        narrative = decision.narrative
+        if narrative and final_state.destination_id:
+            from app.services.agent_service import AgentService
+            narrative = AgentService.sanitize_ai_intro(
+                narrative,
+                final_state.destination_id,
+                "",
+                final_state.destination_name,
+            )
+        prefix = "\n\n".join(part for part in (summary, narrative) if part)
+        if prefix:
+            result["text"] = prefix + ("\n\n" + result.get("text", "") if result.get("text") else "")
+        result["applied_changes"] = applied_changes
+        result["preserved_conditions"] = preserved_conditions
+        result["turn_summary"] = summary
         if decision.intent in ALTERNATIVE_INTENTS:
             state.search_results = {
                 "alternative_cart": deepcopy(result.get("alternative_cart")),
                 "alternative_quote": deepcopy(result.get("alternative_quote")),
             }
-            profile = state.apply_to_profile(profile)
+            final_state.search_results = deepcopy(state.search_results)
+            profile = final_state.apply_to_profile(profile)
             await save_session(user_id, profile, final_cart, message, result.get("text", ""))
         difference = result.get("quote_difference") or final_cart.get("quote_difference")
         if difference:
@@ -203,7 +221,6 @@ class TripController:
             result["quote_difference"] = difference
         session.profile = deepcopy(profile)
         session.current_cart = deepcopy(final_cart)
-        final_state = self._state_after_execution(state, profile, final_cart)
         return self._enrich(result, decision, profile, final_cart, final_quote, state=final_state)
 
     def _read_only_result(self, decision: DialogueDecision, profile: dict, cart: dict, message: str) -> dict:
@@ -297,7 +314,61 @@ class TripController:
             return "Уточните, пожалуйста, запрос."
         return "Уточните, пожалуйста: " + ", ".join(labels[field] for field in fields) + "?"
 
-    def change_explanation(self, changes: list[StateChange]) -> str:
+    def _state_values(self, state: TripState) -> dict[str, Any]:
+        return {
+            "destination_id": state.destination_id,
+            "checkin_date": state.dates.checkin_date,
+            "checkout_date": state.dates.checkout_date,
+            "nights": state.dates.nights,
+            "adults_count": state.passengers.adults_count,
+            "kids_count": state.passengers.kids_count,
+            "kids_ages": list(state.kids_ages),
+            "rooms_count": state.rooms_count,
+            "has_pets": state.passengers.has_pets,
+            "budget_rub": state.budget_rub,
+            "budget_estimate": state.budget_estimate,
+            "without_transfer": state.services.without_transfer,
+            "prefer_direct_flight": state.services.prefer_direct_flight,
+            "flight_time_pref": state.services.flight_time_pref,
+            "origin_airport": state.services.origin_airport,
+            "private_room_required": state.preferences.private_room_required,
+            "interests": list(state.preferences.interests),
+            "domestic_only": state.preferences.domestic_only,
+            "abroad_only": state.preferences.abroad_only,
+            "is_multi_city": state.preferences.is_multi_city,
+            "rejected_hotels": list(state.preferences.rejected_hotels),
+            "rejected_destinations": list(state.preferences.rejected_destinations),
+            "hotel_id": state.selected_offers.get("hotel_id"),
+        }
+
+    def applied_changes(self, previous: TripState, current: TripState) -> list[dict[str, Any]]:
+        old_values = self._state_values(previous)
+        new_values = self._state_values(current)
+        return [
+            {"field": field, "old": old_values[field], "new": new_values[field]}
+            for field in new_values
+            if old_values[field] != new_values[field]
+        ]
+
+    def preserved_conditions(self, previous: TripState, current: TripState) -> list[str]:
+        old = self._state_values(previous)
+        new = self._state_values(current)
+        groups = {
+            "даты": ("checkin_date", "checkout_date", "nights"),
+            "состав путешественников": ("adults_count", "kids_count", "kids_ages", "rooms_count", "has_pets"),
+            "направление": ("destination_id",),
+            "общий лимит": ("budget_rub",),
+            "условия перелёта": ("prefer_direct_flight", "flight_time_pref", "origin_airport"),
+            "трансфер": ("without_transfer",),
+        }
+        return [label for label, fields in groups.items() if all(old[field] == new[field] for field in fields)]
+
+    def turn_explanation(
+        self,
+        decision: DialogueDecision,
+        changes: list[dict[str, Any]],
+        preserved: list[str],
+    ) -> str:
         labels = {
             "nights": "длительность",
             "adults_count": "число взрослых",
@@ -315,9 +386,43 @@ class TripController:
             "origin_airport": "аэропорт вылета",
             "checkin_date": "дата заезда",
             "checkout_date": "дата выезда",
+            "private_room_required": "отдельный номер",
+            "is_multi_city": "формат маршрута",
         }
-        changed = [labels.get(change.field, change.field) for change in changes if change.field != "replan_action"]
-        return "Обновляю условия: " + ", ".join(changed) + ". Проверяю совместимость и пересчитываю стоимость."
+        parts = []
+        if changes:
+            rendered = []
+            for change in changes:
+                field = change["field"]
+                label = labels.get(field, field)
+                rendered.append(f"{label}: {self._format_change_value(field, change['old'])} → {self._format_change_value(field, change['new'])}")
+            parts.append("Изменения: " + ", ".join(rendered) + ".")
+        search = decision.search
+        if search:
+            if search.scope == "other_destinations":
+                parts.append("Выполнен поиск других направлений.")
+            elif search.scope == "hotels":
+                parts.append("Выполнен поиск других вариантов проживания.")
+            if search.price_preference in ("more_expensive", "comfort"):
+                parts.append("Ищу более дорогие или комфортные варианты в пределах лимита.")
+            elif search.price_preference == "cheaper":
+                parts.append("Ищу более доступные варианты без скрытого изменения остальных условий.")
+        if preserved and (changes or search):
+            parts.append("Сохранены: " + ", ".join(preserved) + ".")
+        if decision.intent in ALTERNATIVE_INTENTS:
+            parts.append("Текущий выбранный тур не изменён.")
+        return " ".join(parts)
+
+    def _format_change_value(self, field: str, value: Any) -> str:
+        if value is None:
+            return "не задано"
+        if field == "budget_rub":
+            return f"{value:,} ₽"
+        if isinstance(value, bool):
+            return "да" if value else "нет"
+        if isinstance(value, list):
+            return ", ".join(map(str, value)) or "не задано"
+        return str(value)
 
     def apply_changes(self, state: TripState, changes: list[StateChange]) -> TripState:
         updated = state.model_copy(deep=True)

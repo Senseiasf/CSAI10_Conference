@@ -2709,7 +2709,7 @@ class AgentService:
             else:
                 reply_text = "Не удалось собрать маршрут с известными ценами перелёта и трансфера. Бронирование пока недоступно."
                 state = "NO_ROUTE"
-            if previous_cart.get("hotel_id"):
+            if previous_cart.get("hotel_id") or previous_cart.get("hotel"):
                 cart = deepcopy(previous_cart)
             else:
                 cart = {"destination_id": dest_id, "destination": dest_name,

@@ -13,6 +13,7 @@ class DialogueIntent(StrEnum):
     SELECT_OFFER = "select_offer"
     CORRECTION = "correction"
     NEW_TRIP = "new_trip"
+    BOOKING = "booking"
     CLARIFY = "clarify"
 
 
