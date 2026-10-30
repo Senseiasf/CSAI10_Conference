@@ -1,4 +1,5 @@
 import json
+from copy import deepcopy
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
@@ -62,3 +63,49 @@ class TripStateStore:
     def from_legacy(profile: dict, cart: dict) -> tuple[TripState, TripQuote | None]:
         state = TripState.from_legacy(profile, cart)
         return state, TripStateStore.quote_from_cart(cart)
+
+    @staticmethod
+    def with_execution_results(state: TripState, profile: dict, cart: dict) -> TripState:
+        updated = state.model_copy(deep=True)
+        updated.destination_id = cart.get("destination_id") or updated.destination_id
+        updated.destination_name = cart.get("destination") or updated.destination_name
+        updated.current_version_id = cart.get("tour_version_id") or updated.current_version_id
+        for field in ("checkin_date", "checkout_date", "nights"):
+            value = profile.get(field, cart.get(field))
+            if value is not None:
+                setattr(updated.dates, field, value)
+        offer_keys = (
+            "hotel_id", "hotel", "hotel_city", "flight", "logistics", "compared_hotels",
+            "is_multi_city", "multi_city_segments",
+        )
+        updated.selected_offers = {key: deepcopy(cart[key]) for key in offer_keys if key in cart}
+        updated.search_results = deepcopy(profile.get("_search_results") or updated.search_results)
+        if updated.pending_action:
+            missing = [field for field in updated.pending_action.missing_fields
+                       if TripStateStore.is_missing(updated, field)]
+            if missing:
+                updated.pending_action.missing_fields = missing
+            else:
+                updated.pending_action = None
+        return updated
+
+    @staticmethod
+    def is_missing(state: TripState, field: str) -> bool:
+        if field in ("direction", "destination_id"):
+            return not (state.destination_id or state.preferences.interests)
+        if field == "checkin_date":
+            return not state.dates.checkin_date
+        if field == "nights":
+            return not state.dates.nights
+        if field == "adults_count":
+            return not state.passengers.adults_count
+        if field == "kids_ages":
+            return (state.passengers.kids_count or 0) > len(state.kids_ages)
+        if field == "rooms_count":
+            travelers = (state.passengers.adults_count or 2) + (state.passengers.kids_count or 0)
+            return travelers > 4 and not state.rooms_count
+        if field == "budget_rub":
+            return state.budget_rub is None
+        if field == "hotel_id":
+            return not state.selected_offers.get("hotel_id")
+        return False

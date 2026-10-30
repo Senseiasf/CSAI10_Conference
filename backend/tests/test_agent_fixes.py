@@ -48,14 +48,15 @@ class AgentFixesTest(unittest.IsolatedAsyncioTestCase):
             result = await AgentService.process_message("test", message)
         return result, save
 
-    async def test_budget_limit_does_not_enable_cheapest_mode(self):
+    async def test_budget_limit_ranks_by_quality_not_lowest_price(self):
         hotels = [
-            make_hotel("expensive", "Гранд Люкс Отель", 12000),
+            {**make_hotel("expensive", "Гранд Люкс Отель", 12000), "stars": "5★"},
             make_hotel("mid", "Комфорт Отель", 6000),
-            make_hotel("cheap", "Эконом Резорт", 3000),
+            {**make_hotel("cheap", "Эконом Резорт", 3000), "stars": "1★"},
         ]
         result, _ = await self.run_agent("Сочи бюджет до 300 тысяч", hotels)
         self.assertEqual(result["ltr_ranking"]["selection_policy"], "ltr")
+        self.assertEqual(result["cart"]["hotel_id"], "expensive")
         self.assertLessEqual(result["cart"]["budget_comparison"]["compared_amount_rub"], 300000)
         self.assertEqual(result["cart"]["budget_comparison"]["basis"], "full_max")
 

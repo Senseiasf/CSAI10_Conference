@@ -222,7 +222,7 @@ class DialogueParser:
                 references=["previous_message"],
             )
         other_destinations_request = bool(re.search(r"друг\w*\s+(?:направлен|город|стран)|другие\s+направления", lower))
-        upgrade_request = bool(re.search(r"\bдороже\b|\bкомфортнее\b|\bболее\s+(?:дорог|комфорт|лучш)", lower))
+        upgrade_request = bool(re.search(r"\bдороже\b|\bкомфортнее\b|\bполучше\b|\bболее\s+(?:дорог|комфорт|лучш)", lower))
         multi_city_request = bool(re.search(r"тур по городам|комбинированн|мульти|несколько городов", lower))
         pending_budget = bool(state.pending_action and "budget_rub" in state.pending_action.missing_fields)
         date_probe = deepcopy(state.apply_to_profile({}))

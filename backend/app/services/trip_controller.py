@@ -70,9 +70,11 @@ class TripController:
                     change.field for change in decision.changes if change.field != "replan_action"
                 })
                 profile = state.apply_to_profile(profile)
+            profile["_trip_state_snapshot"] = state.model_dump(mode="json")
             if decision.intent == DialogueIntent.CLARIFY:
                 state.pending_action = self.pending_for_decision(decision, state)
                 profile = state.apply_to_profile(profile)
+            profile["_trip_state_snapshot"] = state.model_dump(mode="json")
             hotel_change = next((change for change in decision.changes if change.field == "hotel_id"), None)
             if hotel_change:
                 profile["_resolved_hotel_id"] = hotel_change.value
@@ -112,16 +114,18 @@ class TripController:
             ):
                 profile.pop(key, None)
             result = self._read_only_result(decision, profile, cart, message)
+            await save_session(user_id, profile, cart, message, result["text"])
+            profile.pop("_trip_state_snapshot", None)
             session.profile = deepcopy(profile)
             session.current_cart = deepcopy(cart)
-            await save_session(user_id, profile, cart, message, result["text"])
             return self._enrich(result, decision, profile, cart, quote, state=state)
 
         if decision.intent == DialogueIntent.NEW_TRIP and not decision.changes and not decision.search:
             reply = "Начинаем новую поездку. Расскажите, какой отдых хотите, когда и кто едет."
+            await save_session(user_id, profile, cart, message, reply)
+            profile.pop("_trip_state_snapshot", None)
             session.profile = deepcopy(profile)
             session.current_cart = deepcopy(cart)
-            await save_session(user_id, profile, cart, message, reply)
             return self._enrich({"text": reply, "state": "NEW_TRIP", "cart": cart}, decision, profile, cart, None, state=state)
 
         missing = self.outstanding_fields(decision, state)
@@ -131,6 +135,7 @@ class TripController:
             question = decision.clarification or self.missing_question(missing)
             state.pending_action = PendingAction(kind=kind, missing_fields=missing, question=question, attempts=attempts)
             profile = state.apply_to_profile(profile)
+            profile["_trip_state_snapshot"] = state.model_dump(mode="json")
             if attempts >= 2:
                 reply = "Новых данных пока нет. Чтобы не повторять вопрос, укажите недостающие условия или напишите «начать заново». " + question
             else:
@@ -138,9 +143,10 @@ class TripController:
             result = {"text": reply, "state": "CLARIFICATION_REQUIRED", "cart": cart,
                       "pending_action": state.pending_action.model_dump(mode="json"),
                       "applied_changes": self.applied_changes(previous_state, state)}
+            await save_session(user_id, profile, cart, message, reply)
+            profile.pop("_trip_state_snapshot", None)
             session.profile = deepcopy(profile)
             session.current_cart = deepcopy(cart)
-            await save_session(user_id, profile, cart, message, reply)
             return self._enrich(result, decision, profile, cart, quote, state=state)
         if (decision.intent == DialogueIntent.BOOKING
                 and not any(change.field != "replan_action" for change in decision.changes)
@@ -154,6 +160,7 @@ class TripController:
             if decision.intent not in ALTERNATIVE_INTENTS:
                 state.search_results = {}
             profile = state.apply_to_profile(profile)
+            profile["_trip_state_snapshot"] = state.model_dump(mode="json")
         original_profile = deepcopy(profile)
         original_cart = deepcopy(cart)
         profile["_skip_llm_dispatch"] = True
@@ -188,7 +195,7 @@ class TripController:
             "_current_quote_id", "_resolved_hotel_id", "_resolved_hotel_query",
             "_structured_compound_edit", "_structured_comparison", "_structured_decision",
             "_structured_changed_fields", "_structured_budget_changed", "_structured_dates_changed",
-            "_structured_destination_changed", "_comparison_only", "destination_flexible",
+            "_structured_destination_changed", "_comparison_only", "destination_flexible", "_trip_state_snapshot",
         ):
             profile.pop(key, None)
         final_state = self._state_after_execution(state, profile, final_cart)
@@ -217,6 +224,7 @@ class TripController:
             }
             final_state.search_results = deepcopy(state.search_results)
             profile = final_state.apply_to_profile(profile)
+            profile["_trip_state_snapshot"] = final_state.model_dump(mode="json")
             await save_session(user_id, profile, final_cart, message, result.get("text", ""))
         difference = result.get("quote_difference") or final_cart.get("quote_difference")
         if difference:
@@ -279,24 +287,7 @@ class TripController:
         return unresolved
 
     def is_missing(self, state: TripState, field: str) -> bool:
-        if field in ("direction", "destination_id"):
-            return not (state.destination_id or state.preferences.interests)
-        if field == "checkin_date":
-            return not state.dates.checkin_date
-        if field == "nights":
-            return not state.dates.nights
-        if field == "adults_count":
-            return not state.passengers.adults_count
-        if field == "kids_ages":
-            return (state.passengers.kids_count or 0) > len(state.kids_ages)
-        if field == "rooms_count":
-            travelers = (state.passengers.adults_count or 2) + (state.passengers.kids_count or 0)
-            return travelers > 4 and not state.rooms_count
-        if field == "budget_rub":
-            return state.budget_rub is None
-        if field == "hotel_id":
-            return not state.selected_offers.get("hotel_id")
-        return False
+        return TripStateStore.is_missing(state, field)
 
     def missing_question(self, fields: list[str]) -> str:
         labels = {
@@ -521,21 +512,7 @@ class TripController:
             raise TripValidationError("Слишком большая группа")
 
     def _state_after_execution(self, state: TripState, profile: dict, cart: dict) -> TripState:
-        updated = state.model_copy(deep=True)
-        updated.destination_id = cart.get("destination_id") or updated.destination_id
-        updated.destination_name = cart.get("destination") or updated.destination_name
-        updated.current_version_id = cart.get("tour_version_id") or updated.current_version_id
-        for field in ("checkin_date", "checkout_date", "nights"):
-            value = profile.get(field, cart.get(field))
-            if value is not None:
-                setattr(updated.dates, field, value)
-        offer_keys = (
-            "hotel_id", "hotel", "hotel_city", "flight", "logistics", "compared_hotels",
-            "is_multi_city", "multi_city_segments",
-        )
-        updated.selected_offers = {key: deepcopy(cart[key]) for key in offer_keys if key in cart}
-        updated.search_results = deepcopy(profile.get("_search_results") or updated.search_results)
-        return updated
+        return TripStateStore.with_execution_results(state, profile, cart)
 
     def _enrich(
         self,

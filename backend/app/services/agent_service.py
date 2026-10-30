@@ -9,10 +9,11 @@ from sqlalchemy import select, text
 from app.database import async_session_maker
 from app.models import DestinationModel, HotelModel, RiskAlertModel, UserSessionModel
 from app.config import settings
+from app.domain.trip import TripState
 from app.services.vector_service import generate_text_embedding
 from app.mcp.tools import MCPTools
 from app.services.trip_dates import update_trip_dates
-from app.services.trip_budget import compare_with_budget, update_trip_budget, validate_package_totals
+from app.services.trip_budget import compare_with_budget, validate_package_totals
 from app.services.trip_logistics import is_logistics_question, describe_saved_logistics, connection_summary
 from app.services.trip_state import (
     current_trip_question, describe_budget_estimate, describe_current_trip,
@@ -2055,49 +2056,12 @@ class AgentService:
             await AgentService._save_session(user_id, profile, cart, message, result["text"])
             return result
 
-        previous_budget = profile.get("budget_rub")
-        budget_question = None if skip_llm else update_trip_budget(slot_message, profile, cart)
-        if budget_question:
-            profile = AgentService.extract_interests_and_slots(user_lower, profile)
-            update_trip_dates(user_lower, profile, cart)
-            explicit_destination = requested_destination(message)
-            pending_destinations = await AgentService.search_destinations_vector(explicit_destination, limit=1) if explicit_destination else []
-            if pending_destinations:
-                cart["destination_id"] = pending_destinations[0]["id"]
-                cart["destination"] = pending_destinations[0]["name"]
-            cart = {key: cart[key] for key in ("destination_id", "destination") if key in cart}
-            cart.update(nights=profile.get("nights", 7), dates=profile.get("dates"),
-                        checkin_date=profile.get("checkin_date"), checkout_date=profile.get("checkout_date"),
-                        selection_status="needs_budget")
-            profile["pending_action"] = {"kind": "plan_trip", "missing_fields": ["budget_rub"], "question": budget_question}
-            await AgentService._save_session(user_id, profile, cart, message, budget_question)
-            return {"text": budget_question, "state": "NEEDS_BUDGET", "cart": cart}
-        budget_changed = bool(profile.get("_structured_budget_changed")) if skip_llm else profile.get("budget_rub") != previous_budget
+        budget_changed = bool(profile.get("_structured_budget_changed"))
         budget_limit = profile.get("budget_rub")
-
-        if not skip_llm and not profile.get("checkin_date"):
-            if cart.get("checkin_date"):
-                profile["checkin_date"] = cart["checkin_date"]
-                profile["checkout_date"] = cart.get("checkout_date")
-            elif cart.get("hotel") or cart.get("destination") or cart.get("dates"):
-                base_dt = date.today() + timedelta(days=14)
-                nights_cnt = profile.get("nights", cart.get("nights", 7))
-                profile["checkin_date"] = base_dt.isoformat()
-                profile["checkout_date"] = (base_dt + timedelta(days=nights_cnt)).isoformat()
-                profile["dates"] = f"{base_dt:%d.%m.%Y} — {base_dt + timedelta(days=nights_cnt):%d.%m.%Y} ({nights_cnt} ночей)"
-
         previous_dates = profile.get("dates")
         previous_calendar = (profile.get("checkin_date"), profile.get("checkout_date"))
-        date_question = None if skip_llm else update_trip_dates(slot_message, profile, cart)
-        if date_question:
-            profile["pending_action"] = {"kind": "plan_trip", "missing_fields": ["checkin_date"], "question": date_question}
-            await AgentService._save_session(user_id, profile, cart, message, date_question)
-            return {"text": date_question, "state": "NEEDS_DATES", "cart": cart}
 
-        if not skip_llm:
-            profile = AgentService.extract_interests_and_slots(slot_message, profile)
-            price_preference = profile.get("price_preference") or "any"
-        else:
+        if skip_llm:
             search_scope = structured_search.get("scope") or "current"
             profile["destination_flexible"] = search_scope == "other_destinations"
             if profile.get("preferred_destination"):
@@ -2660,6 +2624,15 @@ class AgentService:
             ))
         elif is_luxury and not is_cheapest_requested:
             affordable.sort(key=lambda x: (-x[0]["price_per_night_rub"], -x[0].get("ltr_score", 0.0)))
+        elif budget_limit is not None and not is_budget:
+            def budget_quality_key(option):
+                hotel, _, breakdown = option
+                stars_match = re.search(r"\d+(?:[.,]\d+)?", str(hotel.get("stars") or ""))
+                stars = float(stars_match.group().replace(",", ".")) if stars_match else 0.0
+                total = breakdown["total_trip_budget_range_rub"][estimate_key]
+                return (-stars, -hotel.get("ltr_score", 0.0), -total)
+
+            affordable.sort(key=budget_quality_key)
         elif is_cheapest_requested or is_budget:
             affordable.sort(key=lambda x: (x[2]["total_trip_budget_range_rub"][estimate_key], -x[0].get("ltr_score", 0.0), x[0]["price_per_night_rub"]))
 
@@ -3167,9 +3140,14 @@ class AgentService:
                     "_structured_destination_changed", "destination_flexible",
                 ):
                     profile.pop(key, None)
-                state, quote = TripStateStore.from_legacy(profile, cart)
+                state_snapshot = profile.pop("_trip_state_snapshot", None)
+                if state_snapshot is not None:
+                    state = TripState.model_validate(state_snapshot)
+                else:
+                    state, _ = TripStateStore.load(sess_to_update)
+                quote = TripStateStore.quote_from_cart(cart)
                 if quote and cart.get("hotel_id") and quote.quote_id != (previous_quote.quote_id if previous_quote else None):
-                    profile.pop("pending_action", None)
+                    state.pending_action = None
                     if previous_quote:
                         quote.previous_quote_id = previous_quote.quote_id
                         cart["budget_breakdown"] = quote.enrich_breakdown(cart["budget_breakdown"])
@@ -3188,7 +3166,8 @@ class AgentService:
                     cart["tour_version"] = version.model_dump(mode="json")
                     cart["quote_difference"] = compare_quotes(previous_quote, quote)
                     profile["tour_version_id"] = version.version_id
-                    state, quote = TripStateStore.from_legacy(profile, cart)
+                state = TripStateStore.with_execution_results(state, profile, cart)
+                profile = state.apply_to_profile(profile)
                 sess_to_update.profile = deepcopy(profile)
                 sess_to_update.current_cart = deepcopy(cart)
                 TripStateStore.project(sess_to_update, state, quote)
