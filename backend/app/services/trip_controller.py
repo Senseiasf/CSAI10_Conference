@@ -145,6 +145,8 @@ class TripController:
             return self._enrich(result, decision, profile, cart, quote, state=state)
         if decision.intent in STATE_CHANGING_INTENTS:
             state.pending_action = None
+            if decision.intent not in ALTERNATIVE_INTENTS:
+                state.search_results = {}
             profile = state.apply_to_profile(profile)
         if (decision.intent != DialogueIntent.PLAN
                 and any(change.field != "replan_action" for change in decision.changes)
@@ -172,9 +174,11 @@ class TripController:
         final_cart = result.get("cart") or cart
         final_quote = TripStateStore.quote_from_cart(final_cart) or quote
         if decision.intent in ALTERNATIVE_INTENTS:
-            result["quote_difference"] = compare_quotes(quote, final_quote) if final_quote else None
-            result["alternative_quote"] = final_quote.model_dump(mode="json") if final_quote else None
-            result["alternative_cart"] = deepcopy(final_cart)
+            alternative_cart = result.get("alternative_cart") if "alternative_cart" in result else final_cart
+            alternative_quote = TripStateStore.quote_from_cart(alternative_cart or {}) if alternative_cart else final_quote
+            result["quote_difference"] = compare_quotes(quote, alternative_quote) if alternative_quote else None
+            result["alternative_quote"] = alternative_quote.model_dump(mode="json") if alternative_quote else None
+            result["alternative_cart"] = deepcopy(alternative_cart)
             profile = original_profile
             final_cart = original_cart
             final_quote = quote
@@ -187,6 +191,11 @@ class TripController:
         ):
             profile.pop(key, None)
         if decision.intent in ALTERNATIVE_INTENTS:
+            state.search_results = {
+                "alternative_cart": deepcopy(result.get("alternative_cart")),
+                "alternative_quote": deepcopy(result.get("alternative_quote")),
+            }
+            profile = state.apply_to_profile(profile)
             await save_session(user_id, profile, final_cart, message, result.get("text", ""))
         difference = result.get("quote_difference") or final_cart.get("quote_difference")
         if difference:
@@ -217,10 +226,13 @@ class TripController:
             reply = AgentService.answer_internal_route_timing(message.lower(), cart)
             if reply:
                 return {"text": reply, "state": "INTERNAL_SCHEDULE_INFO", "cart": cart}
-        if decision.topic == "budget_estimate" and cart.get("budget_quote"):
-            mode = decision.mode or "max"
-            reply = describe_budget_estimate(cart["budget_quote"], mode, profile.get("budget_rub"))
-            return {"text": reply, "state": "BUDGET_ESTIMATE", "cart": cart}
+        if decision.topic == "budget_estimate":
+            alternative_cart = (profile.get("_search_results") or {}).get("alternative_cart") or {}
+            budget_quote = cart.get("budget_quote") or alternative_cart.get("budget_quote")
+            if budget_quote:
+                mode = decision.mode or "max"
+                reply = describe_budget_estimate(budget_quote, mode, profile.get("budget_rub"))
+                return {"text": reply, "state": "BUDGET_ESTIMATE", "cart": cart}
         if decision.answer:
             return {"text": decision.answer, "state": "CONSULTATION", "cart": cart}
         return {"text": describe_current_trip(profile, cart), "state": "CURRENT_TRIP", "cart": cart}
@@ -414,6 +426,7 @@ class TripController:
             "is_multi_city", "multi_city_segments",
         )
         updated.selected_offers = {key: deepcopy(cart[key]) for key in offer_keys if key in cart}
+        updated.search_results = deepcopy(profile.get("_search_results") or updated.search_results)
         return updated
 
     def _enrich(

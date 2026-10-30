@@ -48,17 +48,16 @@ class AgentFixesTest(unittest.IsolatedAsyncioTestCase):
             result = await AgentService.process_message("test", message)
         return result, save
 
-    async def test_small_budget_picks_cheapest_hotel_first(self):
-        """Fix 1: When user specifies a budget, cheapest affordable hotel is recommended first."""
+    async def test_budget_limit_does_not_enable_cheapest_mode(self):
         hotels = [
             make_hotel("expensive", "Гранд Люкс Отель", 12000),
             make_hotel("mid", "Комфорт Отель", 6000),
             make_hotel("cheap", "Эконом Резорт", 3000),
         ]
         result, _ = await self.run_agent("Сочи бюджет до 300 тысяч", hotels)
-        # All 3 fit into 300k, but the cheapest (3000/night) must be recommended first
-        self.assertEqual(result["cart"]["hotel_id"], "cheap")
-        self.assertEqual(result["cart"]["hotel"], "Эконом Резорт")
+        self.assertEqual(result["ltr_ranking"]["selection_policy"], "ltr")
+        self.assertLessEqual(result["cart"]["budget_comparison"]["compared_amount_rub"], 300000)
+        self.assertEqual(result["cart"]["budget_comparison"]["basis"], "full_max")
 
     async def test_internal_route_timing_response(self):
         """Fix 2: Internal route schedule questions are answered with departure, arrival, duration."""
@@ -102,7 +101,8 @@ class AgentFixesTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("укладывается в бюджет", result["text"])
         self.assertIn("выше лимита", result["text"])
         self.assertEqual(result["state"], "BUDGET_EXCEEDED")
-        self.assertIn("Среди найденных вариантов нет поездки", result["text"])
+        self.assertIn("подходящих вариантов нет", result["text"])
+        self.assertEqual(len(result["compared_hotels"]), 1)
 
     async def test_splurge_and_luxury_picks_premium_hotel_first(self):
         """Fix: When user is ready to splurge / wants luxury, premium hotel is recommended, not cheap."""

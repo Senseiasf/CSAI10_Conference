@@ -203,6 +203,21 @@ class PresentationAndPlanningTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["cart"], first["cart"])
         self.assertIn("нет", result["text"])
 
+    async def test_more_expensive_offer_explains_upgrade_and_preserves_limit(self):
+        from test_trip_dialogue_regressions import DialogueRegressionTest
+        case = DialogueRegressionTest()
+        user = make_user(nights=5, budget_rub=300000)
+        with case.fixture(user, destination_hotels={"spb": case.named_hotels()}):
+            selected = await AgentService.process_message("web:upgrade", "Пересчитай на 5 ночей")
+            result = await AgentService.process_message("web:upgrade", "Я имею в виду дороже")
+        self.assertEqual(result["cart"], selected["cart"])
+        self.assertEqual(result["alternative_cart"]["hotel_id"], "medovaya")
+        self.assertEqual(result["alternative_cart"]["budget_rub"], 300000)
+        self.assertLessEqual(result["alternative_cart"]["total_trip_budget_range_rub"]["max"], 300000)
+        self.assertIn("За доплату", result["text"])
+        self.assertIn("питание", result["text"])
+        self.assertEqual(result["trip_state"]["dates"], selected["trip_state"]["dates"])
+
     async def test_onsite_expenses_and_flights_scale_with_travelers(self):
         kwargs = dict(
             destination_id="unknown",

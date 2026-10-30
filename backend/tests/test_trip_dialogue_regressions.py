@@ -181,7 +181,7 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
         with self.fixture(user, hotel_rate=10000):
             first = await AgentService.process_message("web:dialogue", "Пересчитай на 1 ночь")
             self.assertEqual(first["state"], "BUDGET_EXCEEDED")
-            bounds = copy.deepcopy(first["cart"]["total_trip_budget_range_rub"])
+            bounds = copy.deepcopy(first["alternative_cart"]["total_trip_budget_range_rub"])
             self.assertEqual(bounds, {"min": 40300, "max": 46300})
             self.search.reset_mock()
             self.compare.reset_mock()
@@ -190,7 +190,7 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
             self.compare.assert_not_awaited()
             self.dispatch.assert_not_awaited()
         self.assertEqual(second["state"], "BUDGET_ESTIMATE")
-        self.assertEqual(second["cart"]["total_trip_budget_range_rub"], bounds)
+        self.assertEqual(second["trip_state"]["search_results"]["alternative_cart"]["total_trip_budget_range_rub"], bounds)
         self.assertIn("40,300", second["text"])
         self.assertIn("Остаток", second["text"])
         self.assertEqual(user.profile["budget_rub"], 45000)
@@ -204,9 +204,11 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first["cart"]["destination_id"], "spb")
         self.assertEqual(second["cart"]["destination_id"], "spb")
         self.assertEqual(third["cart"]["destination_id"], "spb")
-        self.assertEqual(third["cart"]["budget_quote"]["nights"], 8)
-        self.assertEqual(third["cart"]["total_trip_budget_range_rub"], second["cart"]["total_trip_budget_range_rub"])
-        self.assertLessEqual(third["cart"]["total_trip_budget_range_rub"]["min"], second["cart"]["total_trip_budget_range_rub"]["max"])
+        self.assertEqual(third["trip_state"]["search_results"]["alternative_cart"]["budget_quote"]["nights"], 8)
+        self.assertEqual(
+            third["trip_state"]["search_results"]["alternative_cart"]["total_trip_budget_range_rub"],
+            second["alternative_cart"]["total_trip_budget_range_rub"],
+        )
 
     async def test_destination_question_uses_saved_facts(self):
         user = make_user()
@@ -275,7 +277,8 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
             result = await AgentService.process_message("web:dialogue", "Пересчитай на 1 ночь")
         self.assertEqual(result["state"], "BUDGET_EXCEEDED")
         self.assertNotIn("hotel", result["cart"])
-        self.assertEqual(result["cart"]["total_trip_budget_range_rub"]["max"], 46300)
+        self.assertEqual(result["alternative_cart"]["total_trip_budget_range_rub"]["max"], 46300)
+        self.assertEqual(len(result["compared_hotels"]), 1)
 
     async def test_exact_final_ceiling_is_accepted(self):
         user = make_user(nights=1, adults_count=1, rooms_count=1, budget_rub=46300)
@@ -497,7 +500,9 @@ class DialogueRegressionTest(unittest.IsolatedAsyncioTestCase):
             await AgentService.process_message("web:budget-reference", "Пересчитай на 5 ночей")
             result = await AgentService.process_message("web:budget-reference", "Предложи другой вариант проживания под мой бюджет")
         self.assertEqual(result["state"], "BUDGET_EXCEEDED")
-        self.assertNotIn("hotel_id", result["cart"])
+        self.assertEqual(result["cart"]["hotel_id"], "golden")
+        self.assertEqual(result["alternative_cart"]["hotel_id"], "burgas")
+        self.assertTrue(result["alternative_cart"]["over_budget_alternative"])
         self.assertEqual(result["trip_conditions"]["budget_rub"], 300000)
         self.assertEqual(user.profile["budget_rub"], 300000)
 

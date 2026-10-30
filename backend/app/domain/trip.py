@@ -61,6 +61,7 @@ class TripState(BaseModel):
     preferences: TripPreferences = Field(default_factory=TripPreferences)
     pending_action: PendingAction | None = None
     selected_offers: dict[str, Any] = Field(default_factory=dict)
+    search_results: dict[str, Any] = Field(default_factory=dict)
     current_version_id: str | None = None
     revision: int = 0
     explicit_fields: list[str] = Field(default_factory=list)
@@ -111,6 +112,7 @@ class TripState(BaseModel):
             ),
             pending_action=PendingAction.model_validate(profile["pending_action"]) if profile.get("pending_action") else None,
             selected_offers=selected_offers,
+            search_results=deepcopy(profile.get("_search_results") or {}),
             current_version_id=cart.get("tour_version_id") or profile.get("tour_version_id"),
             revision=profile.get("_trip_revision", 0),
             explicit_fields=list(profile.get("_explicit_fields") or []),
@@ -147,6 +149,7 @@ class TripState(BaseModel):
             "tour_version_id": self.current_version_id,
             "_trip_revision": self.revision,
             "_explicit_fields": list(self.explicit_fields),
+            "_search_results": deepcopy(self.search_results),
         })
         for key in ("search_scope", "destination_flexible", "destination_query", "price_preference"):
             result.pop(key, None)

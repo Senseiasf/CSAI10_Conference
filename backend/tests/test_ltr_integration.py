@@ -71,9 +71,8 @@ class AgentLTRIntegrationTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("trip_conditions", result)
         self.assertEqual(result["logistics"]["timeline"]["checkin_wait_minutes"], 540)
 
-    async def test_budget_and_cheapest_requests_beat_higher_ml_scores(self):
-        for profile, message in (({"budget_rub": 200000}, "Сочи на 7 ночей"),
-                                 ({"interests": ["budget_friendly"]}, "Сочи на 7 ночей"),
+    async def test_explicit_budget_preference_beats_higher_ml_scores(self):
+        for profile, message in (({"interests": ["budget_friendly"]}, "Сочи на 7 ночей"),
                                  ({"interests": ["luxury"]}, "Сделай самый дешевый вариант в Сочи")):
             with self.subTest(profile=profile, message=message):
                 result, _, _ = await self.run_agent(profile=profile, message=message)
@@ -87,7 +86,7 @@ class AgentLTRIntegrationTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["cart"]["hotel_id"], "hotel-0")
         self.assertEqual(result["ltr_ranking"]["top_score"], result["compared_hotels"][0]["ltr_score"])
         tied, _, _ = await self.run_agent(profile={"budget_rub": 200000}, hotels=[hotel(index) for index in range(3)])
-        self.assertEqual(tied["cart"]["hotel_id"], "hotel-2")
+        self.assertEqual(tied["ltr_ranking"]["selection_policy"], "ltr")
 
     async def test_price_filter_cannot_be_undone_by_ltr(self):
         result, _, _ = await self.run_agent(profile={"budget_rub": 100000, "adults_count": 1},

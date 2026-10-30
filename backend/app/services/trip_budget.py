@@ -112,3 +112,24 @@ def update_trip_budget(message: str, profile: dict, cart: dict) -> str | None:
     profile["budget_rub"] = limit
     profile.pop("awaiting_budget", None)
     return None
+
+
+def compare_with_budget(limit: int | None, breakdown: dict, estimate: str = "max", basis: str | None = None) -> dict | None:
+    if limit is None:
+        return None
+    selected_basis = basis or ("full_min" if estimate == "min" else "full_max")
+    if selected_basis == "mandatory":
+        compared_amount = breakdown["mandatory"]["total_mandatory_rub"]
+    elif selected_basis == "full_min":
+        compared_amount = breakdown["total_trip_budget_range_rub"]["min"]
+    elif selected_basis == "full_max":
+        compared_amount = breakdown["total_trip_budget_range_rub"]["max"]
+    else:
+        raise ValueError(f"Unknown budget comparison basis: {selected_basis}")
+    return {
+        "basis": selected_basis,
+        "limit_rub": limit,
+        "compared_amount_rub": compared_amount,
+        "difference_rub": limit - compared_amount,
+        "within_budget": compared_amount <= limit,
+    }

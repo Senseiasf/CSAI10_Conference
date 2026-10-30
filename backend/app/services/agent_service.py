@@ -12,7 +12,7 @@ from app.config import settings
 from app.services.vector_service import generate_text_embedding
 from app.mcp.tools import MCPTools
 from app.services.trip_dates import update_trip_dates
-from app.services.trip_budget import update_trip_budget, validate_package_totals
+from app.services.trip_budget import compare_with_budget, update_trip_budget, validate_package_totals
 from app.services.trip_logistics import is_logistics_question, describe_saved_logistics, connection_summary
 from app.services.trip_state import (
     current_trip_question, describe_budget_estimate, describe_current_trip,
@@ -1128,7 +1128,7 @@ class AgentService:
             policy = "luxury"
             hotels_1.sort(key=lambda h: (-h.get("price_per_night_rub", 0), -h["ltr_score"]))
             hotels_2.sort(key=lambda h: (-h.get("price_per_night_rub", 0), -h["ltr_score"]))
-        elif is_cheapest_requested or is_budget or budget_limit is not None:
+        elif is_cheapest_requested or is_budget:
             policy = "budget"
             hotels_1.sort(key=lambda h: (h.get("price_per_night_rub", 0), -h["ltr_score"]))
             hotels_2.sort(key=lambda h: (h.get("price_per_night_rub", 0), -h["ltr_score"]))
@@ -2591,12 +2591,31 @@ class AgentService:
             regional_options = [(candidate, option) for candidate, options in evaluated_regions for option in options]
             affordable_regions = [(candidate, option) for candidate, option in regional_options if budget_limit is None
                                   or option[2]["total_trip_budget_range_rub"][estimate_key] <= budget_limit]
-            if affordable_regions or regional_options:
-                top_dest, _ = min(affordable_regions or regional_options,
-                                  key=lambda item: item[1][2]["total_trip_budget_range_rub"][estimate_key])
+            ranked_regions = []
+            for candidate in candidates:
+                options = [option for option in affordable_regions if option[0]["id"] == candidate["id"]]
+                packages = [option for _, option in options]
+                if not packages:
+                    continue
+                ranked, _ = LTRService.rank_evaluated_packages(packages, candidate["id"], profile, nights)
+                if price_preference in ("more_expensive", "comfort"):
+                    ranked.sort(key=lambda x: -x[2]["total_trip_budget_range_rub"][estimate_key])
+                elif price_preference == "cheaper":
+                    ranked.sort(key=lambda x: x[2]["total_trip_budget_range_rub"][estimate_key])
+                ranked_regions.append((candidate, ranked))
+            if ranked_regions:
+                if price_preference in ("more_expensive", "comfort"):
+                    top_dest, evaluated = max(ranked_regions, key=lambda item: item[1][0][2]["total_trip_budget_range_rub"][estimate_key])
+                elif price_preference == "cheaper":
+                    top_dest, evaluated = min(ranked_regions, key=lambda item: item[1][0][2]["total_trip_budget_range_rub"][estimate_key])
+                else:
+                    top_dest, evaluated = max(ranked_regions, key=lambda item: item[1][0][0].get("ltr_score", 0.0))
+                dest_id, dest_name = top_dest["id"], top_dest["name"]
+                cart.update(destination_id=dest_id, destination=dest_name)
+            elif regional_options:
+                top_dest, _ = min(regional_options, key=lambda item: item[1][2]["total_trip_budget_range_rub"][estimate_key])
                 dest_id, dest_name = top_dest["id"], top_dest["name"]
                 evaluated = next(options for candidate, options in evaluated_regions if candidate["id"] == dest_id)
-                cart.update(destination_id=dest_id, destination=dest_name)
             cart["destination_search"] = {"considered": len(candidates), "affordable_options": len(affordable_regions)}
         recommended_hotel = compared_list[0] if compared_list else None
 
@@ -2639,45 +2658,68 @@ class AgentService:
         is_luxury = any(t in ("luxury", "extreme_luxury") for t in profile.get("interests", []))
         is_budget = "budget_friendly" in profile.get("interests", []) or is_replan_cheaper or is_cheapest_requested
 
-        if is_luxury and not is_cheapest_requested:
-            # Пользователь готов раскошелиться / выбрал люкс: рекомендуем премиум-отель с максимальным комфортом в рамках бюджета
+        if price_preference in ("more_expensive", "comfort") and not is_cheapest_requested:
+            affordable.sort(key=lambda x: (
+                -x[2]["total_trip_budget_range_rub"][estimate_key],
+                -x[0].get("ltr_score", 0.0),
+            ))
+        elif is_luxury and not is_cheapest_requested:
             affordable.sort(key=lambda x: (-x[0]["price_per_night_rub"], -x[0].get("ltr_score", 0.0)))
-        elif is_cheapest_requested or is_budget or (budget_limit is not None and not is_luxury):
-            # Пользователь ищет доступный вариант или ограничил бюджет: рекомендуем наиболее экономичный вариант
+        elif is_cheapest_requested or is_budget:
             affordable.sort(key=lambda x: (x[2]["total_trip_budget_range_rub"][estimate_key], -x[0].get("ltr_score", 0.0), x[0]["price_per_night_rub"]))
 
         if not affordable:
+            alternative_cart = None
+            compared_alternatives = []
             if evaluated and budget_limit is not None:
                 lowest_option = min(evaluated, key=lambda x: x[2]["total_trip_budget_range_rub"][estimate_key])
-                lowest = lowest_option[2]["total_trip_budget_range_rub"][estimate_key]
-                closest_hotel = lowest_option[0]
+                closest_hotel, closest_logistics, closest_breakdown = lowest_option
+                lowest = closest_breakdown["total_trip_budget_range_rub"][estimate_key]
                 dest_name = single_destination_name(dest_id, dest_name, closest_hotel.get("city"))
-                estimate_label = "нижней" if estimate_key == "min" else "верхней"
+                estimate_label = "нижняя" if estimate_key == "min" else "верхняя"
                 reply_text = (
-                    f"⚠️ Среди найденных вариантов нет поездки в пределах бюджета {budget_limit:,} ₽. "
-                    f"В направлении «{dest_name}» ближайший найденный вариант — отель «{closest_hotel['name']}» "
-                    f"с {estimate_label} оценкой полной стоимости {lowest:,} ₽ (на {lowest - budget_limit:,} ₽ выше лимита). "
-                    "В расчёт включены перелёт, отель, трансфер, питание и активности. "
-                    "Оценка получена по демонстрационному каталогу. "
-                    "Можно сократить поездку, выбрать другое направление или явно увеличить бюджет."
+                    f"В пределах лимита {budget_limit:,} ₽ подходящих вариантов нет. "
+                    f"Единственная ближайшая альтернатива вне бюджета: «{closest_hotel['name']}» в направлении «{dest_name}». "
+                    f"С лимитом сравнивается {estimate_label} оценка полной стоимости с расходами на месте — {lowest:,} ₽, "
+                    f"на {lowest - budget_limit:,} ₽ выше лимита. Обязательные расходы — "
+                    f"{closest_breakdown['mandatory']['total_mandatory_rub']:,} ₽. Текущий выбранный тур не заменён."
                 )
                 state = "BUDGET_EXCEEDED"
+                alternative_cart = {
+                    "destination_id": dest_id, "destination": dest_name,
+                    "hotel_id": closest_hotel["id"], "hotel": closest_hotel["name"],
+                    "hotel_city": closest_hotel.get("city"), "nights": nights,
+                    "dates": profile.get("dates"), "checkin_date": closest_breakdown["checkin_date"],
+                    "checkout_date": closest_breakdown["checkout_date"], "budget_rub": budget_limit,
+                    "budget_estimate": estimate_key, "budget_breakdown": deepcopy(closest_breakdown),
+                    "total_mandatory_rub": closest_breakdown["mandatory"]["total_mandatory_rub"],
+                    "total_trip_budget_range_rub": deepcopy(closest_breakdown["total_trip_budget_range_rub"]),
+                    "pricing_inputs": deepcopy(closest_breakdown["pricing_inputs"]),
+                    "budget_quote": AgentService.budget_quote(dest_name, closest_hotel, closest_breakdown),
+                    "budget_comparison": compare_with_budget(budget_limit, closest_breakdown, estimate_key),
+                    "logistics": deepcopy(closest_logistics), "over_budget_alternative": True,
+                }
+                compared_alternatives = [{
+                    **deepcopy(closest_hotel),
+                    "total_trip_budget_range_rub": deepcopy(closest_breakdown["total_trip_budget_range_rub"]),
+                    "over_budget_alternative": True,
+                }]
                 if search_multiple_destinations:
                     reply_text = f"Проверил {len(candidates)} направлений по вашим условиям.\n\n" + reply_text
             else:
                 reply_text = "Не удалось собрать маршрут с известными ценами перелёта и трансфера. Бронирование пока недоступно."
                 state = "NO_ROUTE"
-            cart = {"destination_id": dest_id, "destination": dest_name,
-                    "nights": nights, "dates": profile.get("dates"), "selection_status": state.lower(),
-                    "checkin_date": profile.get("checkin_date"), "checkout_date": profile.get("checkout_date"),
-                    "budget_rub": budget_limit, "budget_estimate": estimate_key}
-            if evaluated and budget_limit is not None:
-                update_trip_dates(lowest_option[2]["checkin_date"], profile, cart)
-                cart["budget_quote"] = AgentService.budget_quote(dest_name, lowest_option[0], lowest_option[2])
-                cart["total_trip_budget_range_rub"] = deepcopy(lowest_option[2]["total_trip_budget_range_rub"])
-                cart["pricing_inputs"] = deepcopy(lowest_option[2]["pricing_inputs"])
+            if previous_cart.get("hotel_id"):
+                cart = deepcopy(previous_cart)
+            else:
+                cart = {"destination_id": dest_id, "destination": dest_name,
+                        "nights": nights, "dates": profile.get("dates"), "selection_status": state.lower(),
+                        "checkin_date": profile.get("checkin_date"), "checkout_date": profile.get("checkout_date"),
+                        "budget_rub": budget_limit, "budget_estimate": estimate_key}
+            profile["_search_results"] = {"alternative_cart": deepcopy(alternative_cart)}
             await AgentService._save_session(user_id, profile, cart, message, reply_text)
-            return {"text": reply_text, "state": state, "cart": cart, "compared_hotels": []}
+            return {"text": reply_text, "state": state, "cart": cart,
+                    "alternative_cart": alternative_cart, "compared_hotels": compared_alternatives}
 
         recommended_hotel, logistics_info, budget_breakdown = affordable[0]
         dest_name = single_destination_name(dest_id, top_dest["name"], recommended_hotel.get("city"))
@@ -2727,7 +2769,12 @@ class AgentService:
             cart["date_shifted"] = True
         compared_list = [x[0] for x in affordable[:3]]
         cart["compared_hotels"] = deepcopy(compared_list)
-        policy = "user_choice" if profile.get("selected_hotel_id") else "luxury" if is_luxury and not is_cheapest_requested else "budget" if is_cheapest_requested or is_budget or budget_limit is not None else "ltr"
+        policy = (
+            "user_choice" if profile.get("selected_hotel_id")
+            else "luxury" if (is_luxury or price_preference in ("more_expensive", "comfort")) and not is_cheapest_requested
+            else "budget" if is_cheapest_requested or is_budget
+            else "ltr"
+        )
         ltr_meta.update(top_k=len(compared_list), top_score=recommended_hotel["ltr_score"],
                         top_hotel=recommended_hotel["name"], selection_policy=policy)
         flight_info = logistics_info["flight"]
@@ -2763,6 +2810,7 @@ class AgentService:
         cart["budget_rub"] = budget_limit
         cart["budget_estimate"] = estimate_key
         cart["budget_quote"] = AgentService.budget_quote(dest_name, recommended_hotel, budget_breakdown)
+        cart["budget_comparison"] = compare_with_budget(budget_limit, budget_breakdown, estimate_key)
         cart["pricing_inputs"] = deepcopy(budget_breakdown["pricing_inputs"])
         cart["price_per_night_rub"] = budget_breakdown["mandatory"]["hotel_per_night"]
         cart["price_per_night_formatted"] = f"{cart['price_per_night_rub']:,} ₽"
@@ -2952,6 +3000,18 @@ class AgentService:
             ""
         ])
         response_lines.extend(fin_lines)
+        comparison = cart.get("budget_comparison")
+        if comparison and comparison["within_budget"]:
+            basis_label = {
+                "mandatory": "обязательные расходы",
+                "full_min": "нижняя оценка полной стоимости с расходами на месте",
+                "full_max": "верхняя оценка полной стоимости с расходами на месте",
+            }[comparison["basis"]]
+            response_lines.append(
+                f"С лимитом {comparison['limit_rub']:,} ₽ сравнивается {basis_label}: "
+                f"{comparison['compared_amount_rub']:,} ₽; остаток {comparison['difference_rub']:,} ₽."
+            )
+            response_lines.append("")
         response_lines.append("*Расчёт по демонстрационному каталогу с календарными коэффициентами; актуальная цена поставщика не запрашивалась.*\n")
 
         if budget_limit is not None and total_range['max'] > budget_limit:
