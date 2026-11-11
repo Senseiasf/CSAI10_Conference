@@ -2,7 +2,7 @@
 Модульные тесты для табличного ранжировщика туров CatBoost LTR (`LTRService`).
 Проверяют:
 - определение архетипа пользователя (`pet`, `family`, `luxury`, `budget`, `solo`),
-- извлечение 10 признаков (`FEATURE_COLUMNS`) из карточек отелей, логистики Neo4j и расчёта бюджета,
+- извлечение 12 признаков (`FEATURE_COLUMNS`) из карточек отелей, логистики Neo4j и расчёта бюджета,
 - пересортировку пакетов `rank_evaluated_packages` и кандидатов отелей `rank_hotel_candidates`,
 - запись онлайн-конверсий `record_online_feedback` (Шаг 4 концепта Synthetic User Simulation).
 """
@@ -57,7 +57,9 @@ class LTRServiceTest(unittest.TestCase):
             breakdown=breakdown,
         )
 
-        self.assertEqual(list(feat.keys()), FEATURE_COLUMNS)
+        for col in FEATURE_COLUMNS:
+            self.assertIn(col, feat)
+        self.assertIn("price", feat)
         self.assertEqual(feat["archetype"], "pet")
         self.assertEqual(feat["cities"], "Сочи -> Красная Поляна -> Сириус")
         self.assertEqual(feat["days"], 7)
@@ -68,6 +70,9 @@ class LTRServiceTest(unittest.TestCase):
         self.assertAlmostEqual(feat["dist_center_km"], 0.15, places=2)
         self.assertEqual(feat["pet_friendly"], 1)
         self.assertEqual(feat["breakfast"], 1)
+        self.assertGreater(feat["log_price"], 0)
+        self.assertGreater(feat["log_price_per_day"], 0)
+        self.assertGreater(feat["stars_per_10k"], 0)
 
     def test_rank_evaluated_packages_prioritizes_pet_friendly_for_pet_archetype(self):
         h_no_pet = {

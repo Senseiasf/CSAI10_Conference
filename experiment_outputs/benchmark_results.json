@@ -1,0 +1,153 @@
+{
+  "summary": [
+    {
+      "Config_ID": "C1_Baseline_SQL",
+      "Configuration": "C1: Baseline (SQL/Lexical)",
+      "Dest_Recall_at_2_pct": 36.0,
+      "Logistics_Feasibility_pct": 35.5,
+      "Constraint_Satisfaction_pct": 58.7,
+      "Task_Completion_Rate_pct": 7.5,
+      "Pairwise_Accuracy_pct": 65.0,
+      "NDCG_at_2": 0.8708,
+      "Batch_Latency_ms": 0.02
+    },
+    {
+      "Config_ID": "C2_Vector_RAG",
+      "Configuration": "C2: + pgvector Search",
+      "Dest_Recall_at_2_pct": 74.0,
+      "Logistics_Feasibility_pct": 35.2,
+      "Constraint_Satisfaction_pct": 69.0,
+      "Task_Completion_Rate_pct": 18.0,
+      "Pairwise_Accuracy_pct": 65.0,
+      "NDCG_at_2": 0.8708,
+      "Batch_Latency_ms": 0.02
+    },
+    {
+      "Config_ID": "C3_Graph_Heuristic",
+      "Configuration": "C3: + Neo4j Graph (Heuristic)",
+      "Dest_Recall_at_2_pct": 74.0,
+      "Logistics_Feasibility_pct": 77.5,
+      "Constraint_Satisfaction_pct": 75.8,
+      "Task_Completion_Rate_pct": 43.5,
+      "Pairwise_Accuracy_pct": 87.5,
+      "NDCG_at_2": 0.9539,
+      "Batch_Latency_ms": 0.09
+    },
+    {
+      "Config_ID": "C4_Full_CatBoost",
+      "Configuration": "C4: Full Pipeline (+ CatBoost LTR)",
+      "Dest_Recall_at_2_pct": 74.0,
+      "Logistics_Feasibility_pct": 77.5,
+      "Constraint_Satisfaction_pct": 77.5,
+      "Task_Completion_Rate_pct": 44.4,
+      "Pairwise_Accuracy_pct": 89.5,
+      "NDCG_at_2": 0.9585,
+      "Batch_Latency_ms": 0.91
+    }
+  ],
+  "archetype_comparison": {
+    "C1_Baseline_SQL": {
+      "pet": {
+        "pairwise_acc": 62.5,
+        "ndcg_at_2": 0.8616
+      },
+      "family": {
+        "pairwise_acc": 52.5,
+        "ndcg_at_2": 0.8247
+      },
+      "luxury": {
+        "pairwise_acc": 30.0,
+        "ndcg_at_2": 0.7417
+      },
+      "budget": {
+        "pairwise_acc": 92.5,
+        "ndcg_at_2": 0.9723
+      },
+      "solo": {
+        "pairwise_acc": 87.5,
+        "ndcg_at_2": 0.9539
+      }
+    },
+    "C2_Vector_RAG": {
+      "pet": {
+        "pairwise_acc": 62.5,
+        "ndcg_at_2": 0.8616
+      },
+      "family": {
+        "pairwise_acc": 52.5,
+        "ndcg_at_2": 0.8247
+      },
+      "luxury": {
+        "pairwise_acc": 30.0,
+        "ndcg_at_2": 0.7417
+      },
+      "budget": {
+        "pairwise_acc": 92.5,
+        "ndcg_at_2": 0.9723
+      },
+      "solo": {
+        "pairwise_acc": 87.5,
+        "ndcg_at_2": 0.9539
+      }
+    },
+    "C3_Graph_Heuristic": {
+      "pet": {
+        "pairwise_acc": 97.5,
+        "ndcg_at_2": 0.9908
+      },
+      "family": {
+        "pairwise_acc": 80.0,
+        "ndcg_at_2": 0.9262
+      },
+      "luxury": {
+        "pairwise_acc": 80.0,
+        "ndcg_at_2": 0.9262
+      },
+      "budget": {
+        "pairwise_acc": 95.0,
+        "ndcg_at_2": 0.9815
+      },
+      "solo": {
+        "pairwise_acc": 85.0,
+        "ndcg_at_2": 0.9446
+      }
+    },
+    "C4_Full_CatBoost": {
+      "pet": {
+        "pairwise_acc": 90.0,
+        "ndcg_at_2": 0.9631
+      },
+      "family": {
+        "pairwise_acc": 80.0,
+        "ndcg_at_2": 0.9216
+      },
+      "luxury": {
+        "pairwise_acc": 90.0,
+        "ndcg_at_2": 0.9631
+      },
+      "budget": {
+        "pairwise_acc": 95.0,
+        "ndcg_at_2": 0.9769
+      },
+      "solo": {
+        "pairwise_acc": 92.5,
+        "ndcg_at_2": 0.9677
+      }
+    }
+  },
+  "feature_importances": {
+    "archetype": 38.11,
+    "cities": 8.22,
+    "days": 0.71,
+    "log_price": 23.11,
+    "log_price_per_day": 1.0,
+    "transfers": 1.24,
+    "layover_hours": 2.15,
+    "hotel_stars": 4.1,
+    "dist_center_km": 2.19,
+    "pet_friendly": 12.95,
+    "breakfast": 2.12,
+    "stars_per_10k": 4.09
+  },
+  "nlu_slot_accuracy_pct": 92.4
+}

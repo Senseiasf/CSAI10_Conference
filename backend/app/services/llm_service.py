@@ -4,7 +4,11 @@ from typing import Optional, List, Dict, Any
 import re
 from openai import AsyncOpenAI
 from app.config import settings
-from app.services.preference_memory import remembered_preferences
+def remembered_preferences(profile: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    if not isinstance(profile, dict):
+        return {}
+    return {k: v for k, v in profile.items() if not k.startswith("_")}
+
 
 logger = logging.getLogger(__name__)
 

@@ -1,0 +1,3438 @@
+[
+  {
+    "id": "CSAI_001",
+    "query": "Подыскиваем бюджетную поездку на 4 дня: тянет к старинной архитектуре, каналам, музеям и спокойным прогулкам, а ночевать хотим в недорогом хостеле или мини-отеле у метро. Бюджет около 50 000 руб на всё, вылет вечером после работы — подскажите вариант с максимальной отдачей за эти деньги?",
+    "archetype": "budget",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 50000,
+    "days": 4,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_002",
+    "query": "Подыскиваем недорогой вариант на 7 дней: хочется тёплого моря, красивых коралловых рифов, снорклинга и купания, бюджет около 115 000 руб. Нужен только прямой перелёт без пересадок, вылет днём в обеденное время. Подскажите, что можно подобрать с максимальной отдачей за эти деньги?",
+    "archetype": "budget",
+    "expected_destinations": [
+      "egypt",
+      "thailand"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 115000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_003",
+    "query": "Подыскиваем вариант на 4 дня: море и прогулки в горах, без загранпаспорта, вылет хочется пораньше утром. Бюджет около 105 000 руб. на всё — посоветуйте, где получить максимум за эти деньги.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 105000,
+    "days": 4,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_004",
+    "query": "Подыскиваем недорогой вариант в Египет на 5 дней: хочется тёплого моря, красивых коралловых рифов, нормального снорклинга и спокойного купания. Бюджет скромный — около 110 000 руб на человека, поэтому важна максимальная отдача за эти деньги, без лишних доплат и дорогих экскурсий. Подскажите отель или вылет, где можно всё это совместить и не выйти за сумму. Желательно простой практичный вариант: главное — чистое море, рифы и нормальные условия, а не пафос.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "egypt",
+      "thailand"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 110000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_005",
+    "query": "Подыскиваем вариант на 6 дней с теплым морем, коралловыми рифами и снорклингом, бюджет около 90 тыс., прямой перелет вечером после работы.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "egypt",
+      "thailand"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 90000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_006",
+    "query": "Подыскиваем недорогой вариант на 5 дней: тёплое море, коралловые рифы, снорклинг и купание. Бюджет около 130 000 руб, нужен только прямой перелёт без пересадок с вылетом вечером после работы. Подскажите, что реально уложить в эту сумму.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "egypt",
+      "thailand"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 130000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_007",
+    "query": "Планируем поездку в Санкт-Петербург на 6 дней и хотим уложиться примерно в 60 000 руб. Интересуют музеи, старинная архитектура и прогулки по каналам, а для ночёвки подойдёт бюджетный хостел или мини-отель рядом с метро. Вылет желательно днём, в обеденное время, чтобы не переплачивать за ранний трансфер. Подскажите практичный вариант с максимальной отдачей за эти деньги, без лишних расходов.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 60000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_008",
+    "query": "Помогите найти курорт: треккинг по горным тропам, хвойный лес, горная река и эконом турбаза, экономно на 7 дней, строгий лимит бюджета до 105 000 руб, вылет днем в обед, прямой перелет.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "altai"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 105000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_009",
+    "query": "Собираемся в Турцию на 7 дней и ищем недорогой отель рядом с морем, прогулки по набережной и восточный колорит, бюджет до 120 000 руб, вылет вечером после работы.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 100000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_010",
+    "query": "Мечтаю о поездке, где будет отдых на море и прогулки в горах в России без загранпаспорта, экономно на 7 дней, строгий лимит бюджета до 100 000 руб, вылет вечером после работы.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 100000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_011",
+    "query": "Подскажите вариант на 6 дней с вылетом вечером после работы: тёплое море, коралловые рифы, снорклинг — уложимся в 125 000?",
+    "archetype": "budget",
+    "expected_destinations": [
+      "egypt",
+      "thailand"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 125000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_012",
+    "query": "Рассматриваем поездку на природу: треккинг по горным тропам, хвойный лес, горная река и эконом турбаза, экономно на 6 дней, строгий лимит бюджета до 80 000 руб, желательно утренний рейс, без пересадок.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "altai"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 80000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_013",
+    "query": "Подыскиваем Сочи на 4 дня: море и горы, без загранпаспорта, прямой перелёт. Уложимся примерно в 100 000 руб?",
+    "archetype": "budget",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 100000,
+    "days": 4,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": null,
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_014",
+    "query": "Подыскиваем недорогой вариант на 7 дней, чтобы уложиться примерно в 110 000 руб на всю поездку. Хочется старый колоритный город, где можно гулять по узким улочкам, есть хинкали и хачапури в простых недорогих кафе, а рядом — горы для выездов на природу. Нужен только прямой перелёт без пересадок, вылет желательно пораньше утром. Подскажите, что можно подобрать под такой бюджет и пожелания?",
+    "archetype": "budget",
+    "expected_destinations": [
+      "georgia"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 110000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_015",
+    "query": "Подыскиваем недорогой вариант на 6 дней: отель рядом с морем, чтобы купаться, гулять по набережной и ловить восточный колорит без лишних трат. Бюджет около 135 000 руб, хочется выжать максимум за скромные деньги. Нужен теплый климат и спокойная атмосфера, без пафосных отелей. Вылет пораньше утром и только прямой рейс, без пересадок — подскажите, что реально подобрать.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 135000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_016",
+    "query": "Планируем короткую поездку на 4 дня в город с музеями, старинной архитектурой и каналами — хочется много гулять, смотреть красивые фасады и не тратить лишнего. Бюджет около 65 000 руб на всё, поэтому ищем бюджетный хостел или мини-отель рядом с метро, чтобы удобно добираться. Вылет нужен утром пораньше и только прямой рейс, без пересадок. Подскажите варианты, где за эти деньги получится максимально насыщенно отдохнуть.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 65000,
+    "days": 4,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_017",
+    "query": "Подыскиваем недорогой вариант на 7 дней: хочется треккинга по горным тропам, хвойного леса и горной реки, а жить готовы на скромной эконом турбазе. На двоих рассчитываем примерно на 105 000 руб и хотим максимально выжать за эти деньги. Вылет нужен вечером после работы и только прямым рейсом, без пересадок. Подскажите, какие варианты реально уложить в такой бюджет?",
+    "archetype": "budget",
+    "expected_destinations": [
+      "altai"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 105000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_018",
+    "query": "Подыскиваем бюджетный вариант в Египет на 8 дней, примерно до 90 000 руб. Нужно тёплое море, красивые коралловые рифы, снорклинг и купание, а вылет — вечером после работы.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "egypt",
+      "thailand"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 90000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_019",
+    "query": "Подыскиваем море и горы без загранпаспорта на 5 дней, около 80 000 ₽: утренний прямой перелёт, максимум за скромные деньги.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 80000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_020",
+    "query": "Подыскиваем недорогой вариант на 7 дней: старый колоритный город, горы рядом, домашние хинкали и хачапури в простых кафе, чтобы атмосфера была тёплая и без лишних трат. Бюджет около 95 000 руб на человека, вылет желательно днём в обеденное время — подскажите, что реально уложить в эту сумму.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "georgia"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 95000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_021",
+    "query": "Подыскиваем недорогой вариант на 7 дней: отель рядом с морем, чтобы можно было гулять по набережной и почувствовать восточный колорит. Бюджет около 125 000 руб., нужен только прямой перелет и вылет пораньше утром.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 125000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_022",
+    "query": "Подыскиваем на 5 дней бюджетный вариант с музеями, старинной архитектурой и каналами: мини-отель у метро, до 80 000 руб, вылет днём.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 80000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_023",
+    "query": "Подыскиваем экономный тур на Алтай на 7 дней: треккинг по горным тропам, хвойный лес, горная река и простая турбаза без лишнего. Бюджет около 95 000 руб., нужен прямой перелёт с вылетом вечером после работы — без пересадок.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "altai"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 95000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_024",
+    "query": "Подыскиваем поездку на 8 дней к теплому морю с красивыми коралловыми рифами — хочется вдоволь поплавать и понырять со снорклом. Бюджет скромный, около 110 000 руб. на все, поэтому важна максимальная отдача за эти деньги. Нужен только прямой перелет без пересадок.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "egypt",
+      "thailand"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 110000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": null,
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_025",
+    "query": "Подыскиваем недорогой вариант на 6 дней: хочется искупаться в море и погулять по горам, без загранпаспорта. Бюджет около 100 000 руб. — подскажите, где за эти деньги получить максимум впечатлений и не переплатить?",
+    "archetype": "budget",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 100000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": null,
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_026",
+    "query": "Подыскиваем тур в Тбилиси на 5 дней за 105 000 руб: старый город, хинкали, горы, недорогие кафе, прямой перелёт.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "georgia"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 105000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": null,
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_027",
+    "query": "Подыскиваем бюджетный вариант на 5 дней: нужен недорогой отель рядом с морем, тёплый климат и спокойная атмосфера для купания и вечерних прогулок по набережной. Хочется немного восточного колорита, местных рынков и недорогой еды, без пафосных курортов. Бюджет около 135 000 руб на поездку, поэтому важна максимальная отдача за эти деньги. Нужен только прямой перелёт без пересадок — подскажите, что реально уложить в такую сумму.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 135000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_028",
+    "query": "Подыскиваем на 5 дней до 75 000 ₽: старинная архитектура, музеи, каналы, бюджетный хостел у метро и прямой вылет вечером после работы.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 75000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_029",
+    "query": "Подыскиваем экономный вариант на Алтай на 7 дней: треккинг по горным тропам, хвойный лес, горная река и простая турбаза. Бюджет около 75 000 руб., вылет желательно вечером после работы — чтобы не брать лишний день отпуска.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "altai"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 75000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_030",
+    "query": "Подыскиваем вариант на море с прогулками в горах, но без загранпаспорта — хочется тёплого климата, нормального пляжа и красивых маршрутов. Едем на 5 дней, бюджет около 100 000 руб на всё, поэтому нужен максимум отдачи за эти деньги: без лишних переплат, но с нормальным жильём и удобной логистикой. Вылет желательно пораньше утром, чтобы не терять первый день. Подскажите, что реально уложить в такую сумму.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 100000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_031",
+    "query": "Подыскиваем недорогой вариант на 6 дней: старый колоритный город, горы рядом, хинкали и хачапури в бюджетных кафе. Бюджет около 95 000 руб. Нужен только прямой перелёт без пересадок с вылетом днём в обеденное время.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "georgia"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 95000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_032",
+    "query": "Подыскиваем бюджетный вариант на 6 дней: недорогой отель у моря, прогулки по набережной и немного восточного колорита. Хотим уложиться примерно в 135 000 руб. на человека и вылететь прямым рейсом пораньше утром.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 135000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_033",
+    "query": "Подыскиваем поездку в Санкт-Петербург на 4 дня с прямым перелётом без пересадок: хочется музеев, старинной архитектуры и каналов, а жильё — бюджетный хостел или мини-отель у метро. Уложимся примерно в 60 000 руб. на всё? Подскажите максимально выгодный вариант.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 60000,
+    "days": 4,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_034",
+    "query": "Подыскиваем вариант эконом-поездки на 7 дней для активного отдыха: нужны треккинг по горным тропам, хвойный лес и горная река, а жить хотим на простой турбазе. Бюджет около 95 000 руб на человека, и обязателен прямой перелет без пересадок — посмотрите, что можно подобрать?",
+    "archetype": "budget",
+    "expected_destinations": [
+      "altai"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 95000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": null,
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_035",
+    "query": "Подыскиваем тур на 5 дней к теплому морю с рифами и снорклингом, бюджет около 120 000 руб, прямой перелет днем.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "egypt",
+      "thailand"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 120000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_036",
+    "query": "Подыскиваем недорогой вариант в Сочи на 4 дня: море и прогулки по горам, без загранпаспорта. Бюджет около 80 000 руб на всё, нужен только прямой перелёт с вылетом пораньше утром. Подскажите, что реально уложить в эту сумму?",
+    "archetype": "budget",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 80000,
+    "days": 4,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_037",
+    "query": "Подыскиваем недорогой вариант на 6 дней: старый колоритный город, горы рядом, кафе с хинкали и хачапури без лишних трат. Бюджет около 115 000 руб, нужен только прямой перелёт без пересадок — что реально уложить в такую сумму?",
+    "archetype": "budget",
+    "expected_destinations": [
+      "georgia"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 115000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_038",
+    "query": "Подыскиваем недорогой отель у моря с восточным колоритом и набережной на 6 дней, до 135 000 руб. и прямым перелётом.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 135000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": null,
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_039",
+    "query": "Подыскиваем на 5 дней вариант с музеями, старинной архитектурой и каналами, бюджетный хостел у метро, до 70 000 руб.",
+    "archetype": "budget",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 70000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": null,
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_040",
+    "query": "Подыскиваем вариант на 7 дней с прямым перелётом без пересадок, вылет желательно днём в обеденное время. Нужна экономная турбаза среди хвойного леса, рядом горная река и тропы для треккинга, бюджет около 75 000 руб. Подскажите, что можно подобрать без лишних переплат?",
+    "archetype": "budget",
+    "expected_destinations": [
+      "altai"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 75000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_041",
+    "query": "Подыскиваем на 7 дней пет-френдли отель у моря с зеленой территорией для прогулок с лабрадором, до 225 000, прямой вылет вечером.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 225000,
+    "days": 7,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_042",
+    "query": "Планируем на 8 дней выбраться в горы с хвойным лесом, чтобы гулять с нашим небольшим джек-расселом вдоль рек и много треккинговать. Подскажите пет-френдли коттедж или отель, где питомцу будет комфортно и есть где выгуливать его на свежем воздухе, а поездка уложится примерно в 125 000 руб. Вылет хотим вечером после работы.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "altai",
+      "sochi",
+      "georgia"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 125000,
+    "days": 8,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_043",
+    "query": "Планируем поездку на 6 дней с маленьким шпицем: подскажите пет-френдли отель у моря, где можно комфортно гулять по набережной и паркам. Бюджет около 145 000 руб., нужен прямой перелёт без пересадок — помогите подобрать вариант.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 145000,
+    "days": 6,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": null,
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_044",
+    "query": "Планируем на 8 дней выбраться в горы, где хвойные леса и реки, чтобы гулять с нашим джек-расселом и много треккинговать на свежем воздухе. Подскажите пет-френдли коттедж или отель, где спокойно примут питомца и будут удобные маршруты для прогулок. Бюджет около 165 000 руб., нужен только прямой перелёт без пересадок, вылет вечером после работы. Хочется комфортной атмосферы и природы, без суеты, чтобы и собака отдохнула, и мы.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "altai",
+      "sochi",
+      "georgia"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 165000,
+    "days": 8,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_045",
+    "query": "Планируем на 8 дней выбраться с нашим джек-расселом туда, где горы, хвойный лес и можно гулять с собакой вдоль рек — подскажите пет-френдли коттедж с комфортными прогулками на свежем воздухе. Бюджет около 170 000 руб, вылет желательно днём в обеденное время.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "altai",
+      "sochi",
+      "georgia"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 170000,
+    "days": 8,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_046",
+    "query": "Планируем поездку в Алтай или Сочи: горы, хвойный лес, треккинг с собакой вдоль рек и пет-френдли коттедж, едем с джек-расселом на 7 дней, бюджет до 190 000 руб, лучше вечерний рейс, только прямой рейс.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "altai",
+      "sochi",
+      "georgia"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 190000,
+    "days": 7,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_047",
+    "query": "Планируем поездку на 8 дней с лабрадором: подыскиваем зеленый отель с собственной территорией у моря, где разрешено проживание с питомцем и есть где комфортно гулять. Бюджет около 230 000 руб., вылет хотелось бы пораньше утром — подскажите подходящий вариант.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 230000,
+    "days": 8,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_048",
+    "query": "Подыскиваем отель в Турции с территорией у моря, где можно с лабрадором, на 6 дней, бюджет около 230 000 руб, вылет утром, только прямой рейс.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 230000,
+    "days": 6,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_049",
+    "query": "Собираемся отдохнуть в Дубай: современный курорт, кондиционированные пет-френдли апартаменты у залива, едем с карликовым пуделем на 5 дней, бюджет до 250 000 руб, вылет утром пораньше.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "uae"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 250000,
+    "days": 5,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_050",
+    "query": "Подыскиваем на 7 дней зеленый отель с собственной территорией у моря, где разрешено проживание с животными. Едем с лабрадором, поэтому важно, чтобы рядом были тихие места для комфортных прогулок на свежем воздухе и pet-friendly отношение. Хочется, чтобы питомцу было спокойно, а нам — удобно отдыхать и гулять без суеты. Бюджет около 180 000 руб, нужен прямой перелет без пересадок. Подскажите, пожалуйста, подходящий вариант.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 180000,
+    "days": 7,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": null,
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_051",
+    "query": "Подыскиваем на 8 дней пет-френдли отель среди лугов и гор, с прогулками для средней собаки; бюджет ~165 000 ₽, вылет вечером.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "georgia"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 165000,
+    "days": 8,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_052",
+    "query": "Подыскиваем пет-френдли отель на 6 дней со шпицем: прогулки по набережной и паркам, прямой перелет, около 165 000 руб.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 165000,
+    "days": 6,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": null,
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_053",
+    "query": "Летим в Санкт-Петербург, пожелания: парки, скверы, исторический центр и прогулки с питомцем по набережным, едем с корги на 6 дней, бюджет до 85 000 руб, без пересадок.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 85000,
+    "days": 6,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_054",
+    "query": "Рассматриваем поездку на 6 дней с нашим карликовым пуделем: хочется на современный курорт, где есть кондиционированные пет-френдли апартаменты у залива и много мест для комфортных прогулок на свежем воздухе. Бюджет около 245 000 руб. Организуйте, пожалуйста, прямой перелёт без пересадок с вылетом днём, в обеденное время, и подберите отель, где питомцу будут рады.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "uae"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 245000,
+    "days": 6,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_055",
+    "query": "Подыскиваем пет-френдли коттедж в горах с хвойным лесом на 7 дней для прогулок с джек-расселом, бюджет ~135 тыс., вылет утром.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "altai",
+      "sochi",
+      "georgia"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 135000,
+    "days": 7,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_056",
+    "query": "Подскажите пет-френдли отель в Сочи на 7 дней, прямой перелёт без пересадок: гулять со шпицем по набережной и паркам, бюджет около 120 000 ₽.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 120000,
+    "days": 7,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_057",
+    "query": "Подберите направление, где есть современный курорт, кондиционированные пет-френдли апартаменты у залива, едем с карликовым пуделем на 5 дней, бюджет до 280 000 руб, желательно утренний рейс.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "uae"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 280000,
+    "days": 5,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_058",
+    "query": "Планируем поездку в Сочи на 7 дней со шпицем: ищем пет-френдли отель, чтобы гулять с маленькой собачкой по морской набережной и паркам. Бюджет около 110 000 руб., нужен только прямой перелёт с вылетом вечером после работы — подскажите подходящий вариант.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 110000,
+    "days": 7,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_059",
+    "query": "Планируем недельную поездку с нашей корги и подыскиваем пет-френдли отель в тихом зелёном районе, где рядом парки и скверы для прогулок на свежем воздухе. Хочется гулять с собакой по набережным и улочкам исторического центра, чтобы питомцу было комфортно. Бюджет около 120 000 рублей на 7 дней, вылет желательно днём, в обеденное время. Подскажите, пожалуйста, варианты отелей, которые принимают корги и где есть удобные маршруты для выгула.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 120000,
+    "days": 7,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_060",
+    "query": "Планируем недельную поездку с собакой среднего размера: ищем пет-френдли отель среди просторных лугов у гор Казбека, где можно комфортно гулять с питомцем на свежем воздухе. Бюджет около 160 000 рублей, вылет вечером после работы — нужен только прямой рейс без пересадок.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "georgia"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 160000,
+    "days": 7,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_061",
+    "query": "Планируем недельную поездку на современный курорт у залива, хотим остановиться в пет-френдли апартаментах с кондиционерами, чтобы нашему карликовому пуделю было комфортно. Подскажите отель, где разрешено проживание с питомцем и есть удобные места для прогулок на свежем воздухе. Бюджет около 210 000 рублей на 7 дней, нужен прямой перелёт без пересадок. Очень важно, чтобы апартаменты находились недалеко от набережной или парка — пудель активный, любит гулять. Рассматриваем вариант с балконом или террасой для питомца.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "uae"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 210000,
+    "days": 7,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_062",
+    "query": "Планируем на 7 дней поездку в горы с хвойным лесом: хотим гулять с нашим джек-расселом вдоль рек, треккинг и уютный пет-френдли коттедж. Подскажите отель, где питомцу будет комфортно, и прямой перелёт без пересадок. Бюджет около 180 000 руб.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "altai",
+      "sochi",
+      "georgia"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 180000,
+    "days": 7,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_063",
+    "query": "Планируем поездку в Санкт-Петербург на 6 дней с корги: подыщите пет-френдли отель рядом с парками и историческим центром, чтобы комфортно гулять по набережным. Бюджет около 85 000 руб., нужен прямой перелёт без пересадок.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 85000,
+    "days": 6,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": null,
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_064",
+    "query": "Планируем на 6 дней поездку с собакой среднего размера: ищем пет-френдли отель среди просторных лугов у гор Казбека, где будут комфортные прогулки на свежем воздухе и гостеприимные гестхаусы. Бюджет около 200 000 руб., вылет желательно днём в обеденное время. Подскажите подходящий вариант?",
+    "archetype": "pet",
+    "expected_destinations": [
+      "georgia"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 200000,
+    "days": 6,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_065",
+    "query": "Планируем недельную поездку с лабрадором: подыскиваем зеленый отель с собственной территорией у моря, где разрешено проживание с животными и есть удобные маршруты для прогулок на свежем воздухе. Бюджет около 205 000 руб., вылет желательно днем, в обеденное время — подскажите подходящий вариант?",
+    "archetype": "pet",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 205000,
+    "days": 7,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_066",
+    "query": "Планируем поездку на 6 дней с нашим карликовым пуделем и подыскиваем современный курорт у залива, где будет комфортно и нам, и питомцу. Нужны кондиционированные пет-френдли апартаменты или отель с разрешённым проживанием собак, а рядом — тихие места для прогулок на свежем воздухе. Бюджет около 305 000 руб., вылет желательно утренним рейсом пораньше. Подскажите, пожалуйста, подходящие варианты с учётом этих пожеланий.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "uae"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 305000,
+    "days": 6,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_067",
+    "query": "Планируем недельную поездку на Алтай с джек-расселом: ищем пет-френдли коттедж в горах рядом с хвойным лесом и рекой, чтобы каждый день гулять и ходить в треккинг с собакой. Бюджет около 115 000 руб на 7 дней. Вылет хотели бы вечером после работы, чтобы не брать лишний день отпуска. Подскажите варианты размещения, где питомцу будут рады, и удобные прогулочные маршруты на свежем воздухе.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "altai",
+      "sochi",
+      "georgia"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 115000,
+    "days": 7,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_068",
+    "query": "Планируем поездку на 6 дней вместе с нашим шпицем и подыскиваем пет-френдли отель у моря, где спокойно примут маленькую собачку и подскажут удобные маршруты для прогулок. Хочется мягкого климата, зелёных парков и набережной рядом с отелем, чтобы комфортно гулять с питомцем на свежем воздухе без суеты. Бюджет около 155 000 руб на двоих с собакой. Вылет вечером после работы, чтобы не терять день.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 155000,
+    "days": 6,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_069",
+    "query": "Планируем на 5 дней в Санкт-Петербург с корги: нужен пет-френдли отель у парков и набережных, бюджет около 135 000 руб, вылет днём.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 135000,
+    "days": 5,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_070",
+    "query": "Планируем поездку в Грузию на 8 дней вместе с нашей собакой среднего размера и подыскиваем гостеприимный пет-френдли гестхаус. Хочется, чтобы рядом были просторные луга и виды на горы Казбека, где можно комфортно гулять с питомцем на свежем воздухе. Бюджет около 165 000 руб., и нужен прямой перелёт без пересадок. Подскажите, пожалуйста, подходящий вариант размещения и перелёта.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "georgia"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 165000,
+    "days": 8,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": null,
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_071",
+    "query": "Подскажите пет-френдли отель с зелёной территорией у моря для прогулок с лабрадором, на 8 дней, бюджет ~185 000 руб, вылет ранним утром.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 185000,
+    "days": 8,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_072",
+    "query": "Планируем поездку в Сочи на 5 дней с нашим шпицем: ищем пет-френдли отель, где спокойно примут маленькую собачку и будет удобно гулять по морской набережной и паркам. Бюджет около 115 000 руб., вылет желательно днём, в обеденное время — подскажите подходящий вариант.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 115000,
+    "days": 5,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_073",
+    "query": "Планируем на 4 дня поездку с корги: нужен пет-френдли отель рядом с парками и историческим центром, чтобы гулять по набережным и дышать свежим воздухом. Подскажите вариант с прямым перелётом без пересадок в пределах 95 000 руб.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 95000,
+    "days": 4,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": null,
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_074",
+    "query": "Планируем поездку на 6 дней с нашей собакой среднего размера и подыскиваем пет-френдли отель, где ей будет спокойно и удобно. Хочется оказаться среди просторных лугов и горных пейзажей, гулять на свежем воздухе и возвращаться в гостеприимное место с доброжелательным отношением к питомцам. Бюджет около 155 000 руб., вылет желателен вечером после работы. Подскажите варианты с комфортными прогулками рядом и возможностью размещения с собакой.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "georgia"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 155000,
+    "days": 6,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_075",
+    "query": "Планируем недельную поездку с лабрадором: подыскиваем пет-френдли отель с большой зеленой территорией у моря, где можно комфортно и много гулять с собакой на свежем воздухе. Бюджет около 215 000 руб. на 7 дней, нужен только прямой перелет с вылетом днем, ближе к обеду.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 215000,
+    "days": 7,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_076",
+    "query": "Подыскиваем современный курорт с кондиционированными пет-френдли апартаментами у залива: едем с карликовым пуделем, важно гулять на свежем воздухе и чувствовать себя комфортно. На 8 дней, вылет днем в обеденное время, бюджет около 275 000 руб. — подскажите подходящий отель?",
+    "archetype": "pet",
+    "expected_destinations": [
+      "uae"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 275000,
+    "days": 8,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_077",
+    "query": "Планируем на неделю выбраться с нашим джек-расселом в тихое место среди гор и хвойного леса, чтобы гулять вдоль рек, много треккинговать и отдыхать в пет-френдли коттедже с удобными выходами на природу. Подскажите отель, где спокойно примут небольшую собаку и будут комфортные маршруты для прогулок на свежем воздухе. Бюджет около 175 000 руб. на поездку на 7 дней. Нужен только прямой перелёт без пересадок, желательно вечерним рейсом после работы.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "altai",
+      "sochi",
+      "georgia"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 175000,
+    "days": 7,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_078",
+    "query": "Планируем поездку на 5 дней с нашим шпицем: ищем отель, где принимают небольших собак, чтобы можно было гулять по морской набережной и паркам. Бюджет около 115 000 рублей — подскажите пет-френдли вариант с комфортными прогулками на свежем воздухе?",
+    "archetype": "pet",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 115000,
+    "days": 5,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_079",
+    "query": "Планируем поездку в Санкт-Петербург на 7 дней вместе с нашим корги. Подскажите, пожалуйста, пет-френдли отель в историческом центре, чтобы рядом были парки и скверы для комфортных прогулок на свежем воздухе, а по набережным можно было спокойно гулять с питомцем. Бюджет около 120 000 рублей, вылет желательно днем, в обеденное время. Для нас важно, чтобы корги чувствовал себя уютно и безопасно.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 120000,
+    "days": 7,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_080",
+    "query": "Подыскиваем современный курорт у залива с кондиционированными пет-френдли апартаментами на 7 дней: едем с карликовым пуделем, важно, чтобы рядом были тихие места для комфортных прогулок на свежем воздухе. Бюджет около 220 000 руб., вылет желательно днём в обеденное время — подскажите подходящий вариант.",
+    "archetype": "pet",
+    "expected_destinations": [
+      "uae"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 220000,
+    "days": 7,
+    "has_pets": true,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_081",
+    "query": "Нам необходим отдых: познавательная поездка для школьника, музей гранд макет, мосты и крейсер Аврора, семейный отдых с детьми на 7 дней, бюджет в пределах 175 000 руб, желательно дневной рейс, прямой перелет.",
+    "archetype": "family",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 175000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 1,
+    "adults_count": 2,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_082",
+    "query": "Подыскиваем спокойное место с пологим песчаным пляжем и бассейном для малышей, аквапарком и хорошим питанием — на 9 дней, около 335 000 руб.",
+    "archetype": "family",
+    "expected_destinations": [
+      "turkey",
+      "uae",
+      "egypt"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 335000,
+    "days": 9,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 1,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_083",
+    "query": "Собираемся всей семьей с детьми в Сочи на 5 дней, бюджет порядка 210 000 руб. Нужен семейный курорт с подогреваемым бассейном, детской игровой и парком аттракционов, пологим входом в воду, хорошим питанием и спокойным перелётом.",
+    "archetype": "family",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 210000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 2,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_084",
+    "query": "Подыскиваем семейный отпуск с детьми на 8 дней: безопасный чистый залив с пологим входом в воду, бассейн, хорошее питание и просторные номера. Хочется тематические парки развлечений и спокойный перелёт вечерним рейсом после работы; бюджет около 315 000 руб. Подскажите вариант.",
+    "archetype": "family",
+    "expected_destinations": [
+      "uae"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 315000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 2,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_085",
+    "query": "Планируем Дубай, ОАЭ на 7 дней: парки развлечений, безопасный чистый залив, просторные семейные номера, утренний вылет, ~285 000 ₽.",
+    "archetype": "family",
+    "expected_destinations": [
+      "uae"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 285000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 2,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_086",
+    "query": "Планируем семейный отпуск с детьми в Турции на 6 дней: нужен отель с аквапарком, песчаным пляжем с пологим входом в воду, детской комнатой, анимацией и питанием все включено. Бюджет около 325 000 руб., важны безопасность и спокойный перелет — вылет хотелось бы утром пораньше.",
+    "archetype": "family",
+    "expected_destinations": [
+      "turkey",
+      "uae",
+      "egypt"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 325000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 1,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_087",
+    "query": "Ищем тур: аквапарк, песчаный пологий пляж, детская комната, анимация и все включено, семейный отдых с детьми на 8 дней, бюджет в пределах 265 000 руб, прямой перелет.",
+    "archetype": "family",
+    "expected_destinations": [
+      "turkey",
+      "uae",
+      "egypt"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 265000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 2,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_088",
+    "query": "Собираемся всей семьей с детьми в познавательную поездку на 6 дней: школьнику интересны музей «Гранд Макет», мосты и крейсер «Аврора», а нам важны безопасность, хорошее питание и пологий вход в воду или бассейн. Подберите отель и спокойный перелет с ранним утренним вылетом примерно за 175 000 руб.",
+    "archetype": "family",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 175000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 2,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_089",
+    "query": "Подыскиваем семейный отель с тематическими парками, чистым заливом и просторными номерами на 7 дней, бюджет около 405 000 руб.",
+    "archetype": "family",
+    "expected_destinations": [
+      "uae"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 405000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 1,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_090",
+    "query": "Подыскиваем спокойное семейное место с закрытой от ветра песчаной лагуной, где малыши смогут безопасно купаться, а у берега не будет кораллов. Нужен отель с хорошим питанием и пологим входом в воду на 8 дней, бюджет около 225 000 руб., и желательно вылет утром пораньше.",
+    "archetype": "family",
+    "expected_destinations": [
+      "egypt"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 225000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 1,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_091",
+    "query": "Нам нужен тур в Таиланд, Пхукет, главное спокойная бухта с мягким песком, свежие фрукты, слоновья ферма и чистый океан, семейный отдых с детьми на 9 дней, бюджет в пределах 325 000 руб, удобный рейс в середине дня, прямой перелет.",
+    "archetype": "family",
+    "expected_destinations": [
+      "thailand"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 325000,
+    "days": 9,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 2,
+    "adults_count": 2,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_092",
+    "query": "Хотим выбраться туда, где семейный курорт с подогреваемым бассейном, детской игровой и парком аттракционов, семейный отдых с детьми на 6 дней, бюджет в пределах 175 000 руб, вылет утром пораньше, без пересадок.",
+    "archetype": "family",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 175000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 2,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_093",
+    "query": "Подыскиваем пологий песчаный пляж, аквапарк и детскую анимацию с хорошим питанием на 6 дней, утренний вылет, бюджет около 235 000 руб.",
+    "archetype": "family",
+    "expected_destinations": [
+      "turkey",
+      "uae",
+      "egypt"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 235000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 1,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_094",
+    "query": "Планируем семейный отпуск на Пхукете, Таиланд, на 10 дней с детьми: хочется спокойную бухту с мягким песком и чистым океаном, пологий вход в воду и бассейн, а также хорошее питание и свежие фрукты. Важны безопасность, удобный отель и спокойный перелет, вылет вечером после работы. Обязательно хотим посетить слоновью ферму. Бюджет около 365 000 руб — подскажите подходящий вариант.",
+    "archetype": "family",
+    "expected_destinations": [
+      "thailand"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 365000,
+    "days": 10,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 1,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_095",
+    "query": "Подыскиваем спокойный семейный курорт с подогреваемым бассейном и пологим входом в воду, детской игровой и парком аттракционов — для нас важны безопасность и хорошее питание. Собираемся на 8 дней всей семьей, бюджет около 225 000 руб., и хотелось бы удобный вылет вечером после работы.",
+    "archetype": "family",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 225000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 1,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_096",
+    "query": "Планируем семейный отпуск в Сочи на 8 дней и ищем спокойный курорт, где детям будет безопасно и интересно. Важны подогреваемый бассейн с пологим входом, детская игровая зона, хорошее питание и парк аттракционов рядом. Хотелось бы удобный недолгий перелёт без сложных пересадок и отель, где продумано всё для отдыха с детьми. Бюджет около 185 000 руб., подскажите подходящие варианты.",
+    "archetype": "family",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 185000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 2,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_097",
+    "query": "Планируем поездку в Санкт-Петербург на 6 дней с детьми: школьнику нужны Гранд Макет, мосты и крейсер Аврора. Подберите безопасный отель с хорошим питанием и бассейном с пологим входом, бюджет около 175 000 руб., вылет вечером после работы.",
+    "archetype": "family",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 175000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 2,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_098",
+    "query": "Планируем познавательную поездку для школьника — хотим увидеть Гранд Макет, разводные мосты и крейсер Аврора. Бюджет около 180 000 руб. на неделю, важно безопасное проживание, хорошее питание и бассейн с пологим входом. Вылет днем, в обеденное время, чтобы спокойно долететь с детьми.",
+    "archetype": "family",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 180000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 2,
+    "adults_count": 2,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_099",
+    "query": "Планируем семейный отпуск в Сочи с детьми на 5 дней и подыскиваем безопасный курорт с подогреваемым бассейном, пологим входом в воду, детской игровой и парком аттракционов. Очень важно хорошее питание и спокойная атмосфера для родителей с детьми. Бюджет около 180 000 руб. за поездку, рассматриваем вылет вечером после работы, чтобы перелет был удобным и без спешки.",
+    "archetype": "family",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 180000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 2,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_100",
+    "query": "Собираемся всей семьей с детьми на 8 дней, бюджет около 220 000 руб. Нужна закрытая от ветра песчаная лагуна с пологим входом и без кораллов у берега — для безопасности малышей, плюс хорошее питание. Вылет вечером после работы, только прямой перелет без пересадок.",
+    "archetype": "family",
+    "expected_destinations": [
+      "egypt"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 220000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 2,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_101",
+    "query": "Планируем семейный отпуск с детьми на 7 дней и ищем спокойное место с безопасным чистым заливом и пологим входом в воду, чтобы малышам было комфортно купаться. Хотим рядом тематические парки развлечений, просторные семейные номера и хорошее питание, а перелет — удобный и без лишней суеты. Бюджет около 390 000 рублей, подскажите подходящий вариант с бассейном и продуманной инфраструктурой для детей.",
+    "archetype": "family",
+    "expected_destinations": [
+      "uae"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 390000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 2,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_102",
+    "query": "Планируем поездку в Санкт-Петербург: познавательная поездка для школьника, музей гранд макет, мосты и крейсер Аврора, семейный отдых с детьми на 6 дней, бюджет в пределах 175 000 руб, вылет вечером после работы.",
+    "archetype": "family",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 175000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 2,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_103",
+    "query": "Интересует направление, где можно найти спокойная бухта с мягким песком, свежие фрукты, слоновья ферма и чистый океан, семейный отдых с детьми на 8 дней, бюджет в пределах 370 000 руб, поздний вылет.",
+    "archetype": "family",
+    "expected_destinations": [
+      "thailand"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 370000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 1,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_104",
+    "query": "Планируем семейный отпуск с детьми на 8 дней: важны безопасность, хорошее питание, пологий вход в море и бассейн, детская комната с анимацией, аквапарк и песчаный пляж. Подскажите отель «всё включено» с удобным спокойным перелётом в пределах 290 000 руб.",
+    "archetype": "family",
+    "expected_destinations": [
+      "turkey",
+      "uae",
+      "egypt"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 290000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 2,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_105",
+    "query": "Планируем семейный отпуск с детьми на 5 дней, бюджет около 235 000 руб. Нужен курорт с подогреваемым бассейном, детской игровой и парком аттракционов, пологим входом в воду и хорошим питанием. Вылет вечером после работы, перелет спокойный и удобный.",
+    "archetype": "family",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 235000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 1,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_106",
+    "query": "Планируем семейный отпуск с детьми на 10 дней: нужен спокойный отель с хорошим питанием и закрытой от ветра песчаной лагуной, где малыши смогут безопасно купаться без кораллов у берега. Бюджет около 230 000 руб., перелёт только прямой и желательно днём, в обеденное время — подскажите подходящие варианты.",
+    "archetype": "family",
+    "expected_destinations": [
+      "egypt"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 230000,
+    "days": 10,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 2,
+    "adults_count": 2,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_107",
+    "query": "Собираемся в семейный отпуск с детьми на 6 дней, ориентируемся на бюджет около 340 000 рублей. Ищем место с чистым безопасным заливом и пологим входом в воду, чтобы малыши могли купаться без риска, плюс тематические парки развлечений для разнообразия. Критично важны просторные семейные номера, хорошее питание и спокойный перелет с вылетом вечером после работы. Подскажите, пожалуйста, подходящие варианты, где детям будет безопасно и интересно.",
+    "archetype": "family",
+    "expected_destinations": [
+      "uae"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 340000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 1,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_108",
+    "query": "Планируем семейный отпуск с детьми на 7 дней, бюджет около 165 000 рублей. Для нас критически важны безопасность, хорошее питание и пологий вход в воду или бассейн — дети маленькие. Хотим спокойный удобный перелет с вылетом вечером после работы, чтобы не будить малышей рано утром. А еще мечтаем совместить отдых с познавательной программой для школьника: посмотреть гранд-макет, разводные мосты и крейсер Аврора.",
+    "archetype": "family",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 165000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 1,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_109",
+    "query": "Планируем семейный отпуск с детьми на 9 дней: нужен спокойный курорт у тихой бухты с мягким песком и пологим входом в воду, чистым океаном, свежими фруктами и слоновьей фермой рядом. Важны безопасность, хорошее питание и бассейн для малышей, а вылет — вечером после работы; бюджет около 330 000 руб.",
+    "archetype": "family",
+    "expected_destinations": [
+      "thailand"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 330000,
+    "days": 9,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 1,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_110",
+    "query": "Планируем семейный отпуск с детьми на 7 дней, бюджет около 340 000 руб. Нужен прямой перелет без пересадок, безопасный отель с хорошим питанием, пологим входом в воду и бассейном, детской комнатой и анимацией. Хотим песчаный пляж и аквапарк, спокойную атмосферу и все включено.",
+    "archetype": "family",
+    "expected_destinations": [
+      "turkey",
+      "uae",
+      "egypt"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 340000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 2,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_111",
+    "query": "Планируем семейный отпуск в Сочи на 6 дней: ищем курорт с подогреваемым бассейном, детской игровой и парком аттракционов, где безопасно, вкусно кормят и пологий вход в воду. Бюджет около 220 000 руб., вылет желателен вечером после работы — подскажите спокойный удобный вариант для поездки с детьми.",
+    "archetype": "family",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 220000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 1,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_112",
+    "query": "Подыскиваем семейный отдых на 7 дней с песчаной лагуной без кораллов, пологим входом, хорошим питанием и дневным вылетом до 240 000 руб.",
+    "archetype": "family",
+    "expected_destinations": [
+      "egypt"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 240000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 2,
+    "adults_count": 2,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_113",
+    "query": "Планируем семейный отпуск с детьми на 8 дней: нужны тематические парки, безопасный чистый залив с пологим входом в воду и просторные семейные номера. Важны хорошее питание, детский бассейн и спокойный перелет — вылет вечером после работы. Бюджет около 295 000 руб., подберите подходящий вариант.",
+    "archetype": "family",
+    "expected_destinations": [
+      "uae"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 295000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 1,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_114",
+    "query": "Планируем семейный отпуск с детьми в Санкт-Петербурге на 7 дней: хотим познавательную поездку для школьника — Гранд Макет, мосты и крейсер Аврора, безопасный отель с хорошим питанием и пологим входом в бассейн. Бюджет около 135 000 руб., нужен только прямой перелёт с ранним утренним вылетом.",
+    "archetype": "family",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 135000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 1,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_115",
+    "query": "Планируем семейный отпуск с детьми в Таиланде, на Пхукете, на 7 дней, около 320 000 руб. Нужна спокойная бухта с мягким песком и чистым океаном, свежие фрукты, слоновья ферма, безопасное питание и пологий вход в воду. Вылет желательно вечером после работы.",
+    "archetype": "family",
+    "expected_destinations": [
+      "thailand"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 320000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 1,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_116",
+    "query": "Планируем семейный отпуск в Сочи с детьми на 5 дней: нужен спокойный курорт с подогреваемым бассейном, детской игровой и парком аттракционов, безопасный и с хорошим питанием. Бюджет около 195 000 руб., важны пологий вход в воду и удобный перелёт — подскажите вариант.",
+    "archetype": "family",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 195000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 1,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_117",
+    "query": "Планируем семейный отпуск с детьми в Египте на 8 дней, бюджет около 240 000 руб. Ищем отель с закрытой от ветра песчаной лагуной и пологим входом в воду без кораллов у берега, важно хорошее питание и безопасность. Нужен прямой перелет без пересадок, желательно вылет утром пораньше.",
+    "archetype": "family",
+    "expected_destinations": [
+      "egypt"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 240000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 2,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_118",
+    "query": "Присматриваем семейный отель с тематическими парками, безопасным заливом и просторными номерами на 7 дней, бюджет около 335 000 руб. Вылет вечером после работы.",
+    "archetype": "family",
+    "expected_destinations": [
+      "uae"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 335000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 2,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_119",
+    "query": "Планируем отпуск, где есть познавательная поездка для школьника, музей гранд макет, мосты и крейсер Аврора, семейный отдых с детьми на 7 дней, бюджет в пределах 145 000 руб, удобный рейс в середине дня.",
+    "archetype": "family",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 145000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 1,
+    "adults_count": 2,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_120",
+    "query": "Собираемся в тихое место: спокойная бухта с мягким песком, свежие фрукты, слоновья ферма и чистый океан, семейный отдых с детьми на 8 дней, бюджет в пределах 270 000 руб, лучше вечерний рейс, только прямой рейс.",
+    "archetype": "family",
+    "expected_destinations": [
+      "thailand"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 270000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": true,
+    "kids_count": 1,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_121",
+    "query": "Подыскиваем на пять дней роскошное уединенное шале на берегу Катуни с вертолетной экскурсией — важны безупречный пятизвездочный сервис, спа, приватность и красивый вид. Бюджет около 460 000 руб., вылет желателен днем, в обеденное время.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "altai"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 460000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_122",
+    "query": "Подыскиваем приватную виллу с панорамным видом над бирюзовой лагуной — важны безупречный пятизвездочный сервис, спа и персональный подход. Планируем на 10 дней, бюджет около 640 000 руб., вылет желательно ранним утром и трансфер на гидросамолете.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "maldives"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 640000,
+    "days": 10,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_123",
+    "query": "Подыскиваем вариант премиального отдыха на 9 дней: пятизвездочный отель с безупречным сервисом, панорамным видом на небоскрёбы, приватностью, спа и индивидуальным подходом. Важны трансфер и шопинг, вылет желательно пораньше утром; бюджет — около 685 000 ₽, комфорт без компромиссов.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "uae"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 685000,
+    "days": 9,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_124",
+    "query": "Планируем провести неделю на Мальдивах и ищем вариант с безупречным пятизвездочным сервисом. Хотелось бы приватную виллу над бирюзовой лагуной, трансфер на гидросамолете и разнообразные спа-процедуры для полного расслабления. Бюджет около 610 000 рублей на семь дней — важны красивый вид, тишина и индивидуальный подход без компромиссов. Подскажите, что можете предложить с учётом этих пожеланий?",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "maldives"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 610000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_125",
+    "query": "Подберите приватную виллу над бирюзовой лагуной с гидросамолётом и спа на 7 дней, около 610 000 ₽, только утренний прямой перелёт.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "maldives"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 610000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_126",
+    "query": "Рассматриваем Мальдивы на 9 дней: нужна приватная вилла над бирюзовой лагуной, трансфер на гидросамолете и спа-процедуры, бюджет около 605 000 руб. Подскажите вариант с прямым перелётом без пересадок и вылетом пораньше утром — ценим приватность, пятизвёздочный сервис и комфорт без компромиссов.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "maldives"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 605000,
+    "days": 9,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_127",
+    "query": "Подыскиваем на семь дней вариант с прямым перелётом: исторический пятизвёздочный гранд-отель с видом на собор, высокой кухней, спа и полной приватностью. Бюджет около 250 000 рублей — важны индивидуальный подход и комфорт без компромиссов.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 250000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_128",
+    "query": "Подыскиваем роскошное уединенное шале на берегу Катуни с панорамными видами и приватным спа — для отдыха без компромиссов на 6 дней. Мечтаем о вертолетной экскурсии над живописными долинами и полном индивидуальном подходе со стороны пятизвездочного сервиса. Бюджет около 550 000 руб, вылет днем в обеденное время.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "altai"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 465000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_129",
+    "query": "Подберите премиальный резорт в уединенной бухте с частным пляжем, безупречным спа, консьерж-сервисом, изысканной гастрономией и полной приватностью. Планируем 8 дней, бюджет около 570 000 руб.; нужен прямой перелет без пересадок с вылетом в обеденное время.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 570000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_130",
+    "query": "Подскажите вариант эксклюзивного пятизвездочного спа-отеля в горах с открытым бассейном и панорамным видом, где ценят приватность и индивидуальный подход. Планируем поездку на 7 дней с прямым перелетом без пересадок, бюджет около 295 000 рублей.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 295000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_131",
+    "query": "Рассматриваем премиальный отдых в Бодруме на 9 дней: нужен уединенный пятизвездочный резорт в красивой бухте с частным пляжем, безупречным сервисом, спа и персональным консьержем. Важны приватность, панорамный вид и изысканная гастрономия без компромиссов. Бюджет около 605 000 рублей, вылет желателен днем, в обеденное время. Подберите, пожалуйста, вариант с индивидуальным подходом и максимальным комфортом.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 605000,
+    "days": 9,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_132",
+    "query": "Подберите уединенное люксовое шале у Катуни с вертолетной прогулкой, спа и приватностью на 6 дней, бюджет около 530 000 руб.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "altai"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 530000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_133",
+    "query": "Подбираем премиум-резорт в Бодруме на 6 дней — уединенная бухта, частный пляж, изысканная гастрономия и персональный консьерж. Бюджет около 430 000 руб., вылет нужен вечером после работы и только прямым рейсом.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 430000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_134",
+    "query": "Планируем поездку в Дубай на 8 дней: нужен пятизвездочный отель люкс с видом на небоскрёбы, индивидуальный трансфер и время для шопинга. Бюджет около 455 000 руб., вылет хотелось бы ранним утром и только прямым рейсом без пересадок — подберите варианты с безупречным сервисом и приватностью.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "uae"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 455000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_135",
+    "query": "Подберите на пять дней в Санкт-Петербурге исторический пятизвездочный гранд-отель с видом на собор и рестораном высокой кухни. Важны приватность, спа и безупречный сервис без компромиссов; бюджет около 345 000 руб., вылет вечером после работы.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 345000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_136",
+    "query": "Планируем поездку на семь дней и ищем пятизвездочный отель люкс с захватывающим видом на небоскрёбы, где будут ценить приватность, безупречный сервис и индивидуальный подход. Хотим совместить расслабление в спа, комфорт без компромиссов и шопинг, а также организовать индивидуальный трансфер. Вылет желателен вечером после работы. Бюджет около 610 000 рублей — подберите варианты, достойные такого запроса.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "uae"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 610000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_137",
+    "query": "Нам необходим отдых: эксклюзивный пятизвездочный спа-отель в горах Красной Поляны с открытым бассейном, высокий уровень сервиса на 8 дней, ориентируемся на бюджет 360 000 руб, желательно утренний рейс, без пересадок.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 360000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_138",
+    "query": "Планируем короткий отдых на пять дней: нужен эксклюзивный пятизвёздочный спа-отель в горах с открытым бассейном, панорамными видами и полной приватностью. Бюджет — около 290 000 рублей, важны безупречный сервис и индивидуальный подход; вылет желателен днём, в обеденное время.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 290000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_139",
+    "query": "Рассматриваем премиум-резорт в Бодруме: уединенная бухта, частный пляж, спа и консьерж-сервис, ориентируемся на бюджет до 500 000 руб на 7 дней, прямой перелет.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 530000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_140",
+    "query": "Подберите, пожалуйста, на 7 дней роскошное уединённое шале на берегу Катуни с вертолётной экскурсией — важны приватность, спа и безупречный сервис. Бюджет около 405 000 ₽, вылет нужен вечером после работы и только прямым рейсом.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "altai"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 405000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_141",
+    "query": "Планируем провести семь дней в горах Красной Поляны, Сочи, и подыскиваем эксклюзивный пятизвездочный спа-отель с открытым бассейном, красивыми видами и полной приватностью. Бюджет около 410 000 рублей, важны безупречный сервис, индивидуальный подход и комфорт без компромиссов. Рассмотрите, пожалуйста, прямой перелёт без пересадок с вылетом утром пораньше. Нужен именно формат тихого премиального отдыха, где всё продумано до мелочей.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 410000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_142",
+    "query": "Планируем провести шесть дней в эксклюзивном пятизвёздочном спа-отеле среди гор: важны панорамные виды, открытый бассейн, полная приватность и безупречный сервис. Хотелось бы индивидуального подхода, комфорта без компромиссов и атмосферы тишины в окружении красивой природы. Бюджет около 470 000 рублей, вылет предпочтителен днём, в обеденное время. Подберите, пожалуйста, вариант, где всё это будет на высшем уровне.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 470000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_143",
+    "query": "Хочется отдохнуть: премиум резорт в уединенной бухте, частный пляж, изысканная гастрономия и консьерж, высокий уровень сервиса на 9 дней, ориентируемся на бюджет 605 000 руб, удобный рейс в середине дня, прямой перелет.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 605000,
+    "days": 9,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_144",
+    "query": "Подберите на 8 дней уединённое шале на Катуни с пятизвёздочным спа и вертолётной экскурсией, вылет вечером; бюджет около 450 тыс.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "altai"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 450000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_145",
+    "query": "Подыскиваем приватную виллу над бирюзовой лагуной с трансфером на гидросамолете и спа-процедурами — важны безупречный пятизвездочный сервис, тишина и индивидуальный подход. Планируем на восемь дней, бюджет около 575 000 рублей, вылет хотелось бы ранним утром.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "maldives"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 575000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_146",
+    "query": "Подыскиваем на 8 дней вариант в Дубае: пятизвездочный отель люкс с видом на небоскребы, приватный трансфер и шопинг. Бюджет около 585 000 руб., вылет нужен вечером после работы и только прямым рейсом без пересадок — важны сервис, приватность и спа без компромиссов.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "uae"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 585000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_147",
+    "query": "Подыскиваем эксклюзивный 5* спа-отель в горах с открытым бассейном на 8 дней, бюджет ~280 тыс. Вылет вечером после работы, только прямой.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 280000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_148",
+    "query": "Подскажите вариант приватного отдыха на 6 дней: роскошное уединенное шале на берегу Катуни с панорамным видом, спа и безупречным пятизвездочным сервисом, включая вертолетную экскурсию. Бюджет около 425 000 руб., вылет желателен днем, в обеденное время.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "altai"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 425000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_149",
+    "query": "Подыскиваем на 4 дня проживание в историческом пятизвездочном гранд-отеле с видом на собор, безупречным сервисом, спа и высокой кухней — хочется приватности и индивидуального подхода без компромиссов. Бюджет около 220 000 рублей, вылет желательно вечером после работы.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 220000,
+    "days": 4,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_150",
+    "query": "Планируем короткую, но безупречную поездку на Мальдивы: хотелось бы приватную виллу над бирюзовой лагуной, трансфер на гидросамолете и спа-процедуры в отеле уровня пять звезд. Нам важен красивый вид, тишина, индивидуальный подход и комфорт без компромиссов. Срок — 6 дней, бюджет около 615 000 руб. Подберите, пожалуйста, прямой перелет без пересадок с вылетом утром пораньше.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "maldives"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 615000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_151",
+    "query": "Подыскиваем на 9 дней пятизвездочный отель люкс с панорамным видом на небоскрёбы, приватностью, спа и безупречным сервисом. Нужен индивидуальный трансфер, шопинг и прямой вылет ранним утром без пересадок; бюджет — около 430 000 руб.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "uae"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 430000,
+    "days": 9,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_152",
+    "query": "Подыскиваем премиальный резорт в уединенной бухте — с частным пляжем, красивым видом из номера, безупречным спа и персональным консьержем. Хотим провести 8 дней в атмосфере полной приватности и комфорта без компромиссов, с изысканной гастрономией и индивидуальным подходом к каждому пожеланию. Бюджет — около 550 000 рублей, вылет желателен ранним утром. Подскажите варианты, где сервис действительно соответствует уровню пяти звезд.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 550000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_153",
+    "query": "Подберите направление, где есть эксклюзивный пятизвездочный спа-отель в горах Красной Поляны с открытым бассейном, высокий уровень сервиса на 5 дней, ориентируемся на бюджет 450 000 руб, вылет днем в обед, без пересадок.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 450000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_154",
+    "query": "Подыскиваем на 7 дней роскошное уединенное шале на берегу Катуни с панорамным видом, спа и вертолетной экскурсией — хочется приватности и безупречного сервиса. Бюджет около 405 000 руб., вылет желателен вечером после работы.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "altai"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 405000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_155",
+    "query": "Подыскиваем вариант на семь дней для двоих: исторический пятизвёздочный гранд-отель с видом на собор, безупречным сервисом и высокой кухней. Хотим приватность, спа-программы и индивидуальный подход без компромиссов по комфорту. Бюджет около 290 000 рублей — готовы рассмотреть достойные предложения с красивым видом из номера. Подскажите, что можно организовать в этом направлении?",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 290000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_156",
+    "query": "Подыскиваем безупречный отдых на Мальдивах: приватная вилла над бирюзовой лагуной, трансфер на гидросамолете и спа-процедуры. Рассматриваем 8 дней с вылетом днём, в обеденное время, бюджет — около 680 000 руб. Нужен пятизвездочный сервис, красивый вид и полная приватность.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "maldives"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 680000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_157",
+    "query": "Планируем недельную поездку с вылетом ранним утром: нужен пятизвездочный отель люкс с панорамным видом на небоскрёбы, приватная атмосфера, спа и индивидуальный трансфер. Бюджет около 535 000 рублей — хотелось бы бескомпромиссного комфорта, внимания к деталям и хорошего шопинга рядом.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "uae"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 535000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_158",
+    "query": "Подыскиваем премиальный резорт в Бодруме на 9 дней для поездки вдвоём: хочется уединённую бухту, собственный пляж, безупречный пятизвёздочный сервис и максимум приватности. Важны изысканная гастрономия, спа-программы и персональный консьерж, который возьмёт на себя все детали. Бюджет ориентируем примерно в 520 000 руб., готовы рассмотреть варианты с красивым видом и индивидуальным подходом без компромиссов. Подскажите, что достойно нашего внимания.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 520000,
+    "days": 9,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": null,
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_159",
+    "query": "Нам нужен тур в Красная Поляна, Сочи, главное эксклюзивный пятизвездочный спа-отель в горах Красной Поляны с открытым бассейном, высокий уровень сервиса на 6 дней, ориентируемся на бюджет 335 000 руб, лучше вечерний рейс, без пересадок.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 335000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_160",
+    "query": "Подыскиваем на 8 дней роскошное уединенное шале на берегу Катуни с панорамным видом, спа и безупречным пятизвездочным сервисом; хотелось бы вертолетную экскурсию и индивидуальный подход. Вылет вечером после работы, бюджет около 410 000 руб. — подберите, пожалуйста, достойный вариант без компромиссов.",
+    "archetype": "luxury",
+    "expected_destinations": [
+      "altai"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 410000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 2,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_161",
+    "query": "Собираюсь один на 5 дней: исторические улочки, паромы через пролив, кофейни и виды; бюджет ~115 000 ₽, вылет днём.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 115000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_162",
+    "query": "Подыскиваю вариант соло-поездки на 4 дня: важны атмосфера старой архитектуры, набережные каналов, музеи, уютные кофейни и белые ночи, плюс свобода гулять и пробовать местную гастрономию. Бюджет около 75 000 руб., вылет хотелось бы пораньше утром и только прямой рейс без пересадок.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 75000,
+    "days": 4,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_163",
+    "query": "Собираюсь один развеяться на 6 дней: хочется узких улочек старого города, горных видов и атмосферы, где можно гулять без спешки, пробовать местную кухню и вино. Подскажите направление и вариант поездки примерно до 105 000 руб., с удобным передвижением и возможностью уединиться с природой.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "georgia"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 105000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": null,
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_164",
+    "query": "Подыскиваю соло-поездку на 7 дней, чтобы развеяться: хочется гулять по набережным каналов, заглядывать в парадные, музеи и уютные кофейни, почувствовать атмосферу белых ночей и свободу передвижения. Бюджет около 105 000 руб., нужен только прямой перелёт без пересадок с вылетом пораньше утром.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 105000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_165",
+    "query": "Собираюсь один на 7 дней развеяться: архитектура, каналы, музеи, кофейни и белые ночи, бюджет около 100 000, вылет вечером после работы.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 100000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_166",
+    "query": "Подыскиваю вариант соло-поездки на 4 дня: хочется архитектуры, уютных парадных и набережных каналов, музеев, кофеен и атмосферы белых ночей, чтобы спокойно гулять и развеяться. Вылет вечером после работы, бюджет около 110 000 руб. — подскажите, что можно подобрать?",
+    "archetype": "solo",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 110000,
+    "days": 4,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_167",
+    "query": "Подыскиваю вариант соло-поездки на 6 дней: хочется развеяться среди красивой архитектуры, погулять по набережным каналов, заглянуть в музеи и уютные кофейни, а белые ночи добавили бы атмосферы. Бюджет около 80 000 руб, вылет желательно днём, в обеденное время, и побольше свободы передвижения с возможностью выбраться на природу.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 80000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_168",
+    "query": "Рассматриваю соло-поездку на 7 дней в Красную Поляну и Сочи: хочется активного треккинга по горным тропам, подъёмников и свежего морского бриза. Бюджет около 110 000 руб, вылет желательно пораньше утром.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 110000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_169",
+    "query": "Собираюсь в одиночку развеяться в Стамбуле на 5 дней: хочется побродить по историческим улочкам, прокатиться на паромах через пролив, посидеть в кофейнях и забраться на смотровые площадки. Бюджет около 120 000 руб, вылет желательно пораньше утром, чтобы не терять день. Подберите, пожалуйста, варианты со свободой передвижения и атмосферой города, без плотной экскурсионной программы. Важны красивые виды, гастрономия и возможность самому выбирать маршрут.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 120000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_170",
+    "query": "Собираюсь в одиночку на Алтай на 7 дней, чтобы по-настоящему перезагрузиться: хочется медитации на природе, горного воздуха, тишины у реки и красивых прогулок без суеты. Бюджет около 130 000 руб., нужен только прямой перелёт без пересадок, желательно вылет утром пораньше. Подберите, пожалуйста, вариант с удобной логистикой и свободой передвижения, чтобы можно было наслаждаться атмосферой и гастрономией. Я путешествую соло, поэтому важны спокойные места и комфорт.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "altai"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 130000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_171",
+    "query": "Подыскиваю соло-поездку на 8 дней: важны атмосфера тропических храмов, фруктовых рынков, массаж и закаты на пляже, без суеты. Бюджет около 215 000 руб., нужен только прямой перелет с вылетом днем. Подскажите направление с красивой природой и свободой передвижения.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "thailand"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 215000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_172",
+    "query": "Собираюсь в одиночку развеяться на 6 дней: хочется атмосферных исторических улочек, прогулок вдоль воды, паромных переправ через пролив, уютных кофеен и смотровых площадок с красивыми видами. Бюджет около 130 000 рублей — подберите, пожалуйста, вариант со свободой передвижения и гастрономией.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 130000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": null,
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_173",
+    "query": "Планирую соло-поездку на Алтай на 6 дней: хочу перезагрузки, медитации на природе, горного воздуха и тишины у реки. Подскажите вариант с прямым перелётом без пересадок, вылетом утром пораньше, бюджет около 130 000 руб.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "altai"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 130000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_174",
+    "query": "Подберите направление, где есть активный треккинг по горным тропам одному, подъемники и свежий морской бриз, соло поездка для одного на 6 дней, рассчитываю на бюджет 110 000 руб, желательно утренний рейс, только прямой рейс.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 110000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_175",
+    "query": "Интересует соло-поездка на 5 дней: исторические улочки, паромы через пролив, кофейни и смотровые площадки, прямой перелёт, около 90 000 руб.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 90000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": null,
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_176",
+    "query": "Подскажите вариант соло-поездки на 8 дней с бюджетом около 145 000 руб.: нужны тропическая атмосфера, красивые храмы, фруктовые рынки, массаж и закаты на пляже, чтобы спокойно гулять и развеяться. Вылет вечером после работы, только прямой перелёт без пересадок.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "thailand"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 145000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_177",
+    "query": "Планирую соло-перезагрузку на Алтае на 8 дней: горы, тишина у реки, медитации, прямой вечерний вылет после работы, бюджет ~105 000 ₽.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "altai"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 105000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_178",
+    "query": "Планирую соло-поездку в Таиланд на 8 дней: хочется посмотреть тропические храмы, побродить по фруктовым рынкам, взять массаж и встречать закаты на пляже. Бюджет около 175 000 руб., вылет желательно пораньше утром и только прямой рейс без пересадок — подскажите варианты.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "thailand"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 175000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_179",
+    "query": "Подыскиваю для себя соло-поездку на 8 дней: хочется тропических храмов, фруктовых рынков, массажа и закатов на пляже, чтобы днём гулять по колоритным местам, а вечером просто отдыхать и пробовать местную кухню. Бюджет около 140 000 руб, важна свобода передвижения и атмосфера без суеты — подскажите подходящий вариант.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "thailand"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 140000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": null,
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_180",
+    "query": "Рассматриваю Алтай на 5 дней: соло-перезагрузка, тишина у реки, горный воздух и медитация. Прямой вечерний перелёт после работы, бюджет около 110 000 руб.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "altai"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 110000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_181",
+    "query": "Подберите соло-тур на 5 дней за 115 000 ₽ с прямым вылетом днём: архитектура, каналы, музеи, кофейни, белые ночи.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 115000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_182",
+    "query": "Подскажите вариант соло-поездки в Таиланд на 9 дней, около 175 000 руб: храмы, фруктовые рынки, массаж и закаты на пляже, вылет вечером.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "thailand"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 175000,
+    "days": 9,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_183",
+    "query": "Присматриваю вариант соло-поездки на 8 дней, чтобы развеяться и сменить обстановку: хочется узких улочек старого города, винных погребов, колоритных рынков и гастрономии, а рядом — гор и тихих прогулок на природе. Бюджет около 140 000 руб., вылет желательно днём, в обеденное время, и только прямой рейс без пересадок. Важна свобода передвижения и атмосфера, где комфортно путешествовать одному. Подскажите, пожалуйста, подходящие направления и варианты.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "georgia"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 140000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_184",
+    "query": "Подыскиваю вариант соло-поездки на 6 дней: хочется тишины, горного воздуха, медитативных прогулок у реки и красивых мест для перезагрузки. Бюджет около 105 000 руб., нужен только прямой перелёт без пересадок и вылет утром пораньше.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "altai"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 105000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_185",
+    "query": "Собираюсь соло развеяться: тропические храмы, фруктовые рынки, массаж и закаты на пляже. На 10 дней, утренний вылет, около 180 000 руб.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "thailand"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 180000,
+    "days": 10,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_186",
+    "query": "Подскажите вариант соло на 6 дней: Красная Поляна и Сочи, треккинг по горам, подъемники и морской бриз, до 80 000 руб, вылет утром.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 80000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_187",
+    "query": "Подыскиваю соло-поездку на 7 дней: архитектура, парадные, набережные каналов, музеи, кофейни и белые ночи, бюджет около 120 000 ₽.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 120000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": null,
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_188",
+    "query": "Подыскиваю вариант соло-поездки на 8 дней: тянет к узким улочкам старого города, винным погребам и горам, где можно гулять в одиночку и никуда не спешить. Бюджет около 105 000 руб, нужен только прямой перелёт с вылетом вечером после работы.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "georgia"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 105000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_189",
+    "query": "Подыскиваю вариант соло-перезагрузки на 8 дней: хочется тишины у реки, горного воздуха, красивых прогулок и простой гастрономии без суеты. Бюджет около 105 000 руб., вылет желательно пораньше утром и только прямым рейсом.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "altai"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 105000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_190",
+    "query": "Собираюсь в одиночную поездку на 10 дней, чтобы развеяться и набраться впечатлений. Хочется тёплого климата, тропических храмов, колоритных фруктовых рынков и неспешных прогулок по городу, а ещё массажа и закатов на пляже — всё это соло, в своём ритме. Бюджет около 140 000 рублей, вылет желательно утром пораньше. Подскажите, пожалуйста, подходящий вариант с удобной логистикой и свободой передвижения.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "thailand"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 140000,
+    "days": 10,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_191",
+    "query": "Подыскиваю соло-поездку на 5 дней с бюджетом около 120 000 руб. Хочется развеяться и почувствовать атмосферу: неспешно гулять по историческим улочкам, кататься на паромах через пролив, заглядывать в уютные кофейни, подниматься на смотровые площадки и выбираться на природу. Важны красивые виды, вкусная гастрономия и свобода передвижения без жесткого плана. Нужен только прямой перелет без пересадок, желательно вылет днем, в обеденное время.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 120000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_192",
+    "query": "Подыскиваю вариант соло-поездки в Красную Поляну и Сочи на 6 дней: хочется активного треккинга по горным тропам одному, подъёмников и свежего морского бриза. Бюджет около 105 000 руб., важны красивые места, прогулки и свобода передвижения — без лишней суеты.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 105000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": null,
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_193",
+    "query": "Подыскиваю соло-поездку на 5 дней: архитектура, парадные, набережные каналов, кофейни и белые ночи, около 70 000 руб, вылет вечером после работы, только прямой рейс.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "spb"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 70000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_194",
+    "query": "Собираюсь один в Тбилиси на 7 дней — развеяться, побродить по узким улочкам старого города, заглянуть в винные погреба и выбраться в горы за колоритом. Подскажите вариант соло-поездки со свободой передвижения и хорошей гастрономией, уложившись примерно в 90 000 руб.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "georgia"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 90000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": null,
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_195",
+    "query": "Подыскиваю соло-перезагрузку на Алтае: тишина у реки, горный воздух и медитация на 5 дней, бюджет около 120 000 с вылетом днём.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "altai"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 120000,
+    "days": 5,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_196",
+    "query": "Собираюсь в Таиланд один на 8 дней — хочется тропических храмов, фруктовых рынков, массажа и закатов на пляже. Бюджет около 210 000 руб., важны атмосфера, прогулки и свобода передвижения. Подскажите вариант соло-поездки?",
+    "archetype": "solo",
+    "expected_destinations": [
+      "thailand"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 210000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": null,
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_197",
+    "query": "Подыскиваю соло-поездку на 7 дней в город с историческими улочками, паромами через пролив, уютными кофейнями и смотровыми площадками, где можно много гулять и пробовать местную кухню. Бюджет около 100 000 руб., вылет вечером после работы и только прямой перелёт без пересадок.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 100000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_198",
+    "query": "Подыскиваю соло-поездку на 7 дней по Красной Поляне и Сочи: хочется одному пройтись по горным тропам, покататься на подъемниках и почувствовать свежий морской бриз. Бюджет около 80 000 руб., вылет желательно днём в обеденное время — подскажите, что можно собрать.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "is_implicit_vibe": false,
+    "budget": 80000,
+    "days": 7,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "day",
+    "prefer_direct_flight": false
+  },
+  {
+    "id": "CSAI_199",
+    "query": "Подыскиваю вариант, чтобы съездить одному на 8 дней: тянет к узким улочкам старого города, горам и винным погребам, хочется просто гулять, дышать и пробовать местную кухню. Вылет вечером после работы, нужен только прямой рейс без пересадок, бюджет около 85 000 рублей.",
+    "archetype": "solo",
+    "expected_destinations": [
+      "georgia"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 85000,
+    "days": 8,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "evening",
+    "prefer_direct_flight": true
+  },
+  {
+    "id": "CSAI_200",
+    "query": "Рассматриваю соло-поездку на 6 дней для перезагрузки: хочется горного воздуха, тишины у реки и медитации на природе. Бюджет около 130 000 руб., вылет утром пораньше, только прямой перелет без пересадок. Что посоветуете?",
+    "archetype": "solo",
+    "expected_destinations": [
+      "altai"
+    ],
+    "is_implicit_vibe": true,
+    "budget": 130000,
+    "days": 6,
+    "has_pets": false,
+    "has_kids": false,
+    "kids_count": 0,
+    "adults_count": 1,
+    "flight_time_pref": "morning",
+    "prefer_direct_flight": true
+  }
+]

@@ -43,13 +43,15 @@ FEATURE_COLUMNS: List[str] = [
     "archetype",
     "cities",
     "days",
-    "price",
+    "log_price",
+    "log_price_per_day",
     "transfers",
     "layover_hours",
     "hotel_stars",
     "dist_center_km",
     "pet_friendly",
     "breakfast",
+    "stars_per_10k",
 ]
 
 CAT_FEATURES: List[str] = ["archetype", "cities"]
@@ -352,17 +354,26 @@ class LTRService:
                 buffer_min = max(0.0, finite_number(timeline.get("post_flight_buffer_min"), 60))
                 layover_hours = round(float(buffer_min) / 60.0, 2)
 
+        price_per_day = price / max(1, days)
+        log_price = float(np.log1p(price))
+        log_price_per_day = float(np.log1p(price_per_day))
+        stars_val = cls._parse_stars(hotel.get("stars"))
+        stars_per_10k = float(stars_val / max(0.1, price_per_day / 10000.0))
+
         return {
             "archetype": archetype,
             "cities": cities,
             "days": days,
             "price": price,
+            "log_price": log_price,
+            "log_price_per_day": log_price_per_day,
             "transfers": int(transfers_count),
             "layover_hours": float(layover_hours),
-            "hotel_stars": cls._parse_stars(hotel.get("stars")),
+            "hotel_stars": stars_val,
             "dist_center_km": cls._parse_dist_center_km(hotel),
             "pet_friendly": cls._parse_pet_friendly(hotel),
             "breakfast": cls._parse_breakfast(hotel),
+            "stars_per_10k": round(stars_per_10k, 4),
         }
 
     @classmethod
@@ -372,7 +383,7 @@ class LTRService:
         Не заменяет обучение и не считается результатом инференса бинарной модели.
         """
         arch = feat["archetype"]
-        price = float(feat["price"])
+        price = float(feat.get("price", np.expm1(feat.get("log_price", 0.0))))
         stars = int(feat["hotel_stars"])
         dist = float(feat["dist_center_km"])
         transfers = int(feat["transfers"])
@@ -455,12 +466,23 @@ class LTRService:
     @staticmethod
     def normalize_features(feat: Dict[str, Any]) -> Dict[str, Any]:
         result = {}
+        price = max(0.0, finite_number(feat.get("price"), 0.0))
+        days = max(1, int(finite_number(feat.get("days"), 7)))
+        price_per_day = price / days
+        stars = max(1, min(5, int(finite_number(feat.get("hotel_stars"), 4))))
+
         for column in FEATURE_COLUMNS:
             value = feat.get(column)
             if column in CAT_FEATURES:
                 result[column] = str(value) if value is not None and not (isinstance(value, float) and not math.isfinite(value)) else "unknown"
             elif column in ("pet_friendly", "breakfast"):
                 result[column] = binary_flag(value)
+            elif column == "log_price":
+                result[column] = float(np.log1p(price)) if value is None else max(0.0, finite_number(value))
+            elif column == "log_price_per_day":
+                result[column] = float(np.log1p(price_per_day)) if value is None else max(0.0, finite_number(value))
+            elif column == "stars_per_10k":
+                result[column] = float(stars / max(0.1, price_per_day / 10000.0)) if value is None else max(0.0, finite_number(value))
             else:
                 result[column] = max(0.0, finite_number(value))
         result["days"] = max(1, int(result["days"]))
@@ -566,17 +588,18 @@ class LTRService:
 
         scores, latency_ms, engine_name = cls.score_features_batch(features_batch)
 
-        scored_options: List[Tuple[float, int, Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]]] = []
+        scored_options = []
         for idx, (opt, score, feat) in enumerate(zip(evaluated_options, scores, features_batch)):
             hotel_copy = dict(opt[0])
             hotel_copy["ltr_score"] = score
             hotel_copy["ltr_archetype"] = feat["archetype"]
-            scored_options.append((score, idx, (hotel_copy, opt[1], opt[2])))
+            price_val = float(feat.get("price", 0.0))
+            scored_options.append((score, price_val, idx, (hotel_copy, opt[1], opt[2])))
 
-        # Сортируем по убыванию LTR-скора (при равенстве сохраняем исходный порядок)
-        scored_options.sort(key=lambda item: (-item[0], item[1]))
+        # Сортируем по убыванию LTR-скора (при равенстве скоров тай-брейк по возрастанию цены)
+        scored_options.sort(key=lambda item: (-round(item[0], 5), item[1], item[2]))
 
-        ranked = [item[2] for item in scored_options]
+        ranked = [item[3] for item in scored_options]
         if top_k is not None:
             if top_k < 0:
                 raise ValueError("top_k не должен быть отрицательным")

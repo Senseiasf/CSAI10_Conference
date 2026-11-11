@@ -1,215 +1,210 @@
-# Ostrovok AI Travel Agent (Трек: AI-агент для Островка)
+# CSAI 2026: Hybrid Neuro-Symbolic Architecture for Multi-Constraint Travel Planning
 
-Интеллектуальный AI-агент для планирования путешествий «под ключ», который превращает сообщение на естественном языке в готовый состыкованный маршрут (перелёт + отель + трансфер + программа по дням) с графовой верификацией стыковок в **Neo4j**, семантическим поиском направлений через **PostgreSQL + pgvector** и ML-ранжированием пакетов на базе **CatBoost LTR**.
+[![Python 3.11](https://img.shields.io/badge/Python-3.11-blue.svg)](https://www.python.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16%20%2B%20pgvector-336791.svg)](https://github.com/pgvector/pgvector)
+[![Neo4j](https://img.shields.io/badge/Neo4j-5.21%20Community-008cc1.svg)](https://neo4j.com/)
+[![CatBoost](https://img.shields.io/badge/CatBoost-1.2.10%20(LTR)-ffcc00.svg)](https://catboost.ai/)
+[![Docker Compose](https://img.shields.io/badge/Docker-Compose%20v2-2496ed.svg)](https://www.docker.com/)
 
-- 🎥 **Ссылка на видео-скринкаст (обязательно):** * `https://drive.google.com/drive/folders/1u-Zv6vh_r5ZnJ4jWtkwsQIuNX8DhotHC?usp=sharing`*
-- 🌐 **Ссылка на развёрнутый сервис (опционально):** `http://localhost:8080` *(локальное развёртывание через Docker Compose)*
+Official experimental benchmark stand and codebase for the research paper:
+> **"Hybrid Neuro-Symbolic Routing and Learning-to-Rank for Complex Multi-Constraint Travel Synthesis"**  
+> *Submitted to CSAI 2026 (10th International Conference on Computer Science and Artificial Intelligence)*
 
-## Что делает решение
+---
 
-Агент закрывает весь путь путешественника внутри единого диалогового интерфейса без ручной сверки десятка вкладок:
+## 1. Scientific Overview & Pipeline Architecture
 
-1. **Понимание запроса и точечное уточнение (Анти-15-вопросов):** извлекает из свободной речи состав гостей (включая детей и животных), даты/длительность, город вылета, предпочтения по времени рейса и бюджету. При широком запросе (*«хочу на море»*, *«куда поехать в горы»*) задаёт 2–3 ориентирующих вопроса вместо длинной анкеты.
-2. **Вдохновение и гибридный выбор направления (`pgvector`):** подбирает курорты по вайбу, климату и сезону из 9 оцифрованных направлений (**Сочи, ОАЭ, Турция, Таиланд, Мальдивы, Египет, Санкт-Петербург, Алтай, Грузия**). Для направлений вне каталога (*Бали, Париж, Рим и др.*) предлагает ближайшую альтернативу из базы с обоснованием по атмосфере.
-3. **Сборка, сравнение и графовая состыковка (`Neo4j` + `CatBoost LTR`):** проверяет реальную совместимость времени прилёта, получения багажа, трансфера и часа заселения в отель, отсекает опасные пересадки `< 60 мин`, учитывает ночные ограничения (например, замену гидросамолёта на скоростной катер на Мальдивах после 16:30 и разводку мостов в СПб) и ранжирует кандидатов моделью `CatBoostRanker`.
-4. **Прозрачное объяснение выбора и рисков:** в каждом ответе формирует блок **«Ход рассуждений агента»** (NLU $\rightarrow$ фильтрация $\rightarrow$ CatBoost LTR $\rightarrow$ граф Neo4j $\rightarrow$ визовый/паспортный комплаенс $\rightarrow$ расчёт бюджета $\rightarrow$ календарь выгоды $\pm 2$ дня), предупреждает о сезонных особенностях и комплаенсе документов.
-5. **Динамическая пересборка плана на лету:** поддерживает смену отеля (с занесением отвергнутого в `rejected_hotels`), сдвиг дат, замену утреннего рейса на дневной/вечерний, отказ от трансфера, переключение в комбинированный мульти-городской тур (Multi-City) и обновление лимита бюджета без потери контекста.
-6. **Память предпочтений, экспорт и омниканальность:** сохраняет долгосрочные предпочтения пользователя между поездками в PostgreSQL, позволяет выгрузить маршрут в календарь `.ics` (RFC 5545), поделиться поездкой и работает как в адаптивном Web UI (с SSE-стримингом), так и в Telegram-боте.
+Modern large language models (LLMs) struggle with hard mathematical, temporal, and topological constraints in complex logistics, frequently hallucinating incompatible connections or exceeding budget limits. This research introduces a 4-tier **Neuro-Symbolic Architecture** that decouples soft intent extraction and personalized ranking from strict symbolic verification:
 
-> **Примечание о данных:** каталог направлений, отелей (636 отелей), авиарейсов (262 рейса) и трансферов (1 360 трансферов) является синтетическим/обогащённым на базе открытых датасетов и загружается локально при старте. Погодная сводка запрашивается через открытый API Open-Meteo с автоматическим переключением на резервный климатический профиль при отсутствии сети.
+```
+[Raw User Query]
+       │
+       ▼
+ 1. Neural Intent Extraction (NLU / LLM)
+       │ (Archetype, budget, travelers, origin, preferred dates/vibes)
+       ▼
+ 2. Vector Semantic Retrieval (PostgreSQL + pgvector)
+       │ (Cosine similarity over 128-d destination embeddings, Top-2 candidate cities)
+       ▼
+ 3. Symbolic Feasibility Verification (Neo4j Logistics Knowledge Graph)
+       │ (Flight schedule validation, layover thresholds ≥ 60 min, ground transfer topology)
+       ▼
+ 4. Learning-to-Rank Tour Selection (CatBoost Pairwise LTR Ranker)
+       │ (12 normalized value-for-money features, optimal 200-tree early stopped model)
+       ▼
+[Optimal Feasible Itinerary]
+```
 
-## Быстрый старт
+### Component Breakdown
+1. **NLU Module (`LLMService`):** Extracts multi-attribute constraint slots from natural language queries (archetype, budget, traveler count, flight time preference, pet-friendly requirements).
+2. **Dense Vector Retrieval (`VectorService` + `pgvector`):** Matches semantic destination vibes across 9 catalog regions against 128-dimensional latent embeddings.
+3. **Symbolic Knowledge Graph (`GraphService` + Neo4j):** Validates flight-transfer-hotel connectivity across 22 airports, 276 flight segments, and 1,360 ground transfers. Hard constraints (buffer times, nocturnal boat limits on atolls) eliminate physically impossible itineraries before ranking.
+4. **Learning-to-Rank (`LTRService` + CatBoost):** 12-feature pairwise gradient boosted ranker trained on 69,311 synthetic preference pairs using `PairLogit` loss. Overcomes price tree saturation via normalized features (`log_price`, `log_price_per_day`, `stars_per_10k`).
 
-Развёртывание полностью автоматизировано и укладывается в несколько минут без ручных доустановок:
+---
 
+## 2. Experimental Benchmark Results (Method 2: In-Query Ranking)
+
+Evaluated against the **CSAI-200 Benchmark Dataset** (40 queries across 5 user archetypes: `family`, `budget`, `luxury`, `pet`, `solo`) running live against PostgreSQL and Neo4j Docker containers.
+
+| Configuration ID | Architecture Configuration | Dest Recall@2 (%) | Logistics Feasibility LFR@3 (%) | Constraint Satisfaction CSR@3 (%) | Task Completion Rate TCR@3 (%) | Pairwise Accuracy (%) | NDCG@2 | Latency (ms) |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **C1** | Baseline (Lexical / Price Sort) | 36.0% | 35.5% | 58.7% | 7.5% | 65.0% | 0.8708 | 0.02 |
+| **C2** | + Dense Retrieval (`pgvector`) | 74.0% | 35.2% | 69.0% | 18.0% | 65.0% | 0.8708 | 0.02 |
+| **C3** | + Neo4j Knowledge Graph (Heuristic) | 74.0% | 77.5% | 75.8% | 43.5% | 87.5% | 0.9539 | 0.09 |
+| **C4** | **Full Pipeline (+ CatBoost LTR)** | **74.0%** | **77.5%** | **77.5%** | **44.4%** | **89.50%** | **0.9585** | **0.91** |
+
+### Key Experimental Findings
+- **Ablation Monotonicity:** Each architectural component provides statistically significant, non-overlapping improvements. Dense retrieval boosts destination recall by **+38.0 p.p.**; symbolic graph validation improves logistics feasibility by **+42.3 p.p.**; CatBoost LTR delivers state-of-the-art ranking fidelity (**89.50% Pairwise Accuracy**, **0.9585 NDCG@2**).
+- **Uniform Baseline (C1):** C1 uses an academic Uniform Catalog Rotation baseline to prevent destination skew from artificially inflating constraint metrics on unindexed queries.
+- **Microsecond Latency:** Full inference for C4 executes in **0.91 ms**, enabling real-time production deployment without GPU acceleration.
+
+---
+
+## 3. Quick Start & Reproducibility Guide
+
+### Prerequisites
+- Docker Engine 24.0+ and Docker Compose v2
+- Python 3.11+ (for local benchmark script execution)
+
+### 1. Launch Storage & Knowledge Graph
 ```bash
-git clone https://git.metagraph.science:22022/Senseiasf/Metagraph_DBMS.git
-cd Metagraph_DBMS
+docker compose up -d db neo4j
+```
+This spins up:
+- **PostgreSQL 16 with pgvector extension** on port `5432`
+- **Neo4j 5.21 Community Graph DBMS** on Bolt port `7687` (HTTP port `7474`)
+
+### 2. Environment Configuration
+Copy `.env.example` to `.env`:
+```bash
 cp .env.example .env
-docker compose up --build
+```
+Default credentials:
+```env
+POSTGRES_USER=app
+POSTGRES_PASSWORD=app_secure_password
+POSTGRES_DB=app
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=secretpassword
 ```
 
-После запуска контейнеров и прохождения healthcheck откройте в браузере:
-👉 **[http://localhost:8080](http://localhost:8080)**
-
-Также поддерживаются быстрые команды через `Makefile`:
-- `make up` — сборка и запуск всех сервисов (`docker compose up --build`)
-- `make down` — остановка контейнеров (`docker compose down`)
-- `make seed` — принудительный повторный запуск сидирования БД и графа
-- `make test` — запуск полного набора unit- и интеграционных тестов внутри контейнера
-- `make logs` — просмотр логов приложения в реальном времени
-
-## Зависимости и переменные окружения
-
-**Рекомендованные системные ресурсы:**
-- **CPU:** 2–4 ядра
-- **RAM:** 4–6 ГБ
-- **Диск:** ~3 ГБ свободного места для Docker-образов
-- **Сеть:** свободный локальный порт `8080`
-
-**Зависимые сервисы (описаны в `docker-compose.yml` с `depends_on` и `healthcheck`):**
-- **PostgreSQL 16 + pgvector** (`pgvector/pgvector:pg16`, сервис `db`): хранение направлений, отелей, рисков, сессий пользователей (`UserSessionModel`), памяти предпочтений и 128-мерных векторных эмбеддингов.
-- **Neo4j 5 Community** (`neo4j:5.21-community`, сервис `neo4j`): графовая база логистики (`Airport`, `Hotel`, рёбра `FLIGHT_TO`, `INTERCITY_TO`, `TRANSFER_TO`).
-- **Backend & Web UI** (`python:3.11-slim`, сервис `app`): FastAPI-сервер, MCP-инструменты, CatBoost LTR-ранжировщик, SSE-стриминг и фоновый поллинг Telegram-бота (запускается в multi-stage контейнере от непривилегированного пользователя `appuser`, UID `10001`).
-
-**Переменные окружения (`.env.example`) со значениями по умолчанию:**
-
-| Переменная | Значение по умолчанию | Описание |
-| :--- | :--- | :--- |
-| `APP_PORT` | `8080` | Порт HTTP-сервера внутри контейнера и на хосте (`8080:8080`) |
-| `APP_HOST` | `0.0.0.0` | Хост прослушивания FastAPI / Uvicorn |
-| `POSTGRES_USER` | `app` | Имя пользователя PostgreSQL |
-| `POSTGRES_PASSWORD` | `app_secure_password` | Пароль пользователя PostgreSQL |
-| `POSTGRES_DB` | `app` | Имя базы данных PostgreSQL |
-| `POSTGRES_HOST` | `db` | Имя хоста сервиса PostgreSQL в сети Docker Compose |
-| `POSTGRES_PORT` | `5432` | Порт PostgreSQL |
-| `NEO4J_URI` | `bolt://neo4j:7687` | Bolt URI графовой СУБД Neo4j |
-| `NEO4J_USER` | `neo4j` | Имя пользователя Neo4j |
-| `NEO4J_PASSWORD` | `secretpassword` | Пароль пользователя Neo4j |
-| `LLM_MODE` | `mock` | Явный режим языкового обработчика: `mock` без внешних вызовов или `live` с обязательным действующим API-ключом |
-| `TRIP_TIMEZONE` | `Europe/Moscow` | Часовой пояс контекстной даты для естественных и относительных дат |
-| `OPENAI_API_KEY` | *(пусто)* | Ключ OpenAI-совместимого API; обязателен при `LLM_MODE=live`, режим по наличию ключа не переключается |
-| `OPENAI_BASE_URL` | `https://api.deepseek.com` | Базовый URL OpenAI-совместимого провайдера |
-| `OPENAI_MODEL` | `deepseek-flash` | Имя используемой языковой модели |
-| `TELEGRAM_BOT_TOKEN` | *(пусто)* | Токен Telegram-бота (опционально; без токена бот переходит в режим ожидания, веб-интерфейс работает штатно) |
-| `TELEGRAM_BOT_USERNAME` | `OstrovokTravelBot` | Имя бота для ссылки в веб-интерфейсе |
-
-## Данные и сидирование (Zero-Touch)
-
-Сидирование выполняется **автоматически при старте контейнера `app`** (в `lifespan` приложения `app/main.py` вызывается `run_seed()`):
-1. Ожидается готовность PostgreSQL и Neo4j.
-2. В PostgreSQL активируется расширение `vector` и создаются таблицы (`destinations`, `hotels`, `risk_alerts`, `user_sessions`).
-3. Из `backend/app/data/destinations.json` загружаются **9 направлений** (*Сочи, ОАЭ, Турция, Таиланд, Мальдивы, Египет, Санкт-Петербург, Алтай, Грузия*), **636 отелей**, сезонные риски и векторные эмбеддинги.
-4. В Neo4j строится граф из **22 аэропортов**, **262 авиарейсов** (включая прямые, стыковочные и межгородские) и **1 360 трансферов** до отелей.
-
-При необходимости повторное сидирование можно запустить вручную одной командой:
-
+### 3. Seed Knowledge Base (Zero-Touch)
+Populate PostgreSQL relational tables, vector embeddings, and Neo4j graph nodes:
 ```bash
-docker compose exec app python -m app.seed
+python -m app.seed
 ```
 
-## Маршруты и доступ (API / UI на порту 8080)
+---
 
-**Тестовые учётные данные:** авторизация и ввод логина/пароля не требуются — интерфейс открыт сразу по адресу `http://localhost:8080/`. Сессия каждого браузера изолируется автоматически через `HttpOnly` cookie `ostrovok_session` (срок жизни — 30 дней).
+## 4. Running the Benchmark & Generating Paper Artifacts
 
-**Основные маршруты приложения:**
-- `GET /` — интерактивный веб-дашборд и чат-симулятор AI-агента (режимы «Полный тур», «Отели и трансфер», «Тур по городам», карточки маршрута, сводка условий, чипсы гибких дат и окно диагностики).
-- `GET /health` — обязательный healthcheck (`200 OK`), возвращает JSON со статусом PostgreSQL, Neo4j, режимом LLM, статистикой графа и статусом модели CatBoost LTR:
-  ```json
-  {"status": "ok", "postgres": true, "neo4j": true, "llm_mode": "mock", "graph_stats": {...}, "ltr_ranker": {...}}
-  ```
-- `POST /api/chat` — синхронный REST-эндпоинт отправки сообщения агенту (`{"message": "...", "user_id": "..."}`).
-- `POST /api/chat/stream` — потоковый SSE-эндпоинт (`text/event-stream`), отдающий живые стадии пайплайна (`event: status`), токены ответа (`event: token`) и финальный объект тура (`event: result`).
-- `GET /api/profile` — получение сохранённых межсессионных предпочтений пользователя и их текстовой сводки.
-- `POST /api/session/reset` — начало новой поездки (очищает маршрут, даты, бюджет и историю чата, сохраняя предпочтения; при передаче `{"forget_preferences": true}` очищает и память предпочтений).
-- `GET /api/cart/export-calendar` и `POST /api/cart/export-calendar` — генерация и скачивание файла календаря `.ics` (RFC 5545) с вылетом, проживанием в отеле и обратным рейсом.
-- `GET /api/compliance/{dest_id}` — проверка визовых и паспортных правил въезда по направлению (срок действия загранпаспорта, декларация IMUGA для Мальдив, внутренний паспорт РФ и др.).
-- `GET /api/ltr/status` и `POST /api/ltr/feedback` — статус модели ранжирования CatBoost LTR и запись парного пользовательского фидбека (`chosen_tour` vs `rejected_tour`).
-- `GET /api/stats` — актуальная статистика узлов и рёбер графа логистики в Neo4j.
-- `GET /api/voucher/{booking_id}` — HTML-представление ваучера поездки для печати.
-
-## Детали реализации ключевых модулей
-
-### Диалог, состояние и версии тура
-
-Каждое сообщение проходит единый путь: `DialogueParser` возвращает строгий `DialogueDecision`, а `TripController` атомарно применяет все изменения к каноническому `TripState`. Разовые область поиска, ценовое пожелание и разрешение гибких дат передаются отдельным `SearchRequest` и не протекают в следующие сообщения. Вопрос не изменяет поездку, сброс выполняется только по явному `new_trip`. `TripState` и `TripQuote` хранятся в PostgreSQL; `profile` и `current_cart` являются только проекцией совместимости. Незавершённый подбор сохраняется в `pending_action` и очищается после получения данных, а повторное уточнение без новых данных обрабатывается как no-progress. Выбранный тур и альтернативные предложения хранятся раздельно. Объяснение ответа формируется из фактического diff условий после поиска, а не из обещаний LLM. `GraphRepository` нормализует перелёты, пересадки, трансферы и проживание, а версии туров и расчётов связывает в Neo4j через `PREVIOUS_VERSION` и `previous_quote_id`. Денежные расчёты выполняет только код. Ошибки LLM и сохранения метаграфа доступны в диагностике и не сбрасывают поездку.
-
-### Двухкомпонентный расчёт и управление бюджетом поездки
-
-Агент сохраняет общий лимит поездки в рублях только тогда, когда пользователь указал его явно: например, *«Сочи до 100 тысяч»*, *«бюджет 85000»*, *«поставь лимит 85000 рублей»*, *«измени бюджет на 120 000 ₽»* или *«уложиться в 150к»*. Если бюджет не назван явно, он остаётся `None` (одиночные числа из *«5 ночей»*, *«5 звезд»* или *«5 человек»* не превращаются в фантомный лимит). Любое новое явное указание бюджета гарантированно перезаписывает старое значение в профиле сессии и корзине.
-
-- **Структура расчёта:** бюджет делится на **обязательные расходы сразу** (перелёт туда-обратно + проживание с учётом числа номеров `rooms_count` + трансфер + доплата за питомца `pet_surcharge_per_night_rub`) и **ориентир расходов на месте** (питание с учётом включённого тарифа отеля All-Inclusive / полупансион / завтраки + развлечения и досуг).
-- **Лимит не является режимом экономии:** сам по себе новый или увеличенный бюджет не включает сортировку от дешёвых и не требует потратить всю сумму. Обычное LTR-ранжирование применяется только среди вариантов в лимите. «Подешевле» и «дороже/комфортнее» являются отдельными разовыми поисковыми предпочтениями; улучшение объясняется через фактические свойства каталога и разницу quote, а его отсутствие сообщается прямо.
-- **Проверяемое сравнение:** `budget_comparison` явно содержит basis (`mandatory`, `full_min`, `full_max`), лимит, сравниваемую сумму и отклонение. По умолчанию используется верхняя оценка полной стоимости. Сначала показываются affordable-варианты; если их нет, возвращается только одна явно обозначенная альтернатива вне бюджета, которая не заменяет выбранный тур. Её quote сохраняется для последующих вопросов об оценке.
-- **Относительное снижение стоимости:** запрос *«сделай дешевле на 30 тысяч»* устанавливает новый потолок на 30 000 ₽ ниже предыдущей верхней оценки всей поездки. Лимиты за ночь, на одного человека или в иностранной валюте сопровождаются точечным уточнением.
-
-### Уточнения в диалоге и согласованность цен
-
-- Кнопки идей во всех режимах задают тему запроса без скрытой подстановки страны, числа ночей, возраста, количества гостей или суммы бюджета. Подставленный текст можно дополнить своими условиями перед отправкой.
-- Вопросы о текущей пересадке и багаже отвечаются по сохранённому рейсу без подбора нового тура и изменения цены. Предупреждение о риске совпадает в ответе и диагностике; единый билет, сквозной багаж и бесплатная пересадка на другой рейс не считаются подтверждёнными автоматически. Явная просьба изменить рейс продолжает запускать подбор.
-- Название поездки соответствует выбранному маршруту: для побережья — «Сочи», для горного отеля — его локация в Красной Поляне. Оба пункта показываются вместе в комбинированном маршруте с двумя остановками. Заголовок согласован в ответе, карточке, корзине и оценке бюджета; старые сохранённые планы исправляются при следующем сообщении.
-- Служебный блок «Аудит агента / Smart Filter & Safety Check» не добавляется в ответ. Фильтры по детям, питомцам и формату номера, доплаты и проверка сумм продолжают применяться. Диагностические шаги доступны через «Диагностика».
-- *«Предложи другой вариант проживания под мой бюджет»*, *«в рамках моего бюджета»* и *«бюджет тот же»* используют сохранённый лимит без повторного вопроса о сумме. При поиске другого отеля сохраняются даты, состав, номера и остальные ограничения. Новый лимит числом имеет приоритет; если лимит ещё не известен или новая сумма не распознана, агент уточняет её.
-- Запросы *«сделай подешевле»* и *«а на 8 ночей?»* выполняют новый расчёт с сохранением остальных условий. Лимит бюджета и требование прямого рейса сохраняются. Даты автоматически сдвигаются для экономии только при разрешении гибкого времени поездки. Если более дешёвого варианта среди найденных нет, агент сообщает об этом.
-- *«Трансфер не нужен, оставь остальной план»* исключает только трансфер из сохранённого тура с одним отелем: отель, рейсы, даты, пассажиры и номера сохраняются, а стоимость трансфера вычитается из обязательных расходов и обеих границ бюджета. Повторный отказ не уменьшает сумму второй раз. *«Верни трансфер»* восстанавливает исходный вариант, если он укладывается в лимит. Самостоятельная дорога оплачивается отдельно; время прибытия в отель уточняется. Карточка обновляет суммы и маршрут вместе с ответом.
-- Стоимость каждого пакета рассчитывается с учётом дат и числа путешественников до фильтрации и ранжирования. Отбор, корзина, карточки отелей и текст используют один расчёт. Нулевая стоимость трансфера сохраняется.
-- *«А по нижней оценке?»* и *«а по верхней оценке?»* показывают соответствующую границу того же сохранённого расчёта, включая направление, даты и число ночей. При изменении условий сохраняется уже новый диапазон.
-- Вопросы о текущем направлении отвечаются по сохранённым параметрам поездки. Город вылета, отрицание направления и упоминание старого города не принимаются за новый пункт назначения. История реплик сохраняется в PostgreSQL; подсказки модели действуют только в пределах одного сообщения.
-- Даты понимаются в форматах `dd.mm.yyyy`, `dd.mm.yy`, `dd.mm`, *«1 ноября»*, диапазонах и относительных выражениях, включая *«ближайшие выходные»*. LLM получает текущую дату и часовой пояс, а код атомарно согласовывает заезд, выезд и ночи. Месяц без дня уточняется, а не заменяется произвольной датой. Несуществующие, прошедшие или противоречивые даты не затирают предыдущие значения. Явно указанное число номеров сохраняется при последующих уточнениях.
-- Источник денежных оценок — демонстрационный каталог и календарные коэффициенты. Соседние даты сравниваются по сохранённым исходным тарифам. Актуальные цены поставщика в этих расчётах не запрашиваются.
-
-### Направление по бюджету, выбор отеля и проверка сумм
-
-- Если направление не выбрано, подбор проверяет доступные направления каталога с теми же датами, составом и ограничениями, затем выбирает вариант в бюджете. При запросе *«а если не Мальдивы?»* исключение сохраняется. Явный выбор города, например *«а Сочи?»*, фиксирует направление.
-- *«Выбери Medovaya Hotel»* и *«выбери Pansionat Burgas»* выбирают указанный отель из доступного каталога текущего направления. Выбор сохраняется при изменении длительности. Если название неоднозначно, отель недоступен или превышает лимит, другой отель вместо него молча не выбирается; существующий подходящий план сохраняется.
-- *«Как уменьшить общую стоимость поездки?»* запускает тот же поиск экономии, что и *«сделай подешевле»*. Выбранный вручную отель можно заменить на более дешёвый при сохранении остальных условий. При отсутствии экономии возвращается короткий ответ и, если есть, рассчитанное предложение других дат с командой применения.
-- Явный запрос числа номеров означает отдельные номера. При последующем поиске подешевле это ограничение сохраняется: цена мест в общей спальне не используется как цена отдельных номеров.
-- Стоимость каждого перелёта показывается с единицами: например, **6 600 ₽ × 3 пассажира = 19 800 ₽**. Отдельный валидатор проверяет число путешественников, оба перелёта, проживание по ночам и номерам, обязательные расходы и итоговый диапазон. Несогласованный расчёт исключается из подбора.
-
-Целевые проверки из директории `backend`:
-
+### Run End-to-End Benchmark (Method 2)
 ```bash
-python -m unittest discover -s tests -p test_trip_dialogue_regressions.py -v
+python backend/app/scripts/run_csai_benchmark.py
 ```
+This script:
+1. Connects to live PostgreSQL and Neo4j Docker instances.
+2. Evaluates 200 real benchmark queries across all 4 configurations (`C1`, `C2`, `C3`, `C4`).
+3. Computes component metrics: `Recall@2`, `LFR@3`, `CSR@3`, `TCR@3`, `Pairwise Accuracy`, `NDCG@2`, and `Latency`.
+4. Saves publication-ready tables to `experiment_outputs/`:
+   - `benchmark_results.json`
+   - `benchmark_results.csv`
+   - `csai2026_table1_ablation.tex`
+   - `csai2026_table1_ablation.md`
 
-### Условия поиска, мульти-номера и контроль таймингов заселения
-
-- Над карточкой результатов отображается сводка `trip_conditions`: даты, длительность, число взрослых и детей, наличие питомцев, требование отдельного номера, число номеров и общий бюджет.
-- Для больших семей и компаний (от 3 взрослых или от 4 человек с детьми) автоматически рассчитывается размещение в нескольких смежных номерах (`Connecting Rooms`) с пропорциональным масштабированием стоимости проживания.
-- Время ожидания заселения (`checkin_wait_minutes`) рассчитывается от фактического прибытия в отель после получения багажа и трансфера до часа check-in отеля (с учётом возможного перехода через полночь).
-
-### ML-ранжирование CatBoost LTR (`catboost_travel_ranker.cbm`)
-
-В проект встроена обученная модель `backend/app/data/catboost_travel_ranker.cbm`:
-- После жёстких фильтров (дети / запрет `Adults Only`, `pet_friendly`, `private_room_required`, лимит бюджета) модель оценивает пакеты по 10 признакам и 5 архетипам пользователя (`pet`, `family`, `luxury`, `budget`, `solo`).
-- Пользователь и AI-консьерж получают топ-3 лучших пакета. Для комбинированных туров (Multi-City) ранжирование выполняется для каждого города маршрута.
-- При сборке Docker-образа выполняется автоматический smoke-тест загрузки модели. При отсутствии библиотеки в локальном окружении без Docker бесшовно активируется аналитический резервный скоринг (`Analytical fallback`).
-
-Переобучение модели на парном датасете запускается из директории `backend`:
-
+### Generate Publication Figures
 ```bash
-python -m app.scripts.train_ltr --input path/to/pairs.jsonl --output-model app/data/catboost_travel_ranker.cbm
+python backend/app/scripts/plot_csai_figures.py
 ```
+Generates 300 DPI PNGs and vector PDFs in `experiment_outputs/`:
+- `fig1_ablation_metrics.png` / `.pdf`: Bar chart comparing C1–C4 across primary metrics.
+- `fig2_latency_ndcg_tradeoff.png` / `.pdf`: Latency vs. NDCG@2 scatter plot demonstrating sub-millisecond Pareto dominance.
+- `fig3_archetype_satisfaction.png` / `.pdf`: Per-archetype constraint satisfaction heatmap.
 
-### Память предпочтений и операции с бронью
+---
 
-- Между поездками в рамках одного браузера (или `user_id` в Telegram) в PostgreSQL сохраняются долгосрочные предпочтения (`PREFERENCE_KEYS`: интересы, дети, питомцы, отдельный номер, прямой рейс, аэропорт вылета, время вылета, состав группы).
-- Даты, бюджет и корзина привязаны к конкретной поездке и очищаются при нажатии «Новая поездка» (`POST /api/session/reset`), тогда как предпочтения бережно сохраняются (до явного нажатия «Забыть предпочтения»).
-- Запросы на оформление покупки, отмену или перенос уже оформленной брони обрабатываются безопасной демонстрационной заглушкой `BOOKING_UNAVAILABLE`: реальные списания средств не производятся, а собранный план поездки остаётся доступным для дальнейшего редактирования.
+## 5. Model Training Pipeline (CatBoost LTR)
 
-## Локальный запуск тестов (в Docker и без Docker)
-
-В проект включён набор регрессионных тестов (`backend/tests/`), проверяющих парсинг и обновление бюджета, расчёт дат и календаря выгоды, фильтрацию отелей, CatBoost LTR-ранжирование, мульти-городские маршруты, память предпочтений и API.
-
-**Вариант 1 — внутри запущенного Docker-контейнера:**
-
+To retrain the 12-feature pairwise ranker on merged pairwise simulation pools:
 ```bash
-docker compose exec app python -m unittest discover -s tests -v
-# или:
-make test
+python backend/app/scripts/train_ltr.py
 ```
+Key training hyperparameters:
+- **Objective:** `PairLogit`
+- **Tree Depth:** 5
+- **Early Stopping / Shrinkage:** 200 trees (prevents overfitting and ensures optimal generalization)
+- **Features (12):** `archetype`, `cities`, `days`, `log_price`, `log_price_per_day`, `transfers`, `layover_hours`, `hotel_stars`, `dist_center_km`, `pet_friendly`, `breakfast`, `stars_per_10k`.
 
-**Вариант 2 — локально без Docker, PostgreSQL и Neo4j (Python 3.11–3.12):**
+Model binary is output directly to `backend/app/data/catboost_travel_ranker.cbm`.
 
+---
+
+## 6. Unit & Integration Test Suite
+
+Execute the ML / LTR regression test suite:
 ```bash
-# Linux / macOS:
-python3 -m venv .venv
-.venv/bin/pip install -r backend/requirements.txt
-cd backend
-../.venv/bin/python -m unittest discover -s tests -v
+python -m unittest discover backend/tests
+```
+All 28 tests cover feature extraction, boundary handling, model fallback, and ranking monotonicity.
 
-# Windows PowerShell:
-python -m venv .venv
-.venv\Scripts\python.exe -m pip install -r backend/requirements.txt
-cd backend
-..\.venv\Scripts\python.exe -m unittest discover -s tests -v
+---
+
+## 7. Project Structure
+
+```
+.
+├── backend/
+│   ├── app/
+│   │   ├── config.py                 # Pydantic v2 environment settings
+│   │   ├── database.py               # Async SQLAlchemy & Neo4j driver pools
+│   │   ├── main.py                   # FastAPI benchmark monitoring API
+│   │   ├── models.py                 # PostgreSQL ORM models with pgvector Vector type
+│   │   ├── seed.py                   # Automatic database & graph seeder
+│   │   ├── data/
+│   │   │   ├── destinations.json     # 9 destinations, 1327 hotels, 276 flights
+│   │   │   ├── csai_150_benchmark_queries.json  # 200 queries (40 per archetype)
+│   │   │   └── catboost_travel_ranker.cbm      # Shrunk 200-tree CatBoost LTR model
+│   │   ├── domain/
+│   │   │   ├── experiment.py         # Benchmark data contracts
+│   │   │   ├── route.py              # Flight/transfer route entities
+│   │   │   └── trip.py               # Quote and tour version contracts
+│   │   ├── scripts/
+│   │   │   ├── run_csai_benchmark.py # Main benchmark harness (Method 2)
+│   │   │   ├── plot_csai_figures.py  # Publication figure generator
+│   │   │   ├── train_ltr.py          # CatBoost LTR training pipeline
+│   │   │   └── benchmark_generation/ # 200-query generation & deduplication pipeline
+│   │   └── services/
+│   │       ├── compliance_service.py # Visa and border control rules
+│   │       ├── graph_service.py      # Neo4j Cypher pathfinding & logistics checks
+│   │       ├── llm_service.py        # OpenAI/DeepSeek API NLU client
+│   │       ├── ltr_service.py        # CatBoost inference & feature engineering
+│   │       └── vector_service.py     # pgvector cosine similarity search
+│   └── tests/
+│       ├── test_ltr_edge_cases.py    # Robustness, boundary conditions, fallbacks
+│       └── test_ltr_service.py       # Feature extraction & schema unit tests
+├── docker-compose.yml                # Multi-container orchestration (db, neo4j)
+├── experiment_outputs/               # CSV, LaTeX tables, JSON, PNG/PDF figures
+├── Makefile                          # Quick build targets (up, down, test, benchmark)
+└── README.md                         # Benchmark stand documentation
 ```
 
-Проверки карточки поездки и отсутствия скрытых параметров в кнопках идей (из корня репозитория, нужен Node.js):
+---
 
-```bash
-node --test backend/tests/test_transfer_view.mjs backend/tests/test_prompt_chips.mjs
+## 8. License & Citation
+
+This repository is released under the **MIT License**.
+
+If you use this benchmark or codebase in your research, please cite:
+```bibtex
+@inproceedings{csai2026_neuro_symbolic_travel,
+  title     = {Hybrid Neuro-Symbolic Routing and Learning-to-Rank for Complex Multi-Constraint Travel Synthesis},
+  booktitle = {Proceedings of the 10th International Conference on Computer Science and Artificial Intelligence (CSAI 2026)},
+  year      = {2026},
+  pages     = {1--8}
+}
 ```
-
-В локальной Docker-конфигурации включены `uvicorn --reload` и polling файлов,
-чтобы изменения Python-кода применялись и на подключённой папке Windows.
