@@ -7,9 +7,9 @@
 \textbf{Pipeline Configuration} & \textbf{Recall@2 (\%)} & \textbf{LFR@3 (\%)} & \textbf{CSR@3 (\%)} & \textbf{Pairwise Acc. (\%)} & \textbf{NDCG@2} & \textbf{Latency (ms)} \\
 \hline
 C1: Baseline (SQL/Lexical) & 36.0 & 35.5 & 58.7 & 65.00 & 0.8708 & 0.02 \\
-C2: + pgvector Search & 61.5 & 37.5 & 38.5 & 65.00 & 0.8708 & 0.05 \\
-C3: + Neo4j Graph (Heuristic) & 61.5 & 72.0 & 40.5 & 87.50 & 0.9539 & 0.24 \\
-C4: Full Pipeline (+ CatBoost LTR) & 61.5 & 72.0 & 40.8 & 89.50 & 0.9585 & 1.67 \\
+C2: + pgvector Search & 80.0 & 39.5 & 65.5 & 65.00 & 0.8708 & 0.05 \\
+C3: + Neo4j Graph (Heuristic) & 80.0 & 83.5 & 89.5 & 87.50 & 0.9539 & 0.17 \\
+C4: Full Pipeline (+ CatBoost LTR) & 80.0 & 83.5 & 90.3 & 89.50 & 0.9585 & 1.41 \\
 \hline
 \end{tabular*}
 \end{table*}

@@ -14,10 +14,10 @@
     {
       "Config_ID": "C2_Vector_RAG",
       "Configuration": "C2: + pgvector Search",
-      "Dest_Recall_at_2_pct": 61.5,
-      "Logistics_Feasibility_pct": 37.5,
-      "Constraint_Satisfaction_pct": 38.5,
-      "Task_Completion_Rate_pct": 8.9,
+      "Dest_Recall_at_2_pct": 80.0,
+      "Logistics_Feasibility_pct": 39.5,
+      "Constraint_Satisfaction_pct": 65.5,
+      "Task_Completion_Rate_pct": 20.7,
       "Pairwise_Accuracy_pct": 65.0,
       "NDCG_at_2": 0.8708,
       "Batch_Latency_ms": 0.05
@@ -25,24 +25,24 @@
     {
       "Config_ID": "C3_Graph_Heuristic",
       "Configuration": "C3: + Neo4j Graph (Heuristic)",
-      "Dest_Recall_at_2_pct": 61.5,
-      "Logistics_Feasibility_pct": 72.0,
-      "Constraint_Satisfaction_pct": 40.5,
-      "Task_Completion_Rate_pct": 17.9,
+      "Dest_Recall_at_2_pct": 80.0,
+      "Logistics_Feasibility_pct": 83.5,
+      "Constraint_Satisfaction_pct": 89.5,
+      "Task_Completion_Rate_pct": 59.8,
       "Pairwise_Accuracy_pct": 87.5,
       "NDCG_at_2": 0.9539,
-      "Batch_Latency_ms": 0.24
+      "Batch_Latency_ms": 0.17
     },
     {
       "Config_ID": "C4_Full_CatBoost",
       "Configuration": "C4: Full Pipeline (+ CatBoost LTR)",
-      "Dest_Recall_at_2_pct": 61.5,
-      "Logistics_Feasibility_pct": 72.0,
-      "Constraint_Satisfaction_pct": 40.8,
-      "Task_Completion_Rate_pct": 18.1,
+      "Dest_Recall_at_2_pct": 80.0,
+      "Logistics_Feasibility_pct": 83.5,
+      "Constraint_Satisfaction_pct": 90.3,
+      "Task_Completion_Rate_pct": 60.3,
       "Pairwise_Accuracy_pct": 89.5,
       "NDCG_at_2": 0.9585,
-      "Batch_Latency_ms": 1.67
+      "Batch_Latency_ms": 1.41
     }
   ],
   "archetype_comparison": {

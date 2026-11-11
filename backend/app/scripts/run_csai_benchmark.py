@@ -159,10 +159,8 @@ async def retrieve_destination_live(
             if use_vector:
                 q_vec = generate_text_embedding(raw_query)
                 vec_str = "[" + ",".join(str(x) for x in q_vec) + "]"
-                rows = await pg_conn.fetch(
-                    "SELECT id FROM destinations ORDER BY embedding <=> $1::vector LIMIT 2;",
-                    vec_str,
-                )
+                query_sql = f"SELECT id FROM destinations ORDER BY embedding <=> '{vec_str}'::vector LIMIT 2;"
+                rows = await pg_conn.fetch(query_sql)
                 if rows:
                     top_ids = [r["id"] for r in rows]
                     return [d for did in top_ids for d in destinations if d["id"] == did]
@@ -541,22 +539,9 @@ async def async_main() -> None:
     queries = json.loads(BENCHMARK_QUERIES_PATH.read_text(encoding="utf-8"))
     print(f"\n[1/5] Загружен эталонный датасет из {len(queries)} запросов.", flush=True)
 
-    # Ключевые фразы для векторизации
-    dest_keywords = {
-        "egypt": "египет шарм хургада красное море кораллы рифы снорклинг дайвинг лагуна пирамиды все включено",
-        "sochi": "сочи красная поляна сириус адлер черное море кавказ горы россия без загранпаспорта олимпийский парк побережье",
-        "georgia": "грузия тбилиси батуми казбеги гудаури хинкали хачапури вино старый город горы кавказ казбек",
-        "turkey": "турция стамбул анталья бодрум каппадокия босфор мечети восточный все включено пляж отель аквапарк",
-        "spb": "петербург санкт-петербург спб эрмитаж каналы мосты белые ночи музеи архитектура нева гранд макет",
-        "altai": "алтай катунь чемал манжерок хвойная тайга треккинг горы реки сибирь шале тишина коттедж природа",
-        "thailand": "таиланд пхукет самуи бангкок тропические острова пляжи храмы фрукты море слоны бухта океан",
-        "maldives": "мальдивы мале бирюзовая лагуна индийский океан виллы над водой гидросамолет рифы атоллы спа дайвинг",
-        "uae": "оаэ дубай абу-даби бурдж-халифа небоскребы персидский залив пустыня моллы шопинг парки развлечений",
-    }
+    # Векторизация направлений (честный 384D SentenceTransformer MiniLM без проекций и паразитных слов)
     dest_embeddings = {
-        d["id"]: generate_text_embedding(
-            f"{d['name']} {d['country']} {d.get('vibe_description', '')} {dest_keywords.get(d['id'], '')}"
-        )
+        d["id"]: generate_text_embedding(d.get("vibe_description", ""))
         for d in destinations
     }
 

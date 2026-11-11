@@ -19,8 +19,8 @@ class DestinationModel(Base):
     avg_check = Column(Integer, nullable=False, default=0)
     vibe_description = Column(Text, nullable=False)
     climate_summary = Column(Text, nullable=False)
-    # 128-dimensional vector representation of destination vibe for fast search
-    embedding = Column(Vector(128), nullable=True)
+    # 384-dimensional vector representation of destination vibe for fast search
+    embedding = Column(Vector(384), nullable=True)
     metadata_json = Column(JSONB, nullable=True)
     
     hotels = relationship("HotelModel", back_populates="destination", cascade="all, delete-orphan")

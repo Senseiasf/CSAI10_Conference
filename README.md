@@ -24,7 +24,7 @@ This repository originally originated from a conversational travel booking proto
 
 ### What is preserved (The Core Scientific Pipeline)
 * **Symbolic Knowledge Graph:** Neo4j logistics graph validating routes, transfers, and layover windows.
-* **Vector Semantic Retrieval:** PostgreSQL with `pgvector` performing 128-d cosine similarity search.
+* **Vector Semantic Retrieval:** PostgreSQL with `pgvector` performing 384-d cosine similarity search (`sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`).
 * **Learning-to-Rank Engine:** CatBoost LTR model with 12 normalized value-for-money features.
 * **Evaluation Suite:** Deterministic 200-query benchmark harness (`run_csai_benchmark.py`), publication figure plotting (`plot_csai_figures.py`), and 28 unit tests.
 
@@ -47,7 +47,7 @@ Modern LLMs struggle with hard temporal, topological, and budgetary constraints,
                                   ▼
       ┌────────────────────────────────────────────────────────┐
       │  Stage 2: Dense Semantic Retrieval (pgvector)          │
-      │  - 128-dimensional destination embeddings              │
+      │  - 384-dimensional destination embeddings (MiniLM)     │
       │  - Cosine similarity ranking over catalog regions      │
       │  - Selects Top-2 candidate destinations                │
       └───────────────────────────┬────────────────────────────┘
@@ -135,14 +135,14 @@ Candidates are evaluated **within the specific context of the user query**:
 
 ## 5. Experimental Results (Ablation Study)
 
-Evaluated on 200 benchmark queries against live PostgreSQL (`pgvector`) and Neo4j Docker containers:
+Evaluated on 200 benchmark queries against live PostgreSQL (`pgvector`, native 384D MiniLM) and Neo4j Docker containers:
 
 | Config ID | Pipeline Configuration | Dest Recall@2 (%) | Logistics Feasibility LFR@3 (%) | Constraint Satisfaction CSR@3 (%) | Task Completion Rate TCR@3 (%) | Pairwise Accuracy (%) | NDCG@2 | Latency (ms) |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **C1** | Baseline (SQL / Uniform / Price Sort) | 36.0% | 35.5% | 58.7% | 7.5% | 65.0% | 0.8708 | 0.02 |
-| **C2** | + Dense Retrieval (`pgvector`) | 74.0% | 35.2% | 69.0% | 18.0% | 65.0% | 0.8708 | 0.02 |
-| **C3** | + Knowledge Graph (Neo4j Heuristic) | 74.0% | 77.5% | 75.8% | 43.5% | 87.5% | 0.9539 | 0.09 |
-| **C4** | **Full Pipeline (+ CatBoost LTR)** | **74.0%** | **77.5%** | **77.5%** | **44.4%** | **89.50%** | **0.9585** | **0.91** |
+| **C2** | + Dense Retrieval (`pgvector` 384D) | 80.0% | 39.5% | 65.5% | 20.7% | 65.0% | 0.8708 | 0.05 |
+| **C3** | + Knowledge Graph (Neo4j Heuristic) | 80.0% | 83.5% | 89.5% | 59.8% | 87.5% | 0.9539 | 0.17 |
+| **C4** | **Full Pipeline (+ CatBoost LTR)** | **80.0%** | **83.5%** | **90.3%** | **60.3%** | **89.50%** | **0.9585** | **1.41** |
 
 ### Mathematical Metric Definitions
 * **Destination Recall@2:** $\frac{|\text{Retrieved}_2 \cap \text{GroundTruth}|}{|\text{GroundTruth}|}$

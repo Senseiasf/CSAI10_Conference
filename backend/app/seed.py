@@ -32,6 +32,8 @@ async def seed_postgres(data: dict):
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
         # Create all tables
         await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(text("UPDATE destinations SET embedding = NULL;"))
+        await conn.execute(text("ALTER TABLE destinations ALTER COLUMN embedding TYPE vector(384);"))
         await conn.execute(text("ALTER TABLE hotels ADD COLUMN IF NOT EXISTS pet_surcharge_per_night_rub INTEGER DEFAULT 0;"))
         await conn.execute(text("ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS trip_state JSONB;"))
         await conn.execute(text("ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS trip_quote JSONB;"))
@@ -44,19 +46,8 @@ async def seed_postgres(data: dict):
             )
             dest_obj = existing.scalar_one_or_none()
 
-            dest_keywords_map = {
-                "egypt": "египет шарм хургада красное море кораллы рифы снорклинг дайвинг лагуна пирамиды все включено",
-                "sochi": "сочи красная поляна сириус адлер черное море кавказ горы россия без загранпаспорта олимпийский парк побережье",
-                "georgia": "грузия тбилиси батуми казбеги гудаури хинкали хачапури вино старый город горы кавказ казбек",
-                "turkey": "турция стамбул анталья бодрум каппадокия босфор мечети восточный все включено пляж отель аквапарк",
-                "spb": "петербург санкт-петербург спб эрмитаж каналы мосты белые ночи музеи архитектура нева гранд макет",
-                "altai": "алтай катунь чемал манжерок хвойная тайга треккинг горы реки сибирь шале тишина коттедж природа",
-                "thailand": "таиланд пхукет самуи бангкок тропические острова пляжи храмы фрукты море слоны бухта океан",
-                "maldives": "мальдивы мале бирюзовая лагуна индийский океан виллы над водой гидросамолет рифы атоллы спа дайвинг",
-                "uae": "оаэ дубай абу-даби бурдж-халифа небоскребы персидский залив пустыня моллы шопинг парки развлечений",
-            }
-            kw = dest_keywords_map.get(dest["id"], "")
-            embedding_text = f"{dest['name']} {dest['country']} {dest['vibe_description']} {dest['climate_summary']} {kw}"
+            # Честный 384-мерный вектор SentenceTransformer MiniLM из калиброванного описания
+            embedding_text = dest["vibe_description"]
             vector = generate_text_embedding(embedding_text)
 
             price_info = dest.get("price_range_rub", {})
