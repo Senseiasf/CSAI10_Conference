@@ -1,0 +1,15 @@
+\begin{table}[htbp]
+\centering
+\caption{Ablation Study of the Proposed Hybrid Neuro-Symbolic Travel Planning Pipeline}
+\label{tab:ablation_results}
+\begin{tabular}{lcccccc}
+\hline
+\textbf{Pipeline Configuration} & \textbf{Recall@2 (\%)} & \textbf{LFR (\%)} & \textbf{CSR (\%)} & \textbf{Pairwise Acc. (\%)} & \textbf{NDCG@2} & \textbf{Latency (ms)} \\
+\hline
+C1: Baseline (SQL/Service) & 40.0 & 100.0 & 46.5 & 70.67 & 0.8917 & 0.03 \\
+C2: + pgvector Search & 70.0 & 93.2 & 53.2 & 70.67 & 0.8917 & 0.04 \\
+C3: + Neo4j Graph (Heuristic) & 70.0 & 100.0 & 100.0 & 93.33 & 0.9754 & 0.24 \\
+C4: Full Pipeline (+ CatBoost LTR) & 70.0 & 100.0 & 100.0 & 77.67 & 0.9176 & 2.42 \\
+\hline
+\end{tabular}
+\end{table}

@@ -1,0 +1,5 @@
+Config_ID,Configuration,Dest_Recall_at_2_pct,Logistics_Feasibility_pct,Constraint_Satisfaction_pct,Pairwise_Accuracy_pct,NDCG_at_2,Batch_Latency_ms
+C1_Baseline_SQL,C1: Baseline (SQL/Service),40.0,100.0,46.5,70.67,0.8917,0.03
+C2_Vector_RAG,C2: + pgvector Search,70.0,93.2,53.2,70.67,0.8917,0.04
+C3_Graph_Heuristic,C3: + Neo4j Graph (Heuristic),70.0,100.0,100.0,93.33,0.9754,0.24
+C4_Full_CatBoost,C4: Full Pipeline (+ CatBoost LTR),70.0,100.0,100.0,77.67,0.9176,2.42
