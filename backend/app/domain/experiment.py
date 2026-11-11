@@ -36,3 +36,4 @@ EXPERIMENT_CONFIGS = {
         ranking_mode="catboost",
     ),
 }
+
