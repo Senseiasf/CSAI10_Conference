@@ -1,10 +1,15 @@
 # CSAI 2026: Hybrid Neuro-Symbolic Architecture for Multi-Constraint Travel Planning
 
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-blue.svg)](https://www.python.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16%20%2B%20pgvector-336791.svg)](https://github.com/pgvector/pgvector)
-[![Neo4j](https://img.shields.io/badge/Neo4j-5.21%20Community-008cc1.svg)](https://neo4j.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16%20%2B%20pgvector%20(384D)-336791.svg)](https://github.com/pgvector/pgvector)
+[![Neo4j](https://img.shields.io/badge/Neo4j-5.21%20Community%20(Strict%20Graph)-008cc1.svg)](https://neo4j.com/)
 [![CatBoost](https://img.shields.io/badge/CatBoost-1.2.10%20(LTR)-ffcc00.svg)](https://catboost.ai/)
+[![SentenceTransformers](https://img.shields.io/badge/SentenceTransformers-MiniLM--L12--v2%20(384D)-orange.svg)](https://huggingface.co/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2)
 [![Docker Compose](https://img.shields.io/badge/Docker-Compose%20v2-2496ed.svg)](https://www.docker.com/)
+
+> **Active Branch:** `feat/exp-minilm-and-graph-validation`  
+> **Key Innovations:** Native 384D SentenceTransformer (`paraphrase-multilingual-MiniLM-L12-v2`), strict Neo4j catalog topology validation, calibrated semantic vibes without lexical attractors, and optimal 200-tree CatBoost LTR.  
+> **Peak Metrics:** **Recall@2: 80.0%** | **CSR@3: 90.3%** | **LFR@3: 83.5%** | **TCR@3: 60.3%** | **Pairwise Acc: 89.50%** | **NDCG@2: 0.9585**.
 
 Official experimental benchmark stand and codebase for the research paper:
 > **"Hybrid Neuro-Symbolic Routing and Learning-to-Rank for Complex Multi-Constraint Travel Synthesis"**  
@@ -74,7 +79,37 @@ Modern LLMs struggle with hard temporal, topological, and budgetary constraints,
 
 ---
 
-## 3. CatBoost LTR Model & Training Specifications
+## 3. Dense Retrieval Evolution: 128D Projection vs. Native 384D MiniLM
+
+### The 128D Projection & "Lexical Attractor" Collapse
+In initial experiments with neural embeddings, a random orthogonal QR projection was tested to compress 384-dimensional `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` down to the legacy 128D pgvector schema:
+$$\mathbf{v}_{128} = \text{QR}(\mathbf{W}_{384 \times 128})^\top \mathbf{v}_{384}$$
+
+While mathematically preserving pairwise distances in expectation, this compression caused an acute **semantic collapse**:
+1. **Dimension Loss:** Discarding 66.7% of dimensions collapsed fine-grained cultural nuances into coarse lexical clusters.
+2. **The "Turkey Attractor" Bug:** In the catalog, Turkey's description was heavily overloaded with generic travel buzzwords (*"все включено"*, *"отель"*, *"пляж"*, *"семейный отдых"*, *"аквапарк"*, *"лагуны"*, *"горы"*). Under 128D projection, Turkey acted as a semantic gravitational attractor, scoring top-1 in **172 out of 200 queries**.
+3. **Catastrophic CSR Collapse (40.8%):** Because Turkey's catalog packages are predominantly premium/deluxe (hotels: 42,000–128,000 RUB/night + 44,500 RUB roundtrip flight), budget queries (50,000–120,000 RUB) assigned to Turkey could not satisfy user budget constraints, driving Constraint Satisfaction Rate (CSR@3) down to 40.8%.
+
+### The Native 384D Solution with Calibrated Vibes
+On this branch (`feat/exp-minilm-and-graph-validation`), the pipeline was upgraded to native 384D:
+1. **Schema Upgrade:** PostgreSQL column migrated natively to `vector(384)`. pgvector performs sub-millisecond exact cosine distance computations ($<=>$) without dimensionality reduction.
+2. **Lexical De-biasing:** All generic attractor words (*"отель"*, *"пляж"*, *"отдых"*, *"все включено"*) were stripped across all 9 catalog regions.
+3. **Distinctive Semantic Markers:** Destination descriptions were calibrated with culturally distinct, natural semantic markers:
+   - *Turkey:* Ottoman architecture, Bosphorus straits, Istanbul mosques, Hagia Sophia, Cappadocia hot air balloons.
+   - *Egypt:* Red Sea coral reefs, marine fish, snorkeling, scuba diving, Giza pyramids, Sphinx.
+   - *Sochi:* Black Sea coast, Caucasus mountains, Sirius promenade, Rosa Khutor hiking (domestic, no foreign passport).
+   - *Altai:* Katun river, Chuysky tract, coniferous taiga, Siberian cedar, secluded chalets, quiet nature.
+   - *St. Petersburg:* Neva granite embankments, drawbridges, Hermitage museum, Mariinsky theatre, white nights.
+   - *Georgia:* Old Tbilisi carved balconies, sulfur baths, Georgian wine, khinkali, Gudauri freeride, Kazbek peak.
+   - *Thailand:* Andaman Sea islands, Buddhist temples, tropical fruits, elephants, wintering, coworiking.
+   - *Maldives:* Indian Ocean atolls, overwater villas on stilts, seaplane transfers, manta rays and whale sharks.
+   - *UAE:* Arabian desert dunes, Burj Khalifa, futuristic skyline, luxury mega-malls, desert safari.
+
+**Result:** Recall@2 surged to **80.0%** (up from 74.0%), while CSR@3 jumped to an all-time high of **90.3%** (up from 40.8% and exceeding baseline 77.5%).
+
+---
+
+## 4. CatBoost LTR Model & Training Specifications
 
 ### Motivation for Retraining
 The legacy baseline CatBoost model suffered from:
@@ -109,7 +144,7 @@ The model was retrained on **69,311 pairs** (`part_4060ti.jsonl` + `part_4080s.j
 
 ---
 
-## 4. Benchmark Dataset & Methodology (CSAI-200)
+## 5. Benchmark Dataset & Methodology (CSAI-200)
 
 ### Dataset Composition
 The benchmark comprises **200 realistic natural language queries** across 5 archetypes (40 queries each):
@@ -133,7 +168,7 @@ Candidates are evaluated **within the specific context of the user query**:
 
 ---
 
-## 5. Experimental Results (Ablation Study)
+## 6. Experimental Results (Ablation Study)
 
 Evaluated on 200 benchmark queries against live PostgreSQL (`pgvector`, native 384D MiniLM) and Neo4j Docker containers:
 
@@ -155,7 +190,7 @@ Evaluated on 200 benchmark queries against live PostgreSQL (`pgvector`, native 3
 
 ---
 
-## 6. Reproducibility & Quick Start
+## 7. Reproducibility & Quick Start
 
 ### 1. Start Docker Containers
 ```bash
@@ -188,7 +223,7 @@ NEO4J_PASSWORD=secretpassword
 ```bash
 python -m app.seed
 ```
-Seeds 9 destinations, 1,327 hotels, 276 flight routes, and 1,360 transfers into PostgreSQL and Neo4j.
+Seeds 9 destinations (with 384D MiniLM embeddings), 1,327 hotels, 276 flight routes, and 1,352 transfers into PostgreSQL and Neo4j.
 
 ### 4. Run Unit Tests (28 tests)
 ```bash
@@ -209,34 +244,58 @@ This automatically produces:
 
 ---
 
-## 7. Safe Branching Guide for Team Collaboration
+## 8. Branch Architecture & Team Synchronization
 
-To experiment with new database schemas, graph queries, or vector indices without risking existing benchmark metrics:
+The project follows a two-tier experimental branch structure to ensure zero risk to paper submission deadlines:
+
+```
+                      [main / master]
+                             │
+            ┌────────────────┴────────────────┐
+            ▼                                 ▼
+[feat/exp-ltr-and-plots]          [feat/exp-minilm-and-graph-validation]
+• Golden Baseline Reference       • Active Advanced Research Branch
+• 128D Deterministic Hash         • Native 384D MiniLM (pgvector 384D)
+• CSR@3: 77.5%                    • Strict Neo4j Catalog Validator
+• Recall@2: 74.0%                 • Calibrated Semantic Vibes
+• Pairwise Acc: 89.50%            • CSR@3: 90.3% | Recall@2: 80.0%
+• Frozen & safe on origin         • Work-in-progress (stand-alone, unmerged)
+```
+
+### Branch Profiles
+
+1. **`feat/exp-ltr-and-plots` (Stable Reference Branch):**
+   - Frozen reference stand based on 128D deterministic hash embeddings.
+   - Guaranteed baseline metrics: Recall@2 = 74.0%, CSR@3 = 77.5%, Pairwise Acc = 89.50%.
+   - Push completed; preserved as safety rollback target.
+
+2. **`feat/exp-minilm-and-graph-validation` (This Branch — Active Experimental):**
+   - Full integration of real SentenceTransformer (`paraphrase-multilingual-MiniLM-L12-v2`).
+   - Native 384-dimensional vector schema in PostgreSQL `pgvector`.
+   - Strict graph catalog validation (`validate_catalog_data` in `graph_service.py`).
+   - Cleaned destination vibes (no lexical attractors).
+   - All-time high metrics: **Recall@2 = 80.0%**, **CSR@3 = 90.3%**, **TCR@3 = 60.3%**, **Pairwise Acc = 89.50%**, **NDCG@2 = 0.9585**.
+   - **Merge Policy:** Remains an independent, self-contained branch for ongoing verification; will not be merged into `main` or `feat/exp-ltr-and-plots` until final review.
+
+### Switching Between Branches Safely
+
+Because the two branches use different vector column schemas (128D vs. 384D), always re-seed databases when switching:
 
 ```bash
-# 1. Ensure you are on the clean stable branch
+# To switch to the 128D baseline reference:
 git checkout feat/exp-ltr-and-plots
-
-# 2. Branch out to an isolated experiment sandbox
-git checkout -b exp/test-db-updates
-
-# 3. Apply your modifications or merge teammate's branch
-git merge origin/<teammate-branch>
-
-# 4. If database seeds changed, reseed the test environment
 python -m app.seed
-
-# 5. Re-run the benchmark
 python backend/app/scripts/run_csai_benchmark.py
 
-# 6. If metrics degrade, simply discard the branch and return:
-git checkout feat/exp-ltr-and-plots
+# To return to this 384D MiniLM branch:
+git checkout feat/exp-minilm-and-graph-validation
 python -m app.seed
+python backend/app/scripts/run_csai_benchmark.py
 ```
 
 ---
 
-## 8. Repository Layout
+## 9. Repository Layout
 
 ```
 .
@@ -245,8 +304,8 @@ python -m app.seed
 │   │   ├── config.py                 # Pydantic v2 application configuration
 │   │   ├── database.py               # Async SQLAlchemy & Neo4j driver pools
 │   │   ├── main.py                   # FastAPI benchmark monitoring API
-│   │   ├── models.py                 # PostgreSQL ORM models with pgvector Vector type
-│   │   ├── seed.py                   # Database & graph seeder
+│   │   ├── models.py                 # PostgreSQL ORM models with pgvector Vector(384)
+│   │   ├── seed.py                   # Database & graph seeder (schema migration & vibes)
 │   │   ├── data/
 │   │   │   ├── destinations.json     # 9 destinations, 1327 hotels, 276 flights
 │   │   │   ├── csai_150_benchmark_queries.json  # 200 queries (40 per archetype)
@@ -262,10 +321,10 @@ python -m app.seed
 │   │   │   └── benchmark_generation/ # 200-query generation & deduplication pipeline
 │   │   └── services/
 │   │       ├── compliance_service.py # Visa and border control rules
-│   │       ├── graph_service.py      # Neo4j Cypher pathfinding & logistics checks
+│   │       ├── graph_service.py      # Neo4j Cypher pathfinding & catalog validator
 │   │       ├── llm_service.py        # NLU slot extraction client
 │   │       ├── ltr_service.py        # CatBoost inference & feature engineering
-│   │       └── vector_service.py     # pgvector cosine similarity search
+│   │       └── vector_service.py     # Native 384D MiniLM pgvector search
 │   └── tests/
 │       ├── test_ltr_edge_cases.py    # Robustness, boundary conditions, fallbacks
 │       └── test_ltr_service.py       # Feature extraction & schema unit tests
@@ -277,7 +336,7 @@ python -m app.seed
 
 ---
 
-## 9. License & Citation
+## 10. License & Citation
 
 This codebase is distributed under the **MIT License**.
 
