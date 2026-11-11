@@ -1,9 +1,56 @@
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 from app.database import get_neo4j_driver
 
 logger = logging.getLogger(__name__)
+
+MIN_LAYOVER_MINUTES = 60
+INTERNATIONAL_AIRPORTS = {
+    "DXB", "DWC", "AUH", "AYT", "IST", "GZP", "DLM", "HKT", "BKK",
+    "USM", "URT", "MLE", "SSH", "HRG", "TBS", "BUS",
+}
+
+REJECTION_MESSAGES = {
+    "no_outbound_route": "В графе нет подходящего рейса до отеля.",
+    "no_return_flight": "В графе нет подходящего обратного рейса.",
+    "invalid_timeline": "Данных каталога недостаточно для расчёта времени маршрута.",
+    "transfer_capacity": "В трансфере недостаточно мест.",
+    "seaplane_closed": "Путешественники не успевают к отправлению гидросамолёта.",
+    "bridge_closed": "Мост закрыт в расчётное время проезда.",
+}
+
+
+def minutes_since_midnight(clock: str) -> int:
+    parsed = datetime.strptime(clock, "%H:%M")
+    return parsed.hour * 60 + parsed.minute
+
+
+def post_flight_buffer(airport_code: str) -> int:
+    return 80 if airport_code in INTERNATIONAL_AIRPORTS else 50
+
+
+def transfer_rejection(candidate: dict, ready_minutes: int, travelers_count: int, strict: bool) -> str | None:
+    capacity = candidate.get("transfer_capacity")
+    if capacity is not None and capacity < travelers_count:
+        return "transfer_capacity"
+    if not strict:
+        return None
+    if candidate["dest_code"] == "MLE" and candidate["transfer_type"] in {"seaplane", "vip_seaplane"}:
+        if ready_minutes > 16 * 60 + 30:
+            return "seaplane_closed"
+    crossing = candidate.get("bridge_crossing_minutes")
+    if crossing is not None:
+        crossing_time = (ready_minutes + crossing) % (24 * 60)
+        closed_from = minutes_since_midnight(candidate["bridge_closed_from"])
+        closed_until = minutes_since_midnight(candidate["bridge_closed_until"])
+        if (crossing_time - closed_from) % (24 * 60) < (closed_until - closed_from) % (24 * 60):
+            return "bridge_closed"
+    return None
+
+
+def rejection(code: str) -> dict:
+    return {"compatible": False, "reason_code": code, "reason": REJECTION_MESSAGES[code]}
 
 
 class GraphService:
@@ -81,6 +128,42 @@ class GraphService:
                         dest_id=dest["id"]
                     )
 
+                # Отели (батчевая вставка через UNWIND)
+                hotels_batch = [
+                    {
+                        "id": hotel["id"],
+                        "name": hotel["name"],
+                        "city": hotel["city"],
+                        "stars": hotel["stars"],
+                        "pet_friendly": hotel["pet_friendly"],
+                        "price": hotel["price_per_night_rub"],
+                        "checkin": hotel["checkin_time"],
+                        "checkout": hotel["checkout_time"],
+                        "dest_id": dest["id"]
+                    }
+                    for hotel in dest.get("hotels", [])
+                ]
+                if hotels_batch:
+                    await session.run(
+                        """
+                        UNWIND $batch AS item
+                        MERGE (h:Hotel {id: item.id})
+                        SET h.name = item.name,
+                            h.city = item.city,
+                            h.stars = item.stars,
+                            h.pet_friendly = item.pet_friendly,
+                            h.price_per_night = item.price,
+                            h.checkin_time = item.checkin,
+                            h.checkout_time = item.checkout
+                        WITH h, item
+                        MATCH (c:City {id: item.dest_id})
+                        MERGE (h)-[:LOCATED_IN]->(c)
+                        """,
+                        batch=hotels_batch
+                    )
+
+            # Связи создаются после загрузки всех аэропортов и отелей.
+            for dest in destinations_data:
                 # Рейсы (FLIGHT_TO с расписанием, ценами, пересадками, пунктуальностью и типами ВС - батчевая вставка)
                 flights_batch = [
                     {
@@ -92,10 +175,10 @@ class GraphService:
                         "arrival_time": fl["arrival_time"],
                         "duration": fl["duration_minutes"],
                         "price": fl["price_rub_roundtrip"],
-                        "flight_type": fl.get("flight_type", "direct"),
+                        "flight_type": fl.get("flight_type"),
                         "layover_airport": fl.get("layover_airport"),
                         "layover_city": fl.get("layover_city"),
-                        "layover_duration_minutes": fl.get("layover_duration_minutes", 0),
+                        "layover_duration_minutes": fl.get("layover_duration_minutes"),
                         "layover_risk_note": fl.get("layover_risk_note", ""),
                         "on_time_pct": fl.get("on_time_pct", 85.0),
                         "aircraft_type": fl.get("aircraft_type", "Airbus A320"),
@@ -131,40 +214,6 @@ class GraphService:
                         batch=flights_batch
                     )
 
-                # Отели (батчевая вставка через UNWIND)
-                hotels_batch = [
-                    {
-                        "id": hotel["id"],
-                        "name": hotel["name"],
-                        "city": hotel["city"],
-                        "stars": hotel["stars"],
-                        "pet_friendly": hotel["pet_friendly"],
-                        "price": hotel["price_per_night_rub"],
-                        "checkin": hotel["checkin_time"],
-                        "checkout": hotel["checkout_time"],
-                        "dest_id": dest["id"]
-                    }
-                    for hotel in dest.get("hotels", [])
-                ]
-                if hotels_batch:
-                    await session.run(
-                        """
-                        UNWIND $batch AS item
-                        MERGE (h:Hotel {id: item.id})
-                        SET h.name = item.name,
-                            h.city = item.city,
-                            h.stars = item.stars,
-                            h.pet_friendly = item.pet_friendly,
-                            h.price_per_night = item.price,
-                            h.checkin_time = item.checkin,
-                            h.checkout_time = item.checkout
-                        WITH h, item
-                        MATCH (c:City {id: item.dest_id})
-                        MERGE (h)-[:LOCATED_IN]->(c)
-                        """,
-                        batch=hotels_batch
-                    )
-
                 # Связи трансферов (батчевая вставка через UNWIND)
                 airport_transfers_batch = []
                 interhotel_transfers_batch = []
@@ -175,7 +224,11 @@ class GraphService:
                         "type": tr["type"],
                         "name": tr["name"],
                         "duration": tr["duration_minutes"],
-                        "price": tr["price_rub"]
+                        "price": tr["price_rub"],
+                        "capacity": tr.get("capacity", tr.get("max_passengers")),
+                        "bridge_crossing_minutes": tr.get("bridge_crossing_minutes"),
+                        "bridge_closed_from": tr.get("bridge_closed_from"),
+                        "bridge_closed_until": tr.get("bridge_closed_until"),
                     }
                     if len(tr.get("from", "")) == 3 and tr["from"].isupper():
                         airport_transfers_batch.append(tr_item)
@@ -190,7 +243,11 @@ class GraphService:
                         MATCH (h:Hotel {id: item.to_id})
                         MERGE (a)-[r:TRANSFER_TO {type: item.type, name: item.name}]->(h)
                         SET r.duration_minutes = item.duration,
-                            r.price_rub = item.price
+                            r.price_rub = item.price,
+                            r.capacity = item.capacity,
+                            r.bridge_crossing_minutes = item.bridge_crossing_minutes,
+                            r.bridge_closed_from = item.bridge_closed_from,
+                            r.bridge_closed_until = item.bridge_closed_until
                         """,
                         batch=airport_transfers_batch
                     )
@@ -244,7 +301,10 @@ class GraphService:
         origin_airport_code: Optional[str] = None,
         prefer_direct_flight: Optional[bool] = None,
         without_transfer: Optional[bool] = False,
-        flight_time_pref: Optional[str] = None
+        flight_time_pref: Optional[str] = None,
+        travelers_count: int = 1,
+        strict_graph_validation: bool = True,
+        return_airport_code: str | None = None,
     ) -> Dict[str, Any]:
         """
         Проверяет сквозную логистику от вылета до заселения:
@@ -256,8 +316,16 @@ class GraphService:
         query = """
         MATCH (orig:Airport)-[f:FLIGHT_TO]->(dest:Airport)
         WHERE ($airport_code IS NULL OR $airport_code = '' OR dest.code = $airport_code)
-          AND ($origin_code IS NULL OR orig.code = $origin_code)
-        MATCH (dest)-[t:TRANSFER_TO]->(h:Hotel {id: $hotel_id})
+          AND (($origin_code IS NULL AND orig.is_origin = true) OR orig.code = $origin_code)
+          AND (NOT $strict OR $prefer_direct IS NULL OR $prefer_direct = false OR f.flight_type = 'direct')
+          AND (NOT $strict OR f.flight_type = 'direct'
+               OR (f.flight_type = 'connecting' AND f.layover_duration_minutes >= $min_layover))
+        MATCH (h:Hotel {id: $hotel_id})
+        OPTIONAL MATCH (dest)-[t:TRANSFER_TO]->(h)
+        WITH orig, dest, f, h, t
+        WHERE t IS NOT NULL OR ($without_transfer AND EXISTS {
+            MATCH (dest)-[:LOCATED_IN]->(:City)<-[:LOCATED_IN]-(h)
+        })
         RETURN orig.code AS origin_code,
                orig.name AS origin_name,
                f.airline AS airline,
@@ -283,9 +351,12 @@ class GraphService:
                t.type AS transfer_type,
                t.name AS transfer_name,
                t.duration_minutes AS transfer_duration,
-               t.price_rub AS transfer_price
-        ORDER BY 
-            CASE WHEN f.layover_duration_minutes > 0 AND f.layover_duration_minutes < 60 THEN 2 ELSE 0 END,
+               t.price_rub AS transfer_price,
+               t.capacity AS transfer_capacity,
+               t.bridge_crossing_minutes AS bridge_crossing_minutes,
+               t.bridge_closed_from AS bridge_closed_from,
+               t.bridge_closed_until AS bridge_closed_until
+        ORDER BY
             CASE 
                 WHEN $flight_time_pref = 'day' THEN (
                     CASE 
@@ -325,7 +396,7 @@ class GraphService:
                 ELSE 0
             END,
             f.price_rub_roundtrip ASC, 
-            t.duration_minutes ASC
+            t.duration_minutes ASC, f.flight_no, t.name
         """
         async with driver.session() as session:
             result = await session.run(
@@ -334,178 +405,94 @@ class GraphService:
                 hotel_id=hotel_id,
                 origin_code=origin_airport_code,
                 prefer_direct=prefer_direct_flight,
-                flight_time_pref=flight_time_pref
+                flight_time_pref=flight_time_pref,
+                without_transfer=bool(without_transfer),
+                strict=strict_graph_validation,
+                min_layover=MIN_LAYOVER_MINUTES,
             )
-            records = await result.data()
+            returns: dict[tuple[str, str, str], dict | None] = {}
+            failure = "no_outbound_route"
+            for candidate in await result.data():
+                try:
+                    arrival = minutes_since_midnight(candidate["flight_arrival_time"])
+                    minutes_since_midnight(candidate["departure_time"])
+                    if candidate["flight_price_roundtrip"] < 0 or candidate["flight_duration"] <= 0:
+                        raise ValueError("invalid flight duration or price")
+                    if not without_transfer:
+                        minutes_since_midnight(candidate["checkin_time"])
+                        if candidate["transfer_duration"] < 0 or candidate["transfer_price"] < 0:
+                            raise ValueError("invalid transfer duration or price")
+                        buffer = post_flight_buffer(candidate["dest_code"])
+                        transfer_failure = transfer_rejection(
+                            candidate, arrival + buffer, travelers_count, strict_graph_validation
+                        )
+                        if transfer_failure:
+                            failure = transfer_failure
+                            continue
+                except (KeyError, TypeError, ValueError) as exc:
+                    logger.warning("Invalid outbound schedule or transfer: %s", exc)
+                    failure = "invalid_timeline"
+                    continue
 
-            if not records:
-                # Fallback только на трансфер если рейс не найден
-                query_fallback = """
-                MATCH (a:Airport)-[r:TRANSFER_TO]->(h:Hotel {id: $hotel_id})
-                WHERE ($airport_code IS NULL OR $airport_code = '' OR a.code = $airport_code)
-                RETURN a.name AS dest_airport_name,
-                       a.code AS dest_code,
-                       h.name AS hotel_name,
-                       h.checkin_time AS checkin_time,
-                       r.type AS transfer_type,
-                       r.name AS transfer_name,
-                       r.duration_minutes AS transfer_duration,
-                       r.price_rub AS transfer_price
-                ORDER BY r.duration_minutes ASC
-                """
-                res_fb = await session.run(query_fallback, airport_code=airport_code, hotel_id=hotel_id)
-                records_fb = await res_fb.data()
-                if not records_fb:
-                    return {"compatible": False, "reason": "Маршрут не найден в графе."}
-                best = records_fb[0]
-
-                if flight_time_pref == "day":
-                    fb_dep, fb_arr = "13:30", "18:00"
-                elif flight_time_pref == "later":
-                    fb_dep, fb_arr = "11:30", "16:00"
-                elif flight_time_pref == "evening":
-                    fb_dep, fb_arr = "18:00", "22:30"
-                elif flight_time_pref == "morning":
-                    fb_dep, fb_arr = "08:30", "13:00"
-                else:
-                    fb_dep, fb_arr = "09:00", "13:30"
-
-                flight_info = {
-                    "airline": "Регулярный рейс",
-                    "flight_no": "Рейс по расписанию",
-                    "origin_name": "Москва (SVO/DME)",
-                    "departure_time": fb_dep,
-                    "arrival_time": fb_arr,
-                    "price_rub_roundtrip": 25000,
-                    "flight_type": "direct",
-                    "layover_airport": None,
-                    "layover_city": None,
-                    "layover_duration_minutes": 0,
-                    "layover_risk_note": "Прямой рейс без пересадок."
-                }
+                return_key = (return_airport_code or candidate["dest_code"], candidate["origin_code"], candidate["airline"])
+                if return_key not in returns:
+                    returns[return_key] = await GraphService._find_return_flight(
+                        session, *return_key, strict_graph_validation, bool(prefer_direct_flight)
+                    )
+                return_flight = returns[return_key]
+                if return_flight is None:
+                    failure = "no_return_flight"
+                    continue
+                best = candidate
+                break
             else:
-                best = records[0]
-                flight_info = {
-                    "airline": best["airline"],
-                    "flight_no": best["flight_no"],
-                    "origin_code": best.get("origin_code", "SVO"),
-                    "origin_name": best.get("origin_name", "Москва"),
-                    "departure_time": best["departure_time"],
-                    "arrival_time": best["flight_arrival_time"],
-                    "duration_minutes": best["flight_duration"],
-                    "price_rub_roundtrip": best["flight_price_roundtrip"],
-                    "flight_type": best.get("flight_type", "direct"),
-                    "layover_airport": best.get("layover_airport"),
-                    "layover_city": best.get("layover_city"),
-                    "layover_duration_minutes": best.get("layover_duration_minutes", 0),
-                    "layover_risk_note": best.get("layover_risk_note", ""),
-                    "on_time_pct": best.get("on_time_pct"),
-                    "aircraft_type": best.get("aircraft_type"),
-                    "baggage_allowance": best.get("baggage_allowance"),
-                    "meal_service": best.get("meal_service"),
-                    "seat_pitch": best.get("seat_pitch")
-                }
+                return rejection(failure)
 
-            # Поиск или синтез обратного рейса (roundtrip)
-            return_flight_info = None
-            if best.get("dest_code") and best.get("origin_code"):
-                ret_query = """
-                MATCH (dest:Airport {code: $dest_code})-[rf:FLIGHT_TO]->(orig:Airport {code: $orig_code})
-                RETURN rf.airline AS airline,
-                       rf.flight_no AS flight_no,
-                       rf.departure_time AS departure_time,
-                       rf.arrival_time AS arrival_time,
-                       rf.duration_minutes AS duration_minutes,
-                       rf.flight_type AS flight_type,
-                       rf.on_time_pct AS on_time_pct,
-                       rf.aircraft_type AS aircraft_type,
-                       rf.baggage_allowance AS baggage_allowance,
-                       rf.meal_service AS meal_service,
-                       rf.seat_pitch AS seat_pitch
-                ORDER BY 
-                    CASE WHEN rf.airline = $airline THEN 0 ELSE 1 END,
-                    CASE WHEN rf.departure_time >= '12:00' THEN 0 ELSE 1 END,
-                    rf.departure_time ASC
-                LIMIT 1
-                """
-                ret_res = await session.run(
-                    ret_query,
-                    dest_code=best["dest_code"],
-                    orig_code=best["origin_code"],
-                    airline=best["airline"]
-                )
-                ret_data = await ret_res.data()
-                if ret_data:
-                    rf = ret_data[0]
-                    return_flight_info = {
-                        "airline": rf["airline"],
-                        "flight_no": rf["flight_no"],
-                        "origin_code": best["dest_code"],
-                        "dest_code": best["origin_code"],
-                        "departure_time": rf["departure_time"],
-                        "arrival_time": rf["arrival_time"],
-                        "duration_minutes": rf["duration_minutes"],
-                        "flight_type": rf.get("flight_type", "direct"),
-                        "on_time_pct": rf.get("on_time_pct"),
-                        "aircraft_type": rf.get("aircraft_type"),
-                        "baggage_allowance": rf.get("baggage_allowance"),
-                        "meal_service": rf.get("meal_service"),
-                        "seat_pitch": rf.get("seat_pitch")
-                    }
-
-            if not return_flight_info:
-                out_no = flight_info.get("flight_no", "SU-1000")
-                parts = out_no.split("-")
-                if len(parts) == 2 and parts[1].isdigit():
-                    num = int(parts[1])
-                    ret_no = f"{parts[0]}-{num + 1 if num % 2 == 0 else num - 1}"
-                else:
-                    ret_no = f"{flight_info.get('airline', 'Авиа')} (обратный)"
-                
-                dur = flight_info.get("duration_minutes", 180)
-                dep = "15:45"
-                dep_h, dep_m = 15, 45
-                arr_h = (dep_h + (dep_m + dur) // 60) % 24
-                arr_m = (dep_m + dur) % 60
-                arr = f"{arr_h:02d}:{arr_m:02d}"
-                return_flight_info = {
-                    "airline": flight_info.get("airline", "Регулярный рейс"),
-                    "flight_no": ret_no,
-                    "origin_code": best.get("dest_code", "DEST"),
-                    "dest_code": best.get("origin_code", "SVO"),
-                    "departure_time": dep,
-                    "arrival_time": arr,
-                    "duration_minutes": dur,
-                    "flight_type": flight_info.get("flight_type", "direct"),
-                    "on_time_pct": flight_info.get("on_time_pct"),
-                    "aircraft_type": flight_info.get("aircraft_type"),
-                    "baggage_allowance": flight_info.get("baggage_allowance"),
-                    "meal_service": flight_info.get("meal_service"),
-                    "seat_pitch": flight_info.get("seat_pitch")
-                }
-
-            flight_info["return_flight"] = return_flight_info
-
+            flight_info = {
+                "airline": best["airline"],
+                "flight_no": best["flight_no"],
+                "origin_name": best["origin_name"],
+                "origin_code": best["origin_code"],
+                "departure_time": best["departure_time"],
+                "arrival_time": best["flight_arrival_time"],
+                "duration_minutes": best["flight_duration"],
+                "price_rub_roundtrip": best["flight_price_roundtrip"],
+                "flight_type": best["flight_type"],
+                "layover_airport": best.get("layover_airport"),
+                "layover_city": best.get("layover_city"),
+                "layover_duration_minutes": best.get("layover_duration_minutes"),
+                "layover_risk_note": best.get("layover_risk_note", ""),
+                "on_time_pct": best.get("on_time_pct"),
+                "aircraft_type": best.get("aircraft_type"),
+                "baggage_allowance": best.get("baggage_allowance"),
+                "meal_service": best.get("meal_service"),
+                "seat_pitch": best.get("seat_pitch"),
+                "return_flight": return_flight,
+            }
             if without_transfer:
-                best["transfer_name"] = "Самостоятельно (такси / каршеринг / общественный транспорт)"
-                best["transfer_type"] = "self"
-                best["transfer_duration"] = 30
-                best["transfer_price"] = 0
+                return {
+                    "compatible": True,
+                    "flight": flight_info,
+                    "airport": best["dest_airport_name"],
+                    "hotel": best["hotel_name"],
+                    "transfer": {"type": "self", "name": "Самостоятельный проезд", "price_rub": 0},
+                    "logistics_status": "Перелёты найдены. Проезд до отеля путешественник организует самостоятельно.",
+                    "mandatory_logistics_cost": flight_info["price_rub_roundtrip"],
+                }
 
             checkin_str = best.get("checkin_time") or "15:00"
             flight_arr_str = flight_info["arrival_time"]
 
             try:
-                dest_code = best.get("dest_code", "")
-                is_international = dest_code in ("DXB", "DWC", "AUH", "AYT", "IST", "GZP", "DLM", "HKT", "BKK", "USM", "URT", "MLE", "SSH", "HRG", "TBS", "BUS")
-                
+                is_international = best["dest_code"] in INTERNATIONAL_AIRPORTS
+
                 # Детализированный буфер после прилёта: высадка, паспортный контроль, выдача багажа на ленте, таможня
                 if is_international:
                     deplaning_min = 15
                     passport_control_min = 25
                     baggage_claim_min = 30
                     customs_exit_min = 10
-                    total_post_flight_buffer_min = deplaning_min + passport_control_min + baggage_claim_min + customs_exit_min  # 80 минут
+                    total_post_flight_buffer_min = post_flight_buffer(best["dest_code"])
                     buffer_desc = (
                         f"Международный буфер {total_post_flight_buffer_min} мин "
                         f"(руление и высадка 15 мин ➔ паспортный контроль 25 мин ➔ выдача багажа на ленте 30 мин ➔ таможня и выход к трансферу 10 мин)"
@@ -523,7 +510,7 @@ class GraphService:
                     passport_control_min = 0
                     baggage_claim_min = 25
                     customs_exit_min = 10
-                    total_post_flight_buffer_min = deplaning_min + passport_control_min + baggage_claim_min + customs_exit_min  # 50 минут
+                    total_post_flight_buffer_min = post_flight_buffer(best["dest_code"])
                     buffer_desc = (
                         f"Внутренний буфер {total_post_flight_buffer_min} мин "
                         f"(высадка и выход в терминал 15 мин ➔ выдача багажа на карусели 25 мин ➔ выход к автостоянке трансфера 10 мин)"
@@ -545,36 +532,11 @@ class GraphService:
                 hotel_arr_str = hotel_arrival_dt.strftime("%H:%M")
                 transfer_start_str = transfer_start_dt.strftime("%H:%M")
 
-                # Расчёт сценария форс-мажора: задержка рейса на 60 мин
-                delay_flight_arr_dt = arr_dt + timedelta(minutes=60)
-                delay_transfer_start_dt = transfer_start_dt + timedelta(minutes=60)
-                delay_hotel_arr_dt = hotel_arrival_dt + timedelta(minutes=60)
-                delay_hotel_arr_str = delay_hotel_arr_dt.strftime("%H:%M")
-
-                flight_no = flight_info.get("flight_no", "рейса")
-
-                force_majeure_resilience = {
-                    "flight_delay_scenario": (
-                        f"При задержке вылета/прилёта на 1 час (приземление в {delay_flight_arr_dt.strftime('%H:%M')}) "
-                        f"отправление трансфера автоматически сдвигается на {delay_transfer_start_dt.strftime('%H:%M')}, "
-                        f"прибытие в отель — в {delay_hotel_arr_str}. "
-                        f"Водитель отслеживает борт {flight_no} по онлайн-табло: бесплатное ожидание до 90 минут. "
-                        f"В отеле гарантирован круглосуточный Late Check-in (бронь не аннулируется)."
-                    ),
-                    "baggage_delay_safety": (
-                        "💼 Совет по багажу: ценные вещи, документы, медикаменты, зарядные устройства "
-                        "и комплект одежды на первые сутки держите в ручной клади. "
-                        "При задержке багажа на ленте оформите акт PIR на стойке Lost & Found до выхода из транзитной зоны."
-                    )
-                }
-
                 # Оценка пересадки (стыковки)
                 is_connecting = flight_info.get("flight_type") == "connecting"
                 if is_connecting:
-                    layover_dur = flight_info.get("layover_duration_minutes", 105)
-                    layover_hours = layover_dur // 60
-                    layover_mins = layover_dur % 60
-                    dur_str = f"{layover_hours}ч {layover_mins}м" if layover_hours else f"{layover_mins}м"
+                    layover_dur = flight_info["layover_duration_minutes"]
+                    dur_str = f"{layover_dur // 60}ч {layover_dur % 60}м" if layover_dur is not None else None
                     layover_details = {
                         "is_connecting": True,
                         "airport": flight_info.get("layover_airport"),
@@ -600,7 +562,7 @@ class GraphService:
                         f"прилёт в {best['dest_airport_name']} в {flight_arr_str}. "
                         f"Закладываем {total_post_flight_buffer_min} мин на прохождение процедур и получение багажа. "
                         f"Отправление трансфера в {transfer_start_str}, прибытие в отель в {hotel_arr_str}. "
-                        f"До заселения (с {checkin_str}) остаётся {diff_hours:.1f} ч (вещи можно оставить на ресепшн отеля)."
+                        f"До заселения (с {checkin_str}) остаётся {diff_hours:.1f} ч."
                     )
                 else:
                     diff_hours = (hotel_arrival_dt - checkin_dt).total_seconds() / 3600
@@ -609,7 +571,7 @@ class GraphService:
                         f"прилёт в {best['dest_airport_name']} в {flight_arr_str}. "
                         f"Закладываем {total_post_flight_buffer_min} мин на прохождение процедур и получение багажа. "
                         f"Отправление трансфера в {transfer_start_str}, прибытие в отель в {hotel_arr_str}. "
-                        f"Номер готов к заселению (check-in с {checkin_str})."
+                        f"Прибытие после начала заселения (check-in с {checkin_str})."
                     )
 
                 return {
@@ -621,7 +583,9 @@ class GraphService:
                         "name": best["transfer_name"],
                         "type": best["transfer_type"],
                         "duration_min": best["transfer_duration"],
-                        "price_rub": best["transfer_price"]
+                        "price_rub": best["transfer_price"],
+                        "capacity": best.get("transfer_capacity"),
+                        "capacity_status": "known" if best.get("transfer_capacity") is not None else "unknown",
                     },
                     "timeline": {
                         "flight_departure": flight_info["departure_time"],
@@ -635,28 +599,52 @@ class GraphService:
                         "hotel_arrival_day_offset": (hotel_arrival_dt.date() - arr_dt.date()).days,
                         "hotel_checkin_policy": checkin_str,
                         "checkin_wait_minutes": max(0, int((checkin_dt - hotel_arrival_dt).total_seconds() / 60)),
-                        "force_majeure_resilience": force_majeure_resilience,
                         "layover_details": layover_details
                     },
                     "logistics_status": status,
                     "mandatory_logistics_cost": flight_info["price_rub_roundtrip"] + best["transfer_price"]
                 }
-            except Exception as e:
-                logger.error(f"Error in timeline calculation: {e}")
-                return {
-                    "compatible": True,
-                    "flight": flight_info,
-                    "airport": best.get("dest_airport_name", airport_code),
-                    "hotel": best.get("hotel_name", hotel_id),
-                    "transfer": {
-                        "name": best["transfer_name"],
-                        "type": best["transfer_type"],
-                        "duration_min": best["transfer_duration"],
-                        "price_rub": best["transfer_price"]
-                    },
-                    "logistics_status": "Логистика состыкована",
-                    "mandatory_logistics_cost": flight_info["price_rub_roundtrip"] + best["transfer_price"]
-                }
+            except (KeyError, TypeError, ValueError) as exc:
+                logger.warning("Invalid route timeline: %s", exc)
+                return rejection("invalid_timeline")
+
+    @staticmethod
+    async def _find_return_flight(
+        session, origin: str, destination: str, airline: str, strict: bool, direct_only: bool,
+    ) -> dict | None:
+        result = await session.run(
+            """
+            MATCH (:Airport {code: $origin})-[f:FLIGHT_TO]->(:Airport {code: $destination})
+            WHERE (NOT $strict OR f.flight_type = 'direct'
+                OR (f.flight_type = 'connecting' AND f.layover_duration_minutes >= $min_layover))
+              AND (NOT $strict OR NOT $direct_only OR f.flight_type = 'direct')
+            RETURN f.airline AS airline, f.flight_no AS flight_no,
+                   f.departure_time AS departure_time, f.arrival_time AS arrival_time,
+                   f.duration_minutes AS duration_minutes, f.flight_type AS flight_type,
+                   f.layover_duration_minutes AS layover_duration_minutes,
+                   f.on_time_pct AS on_time_pct, f.aircraft_type AS aircraft_type,
+                   f.baggage_allowance AS baggage_allowance, f.meal_service AS meal_service,
+                   f.seat_pitch AS seat_pitch
+            ORDER BY CASE WHEN f.airline = $airline THEN 0 ELSE 1 END,
+                     CASE WHEN f.departure_time >= '12:00' THEN 0 ELSE 1 END,
+                     f.departure_time, f.flight_no
+            """,
+            origin=origin,
+            destination=destination,
+            airline=airline,
+            strict=strict,
+            direct_only=direct_only,
+            min_layover=MIN_LAYOVER_MINUTES,
+        )
+        for row in await result.data():
+            try:
+                minutes_since_midnight(row["departure_time"])
+                minutes_since_midnight(row["arrival_time"])
+                if row["duration_minutes"] > 0:
+                    return {**row, "origin_code": origin, "dest_code": destination}
+            except (KeyError, TypeError, ValueError):
+                continue
+        return None
 
     @staticmethod
     async def get_graph_stats() -> Dict[str, int]:

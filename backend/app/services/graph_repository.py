@@ -43,6 +43,7 @@ class Neo4jGraphRepository(GraphRepository):
         return [RouteGraph.model_validate(result["route"])]
 
     async def check_compatibility(self, airport_code: str, hotel_id: str, **preferences) -> dict[str, Any]:
+        travelers = max(1, preferences.get("travelers_count") or 1)
         result = await GraphService.validate_logistics(
             airport_code=airport_code,
             hotel_id=hotel_id,
@@ -50,8 +51,10 @@ class Neo4jGraphRepository(GraphRepository):
             prefer_direct_flight=preferences.get("prefer_direct_flight"),
             without_transfer=preferences.get("without_transfer", False),
             flight_time_pref=preferences.get("flight_time_pref"),
+            travelers_count=travelers,
+            strict_graph_validation=preferences.get("strict_graph_validation", True),
+            return_airport_code=preferences.get("return_airport_code"),
         )
-        travelers = max(1, preferences.get("travelers_count") or 1)
         transfer = result.get("transfer") or {}
         capacity = transfer.get("capacity") or transfer.get("max_passengers")
         if result.get("compatible") and capacity is not None and travelers > capacity:
@@ -60,7 +63,7 @@ class Neo4jGraphRepository(GraphRepository):
                 "reason": f"Трансфер вмещает {capacity} пассажиров, а едет {travelers}.",
                 "travelers_count": travelers,
             }
-        if transfer:
+        if transfer and transfer.get("type") != "self":
             transfer["capacity_status"] = "known" if capacity is not None else "unknown"
             if transfer.get("price_per_person_rub") is not None:
                 transfer["price_rub"] = transfer["price_per_person_rub"] * travelers
@@ -95,8 +98,6 @@ class Neo4jGraphRepository(GraphRepository):
         return alternatives
 
     async def replace_hotel(self, cart: dict, new_hotel: dict, profile: dict, **preferences) -> dict[str, Any]:
-        previous_logistics = deepcopy(cart.get("logistics") or {})
-        previous_flight = previous_logistics.get("flight") or {}
         result = await self.check_compatibility(
             preferences.get("airport_code") or "",
             new_hotel["id"],
@@ -104,6 +105,7 @@ class Neo4jGraphRepository(GraphRepository):
             prefer_direct_flight=profile.get("prefer_direct_flight"),
             without_transfer=profile.get("without_transfer", False),
             flight_time_pref=profile.get("flight_time_pref"),
+            travelers_count=max(1, profile.get("adults_count") or 2) + (profile.get("kids_count") or 0),
             destination_id=cart.get("destination_id"),
             destination_name=cart.get("destination"),
             hotel_city=new_hotel.get("city"),
@@ -113,9 +115,6 @@ class Neo4jGraphRepository(GraphRepository):
         )
         if not result.get("compatible"):
             return result
-        new_flight = result.get("flight") or {}
-        if self._same_flight_route(previous_flight, new_flight):
-            result["flight"] = deepcopy(previous_flight)
         updated_cart = deepcopy(cart)
         updated_cart.update({
             "hotel_id": new_hotel["id"],
@@ -130,23 +129,9 @@ class Neo4jGraphRepository(GraphRepository):
         result["route"] = route.model_dump(mode="json")
         return result
 
-    def _same_flight_route(self, previous: dict, new: dict) -> bool:
-        if not previous or not new:
-            return False
-        previous_return = previous.get("return_flight") or {}
-        new_return = new.get("return_flight") or {}
-        return (
-            previous.get("origin_code") == new.get("origin_code")
-            and previous_return.get("origin_code") == new_return.get("origin_code")
-            and previous.get("flight_no") == new.get("flight_no")
-        )
-
     def preserve_compatible_hotel_change(self, cart: dict, new_hotel: dict, profile: dict, result: dict) -> dict:
         if not result.get("compatible"):
             return result
-        previous_flight = (cart.get("logistics") or {}).get("flight") or {}
-        if self._same_flight_route(previous_flight, result.get("flight") or {}):
-            result["flight"] = deepcopy(previous_flight)
         updated_cart = deepcopy(cart)
         updated_cart.update({
             "hotel_id": new_hotel["id"],

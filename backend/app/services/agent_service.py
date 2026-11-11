@@ -1154,8 +1154,14 @@ class AgentService:
             without_transfer=profile.get("without_transfer", False),
             flight_time_pref=profile.get("flight_time_pref"),
             travelers_count=max(1, profile.get("adults_count") or 2) + (profile.get("kids_count") or 0),
+            return_airport_code=cfg["city_2"]["airport"],
         )
-        outbound_flight = logistics_1.get("flight", {})
+        if not logistics_1.get("compatible"):
+            reply = logistics_1.get("reason") or "Не удалось подтвердить перелёты и трансфер для составного тура."
+            previous_cart = getattr(session_obj, "current_cart", None) or {}
+            await AgentService._save_session(user_id, profile, previous_cart, message, reply)
+            return {"text": reply, "state": "NO_MATCHES", "cart": previous_cart, "compared_hotels": []}
+        outbound_flight = logistics_1["flight"]
 
         # Проверяем в графе Neo4j наличие прямого межгородского транспортного ребра
         graph_intercity = await GraphService.find_intercity_logistics(
@@ -1176,11 +1182,11 @@ class AgentService:
         else:
             intercity = cfg["intercity"]
 
-        ret_fl = outbound_flight.get("return_flight", {})
-        ret_airline = ret_fl.get("airline", outbound_flight.get("airline", "Аэрофлот"))
-        ret_no = ret_fl.get("flight_no", "SU-2137")
-        ret_dep = ret_fl.get("departure_time", "15:45")
-        ret_arr = ret_fl.get("arrival_time", "20:30")
+        ret_fl = outbound_flight["return_flight"]
+        ret_airline = ret_fl["airline"]
+        ret_no = ret_fl["flight_no"]
+        ret_dep = ret_fl["departure_time"]
+        ret_arr = ret_fl["arrival_time"]
         dest_code = cfg["city_2"]["airport"]
         orig_code = profile.get("origin_airport") or outbound_flight.get("origin_code", "SVO")
 
@@ -1435,7 +1441,7 @@ class AgentService:
             {"stage": "nlu", "title": "Анализ запроса и профиля", "detail": f"Составной тур «{cfg['title']}». Состав: {profile.get('party_size', 'стандартный')}, номеров: {rooms_cnt} ({profile.get('room_type', '1 номер')})."},
             {"stage": "ltr_ranking", "title": "ML-ранжирование (CatBoost LTR)", "detail": f"Движок {ltr_meta['engine']}: оценено {ltr_meta['candidates_count']} кандидатов для двух городов за {ltr_meta['latency_ms']} мс. Архетип: {ltr_meta['archetype']}; приоритет: {policy}."},
             {"stage": "multi_city", "title": "Сквозной маршрут", "detail": f"Программа: {cfg['city_1']['name']} ({nights_1} н.) ➔ {cfg['city_2']['name']} ({nights_2} н.)."},
-            {"stage": "logistics", "title": "Межгородская логистика в Neo4j", "detail": f"Сегмент: {intercity['name']} ({intercity['duration']}). Сквозная синхронизация чек-ина."},
+            {"stage": "logistics", "title": "Межгородская логистика", "detail": f"Сегмент: {intercity['name']} ({intercity['duration']}). Источник: {'граф Neo4j' if graph_intercity else 'демонстрационный справочник маршрутов'}."},
             {"stage": "compliance", "title": "Паспортный и визовый комплаенс", "detail": f"{compliance_info.get('passport_required')} ({compliance_info.get('passport_validity')}), {compliance_info.get('visa_policy')}."},
             {"stage": "budget", "title": "Двухкомпонентный расчёт", "detail": f"Обязательные расходы: {mand_total:,} ₽, на месте: {onsite_min:,}–{onsite_max:,} ₽."}
         ]

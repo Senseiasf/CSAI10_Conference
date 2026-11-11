@@ -33120,7 +33120,8 @@
           "type": "speedboat",
           "name": "Скоростной катер (круглосуточно)",
           "duration_minutes": 45,
-          "price_rub": 14000
+          "price_rub": 14000,
+          "capacity": 8
         },
         {
           "from": "MLE",
@@ -54016,7 +54017,20 @@
           "type": "taxi",
           "name": "Такси на Васильевский остров (через ЗСД)",
           "duration_minutes": 30,
-          "price_rub": 1700
+          "price_rub": 1700,
+          "capacity": 4
+        },
+        {
+          "from": "LED",
+          "to": "spb_cosmos_pribaltiyskaya",
+          "type": "taxi",
+          "name": "Такси на Васильевский остров через разводной мост (демо)",
+          "duration_minutes": 25,
+          "price_rub": 1500,
+          "capacity": 4,
+          "bridge_crossing_minutes": 20,
+          "bridge_closed_from": "01:10",
+          "bridge_closed_until": "05:00"
         },
         {
           "from": "LED",

@@ -50,7 +50,7 @@ class TripConditionsTest(unittest.IsolatedAsyncioTestCase):
 class CheckinWaitTest(unittest.IsolatedAsyncioTestCase):
     async def logistics(self, arrival, transfer_minutes, flight_fields=None):
         row = {"airline": "Test Air", "flight_no": "TA-1", "origin_name": "Москва",
-               "departure_time": "01:00", "flight_arrival_time": arrival,
+               "departure_time": "01:00", "flight_arrival_time": arrival, "origin_code": "SVO", "flight_type": "direct",
                "flight_duration": 180, "flight_price_roundtrip": 20000,
                "dest_code": "AER", "dest_airport_name": "Сочи", "hotel_name": "Hotel",
                "checkin_time": "15:00", "transfer_name": "Taxi", "transfer_type": "taxi",
@@ -60,7 +60,11 @@ class CheckinWaitTest(unittest.IsolatedAsyncioTestCase):
         records.data.return_value = [row]
         db = AsyncMock()
         db.__aenter__.return_value = db
-        db.run.return_value = records
+        returning = AsyncMock()
+        returning.data.return_value = [{"flight_no": "TA-2", "airline": "Test Air",
+                                        "departure_time": "15:00", "arrival_time": "18:00",
+                                        "duration_minutes": 180, "flight_type": "direct"}]
+        db.run.side_effect = [records, returning]
         driver = MagicMock()
         driver.session.return_value = db
         with patch("app.services.graph_service.get_neo4j_driver", return_value=driver):

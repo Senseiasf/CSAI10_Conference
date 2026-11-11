@@ -375,6 +375,8 @@ class MCPTools:
         without_transfer: Optional[bool] = False,
         flight_time_pref: Optional[str] = None,
         travelers_count: Optional[int] = None,
+        strict_graph_validation: bool = True,
+        return_airport_code: str | None = None,
     ) -> Dict[str, Any]:
         """
         MCP Tool: Запрашивает графовую базу Neo4j для проверки сквозной цепочки:
@@ -389,6 +391,8 @@ class MCPTools:
             without_transfer=without_transfer,
             flight_time_pref=flight_time_pref,
             travelers_count=travelers_count,
+            strict_graph_validation=strict_graph_validation,
+            return_airport_code=return_airport_code,
         )
 
     @staticmethod

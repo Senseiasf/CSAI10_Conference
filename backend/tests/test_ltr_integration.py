@@ -26,7 +26,9 @@ def hotel(index, price=3000):
 def logistics():
     return {"compatible": True, "airport": "Сочи", "flight": {"price_rub_roundtrip": 20000,
             "airline": "Test Air", "flight_no": "TA-1", "origin_name": "Москва", "origin_code": "SVO",
-            "departure_time": "01:00", "arrival_time": "05:00", "flight_type": "direct"},
+            "departure_time": "01:00", "arrival_time": "05:00", "flight_type": "direct",
+            "return_flight": {"flight_no": "TA-2", "airline": "Test Air", "origin_code": "AER",
+                              "departure_time": "15:00", "arrival_time": "18:00"}},
             "transfer": {"price_rub": 2000, "name": "Taxi", "type": "taxi"},
             "timeline": {"flight_departure": "01:00", "flight_arrival": "05:00", "transfer_start": "05:50",
                          "hotel_arrival": "06:00", "hotel_checkin_policy": "15:00", "checkin_wait_minutes": 540}}
