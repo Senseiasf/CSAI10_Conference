@@ -12,75 +12,166 @@ Official experimental benchmark stand and codebase for the research paper:
 
 ---
 
-## 1. Scientific Overview & Pipeline Architecture
+## 1. Project Transformation & Repository Scope
 
-Modern large language models (LLMs) struggle with hard mathematical, temporal, and topological constraints in complex logistics, frequently hallucinating incompatible connections or exceeding budget limits. This research introduces a 4-tier **Neuro-Symbolic Architecture** that decouples soft intent extraction and personalized ranking from strict symbolic verification:
+This repository originally originated from a conversational travel booking prototype and has been rigorously **refactored into an academic research stand** to guarantee 100% deterministic reproducibility for the CSAI 2026 evaluation:
 
-```
-[Raw User Query]
-       │
-       ▼
- 1. Neural Intent Extraction (NLU / LLM)
-       │ (Archetype, budget, travelers, origin, preferred dates/vibes)
-       ▼
- 2. Vector Semantic Retrieval (PostgreSQL + pgvector)
-       │ (Cosine similarity over 128-d destination embeddings, Top-2 candidate cities)
-       ▼
- 3. Symbolic Feasibility Verification (Neo4j Logistics Knowledge Graph)
-       │ (Flight schedule validation, layover thresholds ≥ 60 min, ground transfer topology)
-       ▼
- 4. Learning-to-Rank Tour Selection (CatBoost Pairwise LTR Ranker)
-       │ (12 normalized value-for-money features, optimal 200-tree early stopped model)
-       ▼
-[Optimal Feasible Itinerary]
-```
+### What was removed (Production & Hackathon Overhead)
+* **Web UI & Static Assets:** Deleted Jinja2 templates (`backend/app/templates/`) and static frontend assets (`backend/app/static/`).
+* **Telegram Bot:** Deleted polling and webhook handlers (`backend/app/bot/`).
+* **Interactive Dialogue Services:** Deleted stateful conversation tracking, multi-turn state machines, and booking stubs (`agent_service.py`, `dialogue_parser.py`, `trip_controller.py`, `preference_memory.py`, `booking_stub.py`, `calendar_service.py`).
+* **Product-Level UI Tests:** Removed 17 product and dialogue test files, retaining pure ML and LTR regression tests.
 
-### Component Breakdown
-1. **NLU Module (`LLMService`):** Extracts multi-attribute constraint slots from natural language queries (archetype, budget, traveler count, flight time preference, pet-friendly requirements).
-2. **Dense Vector Retrieval (`VectorService` + `pgvector`):** Matches semantic destination vibes across 9 catalog regions against 128-dimensional latent embeddings.
-3. **Symbolic Knowledge Graph (`GraphService` + Neo4j):** Validates flight-transfer-hotel connectivity across 22 airports, 276 flight segments, and 1,360 ground transfers. Hard constraints (buffer times, nocturnal boat limits on atolls) eliminate physically impossible itineraries before ranking.
-4. **Learning-to-Rank (`LTRService` + CatBoost):** 12-feature pairwise gradient boosted ranker trained on 69,311 synthetic preference pairs using `PairLogit` loss. Overcomes price tree saturation via normalized features (`log_price`, `log_price_per_day`, `stars_per_10k`).
+### What is preserved (The Core Scientific Pipeline)
+* **Symbolic Knowledge Graph:** Neo4j logistics graph validating routes, transfers, and layover windows.
+* **Vector Semantic Retrieval:** PostgreSQL with `pgvector` performing 128-d cosine similarity search.
+* **Learning-to-Rank Engine:** CatBoost LTR model with 12 normalized value-for-money features.
+* **Evaluation Suite:** Deterministic 200-query benchmark harness (`run_csai_benchmark.py`), publication figure plotting (`plot_csai_figures.py`), and 28 unit tests.
 
 ---
 
-## 2. Experimental Benchmark Results (Method 2: In-Query Ranking)
+## 2. Pipeline Architecture & Workflow
 
-Evaluated against the **CSAI-200 Benchmark Dataset** (40 queries across 5 user archetypes: `family`, `budget`, `luxury`, `pet`, `solo`) running live against PostgreSQL and Neo4j Docker containers.
+Modern LLMs struggle with hard temporal, topological, and budgetary constraints, frequently hallucinating unfeasible flight connections or violating luggage/pet policies. Our architecture decouples **soft natural language understanding** and **multi-criteria ranking** from **strict symbolic validation**:
 
-| Configuration ID | Architecture Configuration | Dest Recall@2 (%) | Logistics Feasibility LFR@3 (%) | Constraint Satisfaction CSR@3 (%) | Task Completion Rate TCR@3 (%) | Pairwise Accuracy (%) | NDCG@2 | Latency (ms) |
+```
+                 [Raw User Query (Natural Language)]
+                                  │
+                                  ▼
+      ┌────────────────────────────────────────────────────────┐
+      │  Stage 1: Neural Intent Extraction (NLU / LLM)         │
+      │  - Extracts: archetype, budget ceiling, traveler count │
+      │  - Detects: preferred vibes, pet/kid flags, origin     │
+      └───────────────────────────┬────────────────────────────┘
+                                  │
+                                  ▼
+      ┌────────────────────────────────────────────────────────┐
+      │  Stage 2: Dense Semantic Retrieval (pgvector)          │
+      │  - 128-dimensional destination embeddings              │
+      │  - Cosine similarity ranking over catalog regions      │
+      │  - Selects Top-2 candidate destinations                │
+      └───────────────────────────┬────────────────────────────┘
+                                  │
+                                  ▼
+      ┌────────────────────────────────────────────────────────┐
+      │  Stage 3: Symbolic Feasibility Check (Neo4j Graph)     │
+      │  - Flight schedule matching & layover threshold ≥ 60m  │
+      │  - Ground transfer feasibility & nocturnal boat limits │
+      │  - Hard pruning of physically impossible itineraries   │
+      └───────────────────────────┬────────────────────────────┘
+                                  │
+                                  ▼
+      ┌────────────────────────────────────────────────────────┐
+      │  Stage 4: Learning-to-Rank Selection (CatBoost LTR)    │
+      │  - 12 normalized value-for-money features              │
+      │  - Shrunk 200-tree PairLogit ranking model             │
+      │  - Optimal candidate package selection                │
+      └───────────────────────────┬────────────────────────────┘
+                                  │
+                                  ▼
+             [Optimal Feasible & Personalized Itinerary]
+```
+
+---
+
+## 3. CatBoost LTR Model & Training Specifications
+
+### Motivation for Retraining
+The legacy baseline CatBoost model suffered from:
+1. **Tree Saturation:** Split borders capped at 237,500 RUB caused luxury atoll packages (e.g. Maldives resorts at 400,000–800,000 RUB) to receive identical tree leaves.
+2. **Unconstrained Score Ties:** On open-ended queries without explicit constraints, identical scores led to arbitrary ranking.
+3. **Overfitting Beyond 200 Trees:** Training on synthetic pools past 200 iterations degraded test-set pairwise accuracy from 89.5% down to 79.7%.
+
+### Feature Schema (12 Features)
+The model was retrained on **69,311 pairs** (`part_4060ti.jsonl` + `part_4080s.jsonl`) with engineered normalized features:
+
+| Feature Name | Type | Description / Normalization Formula |
+| :--- | :---: | :--- |
+| `archetype` | Categorical | Target user persona (`family`, `budget`, `luxury`, `pet`, `solo`) |
+| `cities` | Categorical | Canonical routing path (e.g. `Сочи -> Красная Поляна -> Сириус`) |
+| `days` | Numerical | Length of stay in nights ($\ge 1$) |
+| `log_price` | Numerical | $\ln(1 + \text{total\_price\_rub})$ — prevents luxury price saturation |
+| `log_price_per_day` | Numerical | $\ln(1 + \frac{\text{total\_price\_rub}}{\text{days}})$ — daily cost rate |
+| `transfers` | Numerical | Total segment transfers (connecting flights + ground shuttles) |
+| `layover_hours` | Numerical | Total layover / connection buffer time in hours |
+| `hotel_stars` | Numerical | Hotel star rating ($1..5$) |
+| `dist_center_km` | Numerical | Distance to city / resort center in kilometers |
+| `pet_friendly` | Binary | Hotel accepts pets ($1$ / $0$) |
+| `breakfast` | Binary | Breakfast included in booking ($1$ / $0$) |
+| `stars_per_10k` | Numerical | $\frac{\text{hotel\_stars}}{\max(0.1, \text{price\_per\_day} / 10\,000)}$ — value-for-money metric |
+
+### Hyperparameters & Model Checkpoint
+* **Loss Function:** `PairLogit` (Pairwise ranking)
+* **Tree Depth:** 5
+* **Border Count:** 254
+* **Optimal Tree Shrinkage:** 200 trees (checkpoint: `backend/app/data/catboost_travel_ranker.cbm`, size: 278 KB)
+* **Native Latency:** **0.91 ms** per candidate batch (no GPU required).
+
+---
+
+## 4. Benchmark Dataset & Methodology (CSAI-200)
+
+### Dataset Composition
+The benchmark comprises **200 realistic natural language queries** across 5 archetypes (40 queries each):
+1. **Family with children:** High sensitivity to direct flights, breakfast inclusion, and child-friendly hotels.
+2. **Budget travelers:** Strict budget ceilings, tolerance for layovers, priority on low price per day.
+3. **Luxury seekers:** 5-star requirements, high amenity expectations, premium private transfers.
+4. **Pet owners:** Strict `pet_friendly=1` requirement; violations are disqualifying.
+5. **Solo travelers:** Flexibility in flights, focus on central location and mobility.
+
+### Deduplication Protocol
+Generated queries underwent a 3-tier diversity filter:
+* Exact hash deduplication.
+* Levenshtein distance filtering.
+* TF-IDF + Cosine similarity thresholding ($< 0.70$ inter-query similarity).
+
+### Evaluation Methodology (Method 2: In-Query Ranking)
+Candidates are evaluated **within the specific context of the user query**:
+* For each query $q$, candidate itineraries are generated from the database according to configuration constraints.
+* Pairwise preference is judged by user persona satisfaction.
+* **Uniform Baseline (C1):** In configuration C1 (unindexed SQL), destination selection rotates uniformly across the 9 catalog destinations rather than collapsing to `ORDER BY id LIMIT 2` (which previously caused an artificial Altai skew).
+
+---
+
+## 5. Experimental Results (Ablation Study)
+
+Evaluated on 200 benchmark queries against live PostgreSQL (`pgvector`) and Neo4j Docker containers:
+
+| Config ID | Pipeline Configuration | Dest Recall@2 (%) | Logistics Feasibility LFR@3 (%) | Constraint Satisfaction CSR@3 (%) | Task Completion Rate TCR@3 (%) | Pairwise Accuracy (%) | NDCG@2 | Latency (ms) |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **C1** | Baseline (Lexical / Price Sort) | 36.0% | 35.5% | 58.7% | 7.5% | 65.0% | 0.8708 | 0.02 |
+| **C1** | Baseline (SQL / Uniform / Price Sort) | 36.0% | 35.5% | 58.7% | 7.5% | 65.0% | 0.8708 | 0.02 |
 | **C2** | + Dense Retrieval (`pgvector`) | 74.0% | 35.2% | 69.0% | 18.0% | 65.0% | 0.8708 | 0.02 |
-| **C3** | + Neo4j Knowledge Graph (Heuristic) | 74.0% | 77.5% | 75.8% | 43.5% | 87.5% | 0.9539 | 0.09 |
+| **C3** | + Knowledge Graph (Neo4j Heuristic) | 74.0% | 77.5% | 75.8% | 43.5% | 87.5% | 0.9539 | 0.09 |
 | **C4** | **Full Pipeline (+ CatBoost LTR)** | **74.0%** | **77.5%** | **77.5%** | **44.4%** | **89.50%** | **0.9585** | **0.91** |
 
-### Key Experimental Findings
-- **Ablation Monotonicity:** Each architectural component provides statistically significant, non-overlapping improvements. Dense retrieval boosts destination recall by **+38.0 p.p.**; symbolic graph validation improves logistics feasibility by **+42.3 p.p.**; CatBoost LTR delivers state-of-the-art ranking fidelity (**89.50% Pairwise Accuracy**, **0.9585 NDCG@2**).
-- **Uniform Baseline (C1):** C1 uses an academic Uniform Catalog Rotation baseline to prevent destination skew from artificially inflating constraint metrics on unindexed queries.
-- **Microsecond Latency:** Full inference for C4 executes in **0.91 ms**, enabling real-time production deployment without GPU acceleration.
+### Mathematical Metric Definitions
+* **Destination Recall@2:** $\frac{|\text{Retrieved}_2 \cap \text{GroundTruth}|}{|\text{GroundTruth}|}$
+* **Logistics Feasibility Rate (LFR@3):** Fraction of Top-3 packages with valid flight connections ($\ge 60$ min buffer) and ground transfers.
+* **Constraint Satisfaction Rate (CSR@3):** Fraction of Top-3 packages meeting all explicit user constraints (budget, pets, kids, meal).
+* **Task Completion Rate (TCR@3):** Joint fraction satisfying destination, logistics, and constraints simultaneously:
+  $$\text{TCR@3} = \text{Recall@2} \times \text{LFR@3} \times \text{CSR@3}$$
+* **Pairwise Accuracy:** Percentage of in-query candidate pairs correctly ordered according to ground-truth persona utility.
+* **NDCG@2:** Normalized Discounted Cumulative Gain over the top-2 ranked itineraries.
 
 ---
 
-## 3. Quick Start & Reproducibility Guide
+## 6. Reproducibility & Quick Start
 
-### Prerequisites
-- Docker Engine 24.0+ and Docker Compose v2
-- Python 3.11+ (for local benchmark script execution)
-
-### 1. Launch Storage & Knowledge Graph
+### 1. Start Docker Containers
 ```bash
 docker compose up -d db neo4j
 ```
-This spins up:
-- **PostgreSQL 16 with pgvector extension** on port `5432`
-- **Neo4j 5.21 Community Graph DBMS** on Bolt port `7687` (HTTP port `7474`)
+Verify that PostgreSQL (`5432`) and Neo4j (`7687`, `7474`) are healthy:
+```bash
+docker compose ps
+```
 
 ### 2. Environment Configuration
-Copy `.env.example` to `.env`:
+Create `.env` from `.env.example`:
 ```bash
 cp .env.example .env
 ```
-Default credentials:
+Default connection parameters:
 ```env
 POSTGRES_USER=app
 POSTGRES_PASSWORD=app_secure_password
@@ -93,78 +184,69 @@ NEO4J_USER=neo4j
 NEO4J_PASSWORD=secretpassword
 ```
 
-### 3. Seed Knowledge Base (Zero-Touch)
-Populate PostgreSQL relational tables, vector embeddings, and Neo4j graph nodes:
+### 3. Seed Knowledge Base
 ```bash
+python -m app.seed
+```
+Seeds 9 destinations, 1,327 hotels, 276 flight routes, and 1,360 transfers into PostgreSQL and Neo4j.
+
+### 4. Run Unit Tests (28 tests)
+```bash
+python -m unittest discover backend/tests
+```
+
+### 5. Run Benchmark & Generate Paper Artifacts
+```bash
+python backend/app/scripts/run_csai_benchmark.py
+```
+This automatically produces:
+* `experiment_outputs/benchmark_results.json`
+* `experiment_outputs/summary_table.csv`
+* `experiment_outputs/summary_table.tex`
+* `experiment_outputs/fig1_pipeline_ablation.png` / `.pdf`
+* `experiment_outputs/fig2_archetype_ndcg.png` / `.pdf`
+* `experiment_outputs/fig3_feature_importance.png` / `.pdf`
+
+---
+
+## 7. Safe Branching Guide for Team Collaboration
+
+To experiment with new database schemas, graph queries, or vector indices without risking existing benchmark metrics:
+
+```bash
+# 1. Ensure you are on the clean stable branch
+git checkout feat/exp-ltr-and-plots
+
+# 2. Branch out to an isolated experiment sandbox
+git checkout -b exp/test-db-updates
+
+# 3. Apply your modifications or merge teammate's branch
+git merge origin/<teammate-branch>
+
+# 4. If database seeds changed, reseed the test environment
+python -m app.seed
+
+# 5. Re-run the benchmark
+python backend/app/scripts/run_csai_benchmark.py
+
+# 6. If metrics degrade, simply discard the branch and return:
+git checkout feat/exp-ltr-and-plots
 python -m app.seed
 ```
 
 ---
 
-## 4. Running the Benchmark & Generating Paper Artifacts
-
-### Run End-to-End Benchmark (Method 2)
-```bash
-python backend/app/scripts/run_csai_benchmark.py
-```
-This script:
-1. Connects to live PostgreSQL and Neo4j Docker instances.
-2. Evaluates 200 real benchmark queries across all 4 configurations (`C1`, `C2`, `C3`, `C4`).
-3. Computes component metrics: `Recall@2`, `LFR@3`, `CSR@3`, `TCR@3`, `Pairwise Accuracy`, `NDCG@2`, and `Latency`.
-4. Saves publication-ready tables to `experiment_outputs/`:
-   - `benchmark_results.json`
-   - `benchmark_results.csv`
-   - `csai2026_table1_ablation.tex`
-   - `csai2026_table1_ablation.md`
-
-### Generate Publication Figures
-```bash
-python backend/app/scripts/plot_csai_figures.py
-```
-Generates 300 DPI PNGs and vector PDFs in `experiment_outputs/`:
-- `fig1_ablation_metrics.png` / `.pdf`: Bar chart comparing C1–C4 across primary metrics.
-- `fig2_latency_ndcg_tradeoff.png` / `.pdf`: Latency vs. NDCG@2 scatter plot demonstrating sub-millisecond Pareto dominance.
-- `fig3_archetype_satisfaction.png` / `.pdf`: Per-archetype constraint satisfaction heatmap.
-
----
-
-## 5. Model Training Pipeline (CatBoost LTR)
-
-To retrain the 12-feature pairwise ranker on merged pairwise simulation pools:
-```bash
-python backend/app/scripts/train_ltr.py
-```
-Key training hyperparameters:
-- **Objective:** `PairLogit`
-- **Tree Depth:** 5
-- **Early Stopping / Shrinkage:** 200 trees (prevents overfitting and ensures optimal generalization)
-- **Features (12):** `archetype`, `cities`, `days`, `log_price`, `log_price_per_day`, `transfers`, `layover_hours`, `hotel_stars`, `dist_center_km`, `pet_friendly`, `breakfast`, `stars_per_10k`.
-
-Model binary is output directly to `backend/app/data/catboost_travel_ranker.cbm`.
-
----
-
-## 6. Unit & Integration Test Suite
-
-Execute the ML / LTR regression test suite:
-```bash
-python -m unittest discover backend/tests
-```
-All 28 tests cover feature extraction, boundary handling, model fallback, and ranking monotonicity.
-
----
-
-## 7. Project Structure
+## 8. Repository Layout
 
 ```
 .
 ├── backend/
 │   ├── app/
-│   │   ├── config.py                 # Pydantic v2 environment settings
+│   │   ├── config.py                 # Pydantic v2 application configuration
 │   │   ├── database.py               # Async SQLAlchemy & Neo4j driver pools
 │   │   ├── main.py                   # FastAPI benchmark monitoring API
 │   │   ├── models.py                 # PostgreSQL ORM models with pgvector Vector type
-│   │   ├── seed.py                   # Automatic database & graph seeder
+│   │   ├── seed.py                   # Database & graph seeder
 │   │   ├── data/
 │   │   │   ├── destinations.json     # 9 destinations, 1327 hotels, 276 flights
 │   │   │   ├── csai_150_benchmark_queries.json  # 200 queries (40 per archetype)
@@ -181,7 +263,7 @@ All 28 tests cover feature extraction, boundary handling, model fallback, and ra
 │   │   └── services/
 │   │       ├── compliance_service.py # Visa and border control rules
 │   │       ├── graph_service.py      # Neo4j Cypher pathfinding & logistics checks
-│   │       ├── llm_service.py        # OpenAI/DeepSeek API NLU client
+│   │       ├── llm_service.py        # NLU slot extraction client
 │   │       ├── ltr_service.py        # CatBoost inference & feature engineering
 │   │       └── vector_service.py     # pgvector cosine similarity search
 │   └── tests/
@@ -189,17 +271,16 @@ All 28 tests cover feature extraction, boundary handling, model fallback, and ra
 │       └── test_ltr_service.py       # Feature extraction & schema unit tests
 ├── docker-compose.yml                # Multi-container orchestration (db, neo4j)
 ├── experiment_outputs/               # CSV, LaTeX tables, JSON, PNG/PDF figures
-├── Makefile                          # Quick build targets (up, down, test, benchmark)
+├── Makefile                          # Build targets (up, down, test, benchmark)
 └── README.md                         # Benchmark stand documentation
 ```
 
 ---
 
-## 8. License & Citation
+## 9. License & Citation
 
-This repository is released under the **MIT License**.
+This codebase is distributed under the **MIT License**.
 
-If you use this benchmark or codebase in your research, please cite:
 ```bibtex
 @inproceedings{csai2026_neuro_symbolic_travel,
   title     = {Hybrid Neuro-Symbolic Routing and Learning-to-Rank for Complex Multi-Constraint Travel Synthesis},
