@@ -8,6 +8,7 @@ import pytest
 from neo4j import AsyncGraphDatabase
 
 from app.mcp.tools import MCPTools
+from app.services.graph_service import GraphService
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("CSAI_NEO4J_TEST_URI"), reason="Requires a local Neo4j test database"
@@ -66,6 +67,11 @@ async def test_catalog_routes_are_checked_before_selection():
 
         try:
             with patch("app.services.graph_service.get_neo4j_driver", return_value=driver):
+                assert (await GraphService.validate_transfer("MLE", hotels["mle"], "15:11", 3))["transfer"]["name"] == "Large boat"
+                assert (await GraphService.validate_transfer("MLE", hotels["mle"], "15:10", 3))["transfer"]["name"] == "Plane"
+                assert not (await GraphService.validate_transfer("MLE", hotels["mle"], "15:10", 9))["compatible"]
+                assert (await GraphService.validate_transfer("MLE", hotels["mle"], "bad"))["reason_code"] == "invalid_timeline"
+                assert (await GraphService.validate_transfer("LED", hotels["led"], "00:00"))["transfer"]["name"] == "Bypass"
                 assert (await validate())["reason_code"] == "no_outbound_route"
                 await flight(origin, "MLE", "out", layover=59)
                 assert (await validate())["reason_code"] == "no_outbound_route"

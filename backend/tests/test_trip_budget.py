@@ -143,8 +143,8 @@ class BudgetSelectionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["cart"]["budget_rub"], 110000)
         self.assertLessEqual(result["budget_breakdown"]["total_trip_budget_range_rub"]["max"], 110000)
         # One traveler: 17,600 round trip + 7,000 hotel + 2,000 transfer.
-        self.assertEqual(result["budget_breakdown"]["mandatory"]["total_mandatory_rub"], 26600)
-        self.assertIn("26,600", result["text"])
+        self.assertEqual(result["budget_breakdown"]["mandatory"]["total_mandatory_rub"], 29000)
+        self.assertIn("29,000", result["text"])
 
     async def test_exact_ceiling_is_allowed(self):
         result, _, _, _ = await self.run_agent("Сочи до 99 тысяч", [hotel("affordable", 1000)])
@@ -187,11 +187,11 @@ class BudgetSelectionTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("укладывается в бюджет", result["text"])
         self.assertNotIn("это оценка, а не фиксированная цена", result["text"])
         self.assertNotIn("Лимит всей поездки:", result["text"])
-        # Should have shifted dates to the cheaper day (Wednesday 11 Nov)
-        self.assertEqual(result["cart"]["checkin_date"], "2026-11-11")
-        self.assertEqual(result["cart"]["checkout_date"], "2026-11-17")
-        self.assertIn("11 ноя — 17 ноя", result["text"])
-        self.assertIn("Вы выбрали самый выгодный день вылета", result["text"])
+        # No date-specific fares: preserve dates even when flexible travel is allowed.
+        self.assertEqual(result["cart"]["checkin_date"], "2026-11-13")
+        self.assertEqual(result["cart"]["checkout_date"], "2026-11-19")
+        self.assertIn("13 ноя — 19 ноя", result["text"])
+        self.assertNotIn("Вы выбрали самый выгодный день вылета", result["text"])
 
 
 if __name__ == "__main__":

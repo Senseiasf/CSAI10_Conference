@@ -42,6 +42,8 @@ RUN chown -R appuser:appgroup /app
 
 USER appuser
 
+RUN python -c "from app.services.vector_service import get_embedding_model; get_embedding_model()"
+
 EXPOSE 8080
 
 ENV PYTHONUNBUFFERED=1 \

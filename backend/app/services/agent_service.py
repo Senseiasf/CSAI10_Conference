@@ -1,4 +1,4 @@
-import json
+import asyncio
 import logging
 import re
 from copy import deepcopy
@@ -7,10 +7,10 @@ from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy import select, text
 
 from app.database import async_session_maker
-from app.models import DestinationModel, HotelModel, RiskAlertModel, UserSessionModel
+from app.models import DestinationModel, HotelModel, UserSessionModel
 from app.config import settings
 from app.domain.trip import TripState
-from app.services.vector_service import generate_text_embedding
+from app.services.vector_service import generate_text_embedding, EMBEDDING_VERSION
 from app.mcp.tools import MCPTools
 from app.services.trip_dates import update_trip_dates
 from app.services.trip_budget import compare_with_budget, validate_package_totals
@@ -26,9 +26,7 @@ from app.services.trip_state import (
 from app.services.booking_stub import detect_booking_action, booking_stub
 from app.services.preference_memory import remembered_preferences
 from app.services.llm_service import LLMService
-from app.services.graph_service import GraphService
 from app.services.compliance_service import ComplianceService
-from app.services.calendar_service import CalendarService
 from app.services.ltr_service import LTRService
 from app.services.trip_controller import TripController
 from app.services.trip_state_store import TripStateStore
@@ -837,7 +835,9 @@ class AgentService:
                 return None
 
         cfg = MULTI_CITY_CONFIG[dest_id]
-        inter = cfg["intercity"]
+        inter = cart.get("intercity")
+        if not inter:
+            return "В сохранённом плане нет подтверждённого межгородского маршрута. Сначала нужно подобрать маршрут по данным каталога."
         city_1 = cfg["city_1"]["name"]
         city_2 = cfg["city_2"]["name"]
 
@@ -849,10 +849,7 @@ class AgentService:
             f"• ⏱️ **Время в пути:** **{inter.get('duration', '1 ч 15 мин')}**\n"
             f"• 🏢 **Перевозчик:** {inter.get('operator', 'Партнёр Островок')}\n"
             f"• ℹ️ **Маршрут:** {inter.get('description', '')}\n\n"
-            f"✅ **Сквозная стыковка с отелями:** График рассчитан идеально: "
-            f"вы выселяетесь из первого отеля в {city_1} после завтрака (до 11:00/12:00), "
-            f"комфортно совершаете переезд и прибываете во второй отель в {city_2} "
-            f"к началу стандартного заселения (после 14:00)."
+            "Время трансферов и заселения необходимо согласовать до бронирования."
         )
         return reply
 
@@ -867,19 +864,15 @@ class AgentService:
         Гибридный поиск: прямое совпадение по ключевым словам городов/стран +
         векторный поиск по вайбу и климату в PostgreSQL через pgvector с поддержкой фильтрации заграница/РФ.
         """
-        q_lower = query.lower()
-        sea_only = any(w in q_lower for w in ["море", "морю", "морск", "пляж", "побереж", "купаться", "позагорать"])
-        sea_destination_ids = ("turkey", "sochi", "uae", "thailand", "maldives", "egypt")
-        
+        if limit <= 0 or not re.search(r"\w", query) or (abroad_only and domestic_only):
+            return []
         matched_id = requested_destination(query)
 
         # Если запрошена строго заграница — отсекаем города РФ
         if abroad_only and matched_id in ("sochi", "spb", "altai"):
             matched_id = None
         # Если запрошена строго Россия — отсекаем зарубежные курорты
-        if domestic_only and matched_id in ("uae", "turkey", "thailand", "maldives", "egypt"):
-            matched_id = None
-        if sea_only and matched_id not in sea_destination_ids:
+        if domestic_only and matched_id in ("uae", "turkey", "thailand", "maldives", "egypt", "georgia"):
             matched_id = None
 
         async with async_session_maker() as session:
@@ -888,7 +881,7 @@ class AgentService:
                     select(DestinationModel).where(DestinationModel.id == matched_id)
                 )
                 r = res.scalar_one_or_none()
-                if r:
+                if r and (not domestic_only or r.country == "Россия") and (not abroad_only or r.country != "Россия"):
                     return [{
                         "id": r.id,
                         "name": r.name,
@@ -901,16 +894,14 @@ class AgentService:
                         "score": 1.0
                     }]
 
-            query_vector = generate_text_embedding(query)
+            query_vector = await asyncio.to_thread(generate_text_embedding, query)
             str_vector = f"[{','.join(str(x) for x in query_vector)}]"
             
-            where_clauses = []
+            where_clauses = ["metadata_json->>'embedding_version' = :embedding_version"]
             if abroad_only:
                 where_clauses.append("country != 'Россия'")
             elif domestic_only:
                 where_clauses.append("country = 'Россия'")
-            if sea_only:
-                where_clauses.append("id IN ('turkey', 'sochi', 'uae', 'thailand', 'maldives', 'egypt')")
             
             where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
 
@@ -923,7 +914,7 @@ class AgentService:
                 LIMIT :limit
             """)
             
-            result = await session.execute(sql, {"query_vector": str_vector, "limit": limit})
+            result = await session.execute(sql, {"query_vector": str_vector, "limit": limit, "embedding_version": EMBEDDING_VERSION})
             rows = result.fetchall()
             return [
                 {
@@ -1065,7 +1056,10 @@ class AgentService:
         (внутренний авиарейс через Neo4j, поезд «Ласточка» или комфорт-трансфер) и международные авиаперелёты.
         """
         cfg = MULTI_CITY_CONFIG.get(dest_id, MULTI_CITY_CONFIG["turkey"])
-        nights_1 = max(1, int(round(nights * cfg["city_1"]["nights_share"])))
+        if nights < 2:
+            reply = "Для двух остановок нужна хотя бы одна ночь в каждой. Укажите минимум две ночи."
+            return {"text": reply, "state": "NO_MATCHES", "cart": cart, "compared_hotels": []}
+        nights_1 = min(nights - 1, max(1, int(round(nights * cfg["city_1"]["nights_share"]))))
         nights_2 = max(1, nights - nights_1)
         user_lower = message.lower().strip()
 
@@ -1101,21 +1095,6 @@ class AgentService:
         is_luxury = any(t in ("luxury", "extreme_luxury") for t in profile.get("interests", []))
         is_budget = "budget_friendly" in profile.get("interests", [])
 
-        # Если отель не найден по точному фильтру города — берем альтернативы из общего каталога
-        if not hotels_1 or not hotels_2:
-            all_h = (await MCPTools.compare_hotels(
-                destination_id=dest_id,
-                pet_friendly=profile.get("has_pets"),
-                family_friendly=profile.get("has_kids"),
-                private_room_required=profile.get("private_room_required", False),
-                preferred_tags=profile.get("interests"),
-                limit=None if budget_limit is not None else 30
-            )).get("compared_hotels", [])
-            if not hotels_1 and all_h:
-                hotels_1 = [all_h[0]]
-            if not hotels_2:
-                hotels_2 = [h for h in all_h if not hotels_1 or h["id"] != hotels_1[0]["id"]] or hotels_1
-
         if not hotels_1 or not hotels_2:
             reply_text = "Не нашлось отелей для обеих частей маршрута под ваши условия. Можно изменить города или условия поиска."
             cart = {"destination_id": dest_id, "destination": cfg["title"], "nights": nights,
@@ -1134,7 +1113,18 @@ class AgentService:
             policy = "budget"
             hotels_1.sort(key=lambda h: (h.get("price_per_night_rub", 0), -h["ltr_score"]))
             hotels_2.sort(key=lambda h: (h.get("price_per_night_rub", 0), -h["ltr_score"]))
-        hotel_1, hotel_2 = hotels_1[0], hotels_2[0]
+        from app.services.multi_city_routes import select_route
+        route = await select_route(cfg, hotels_1, hotels_2, profile, nights_1, nights_2, budget_limit, policy)
+        if route is None:
+            reply = "Не найден составной маршрут с доступными наземными сегментами, перелётами и отелями в указанном бюджете."
+            previous_cart = getattr(session_obj, "current_cart", None) or {}
+            await AgentService._save_session(user_id, profile, previous_cart, message, reply)
+            return {"text": reply, "state": "NO_MATCHES", "cart": previous_cart, "compared_hotels": []}
+        hotel_1, hotel_2 = route["hotel_1"], route["hotel_2"]
+        logistics_1, intercity = route["logistics"], route["intercity"]
+        outbound_flight = logistics_1["flight"]
+        transfer_1, transfer_2 = route["transfer_1"], route["transfer_2"]
+        transfers_price = transfer_1.get("price_rub", 0) + transfer_2["price_rub"]
         for meta, hotel in ((ltr_meta_1, hotel_1), (ltr_meta_2, hotel_2)):
             meta.update(top_k=1, top_score=hotel["ltr_score"], top_hotel=hotel["name"], selection_policy=policy)
         ltr_meta = {
@@ -1144,43 +1134,6 @@ class AgentService:
             "latency_ms": round(ltr_meta_1["latency_ms"] + ltr_meta_2["latency_ms"], 2),
             "top_k": 2, "cities": [ltr_meta_1, ltr_meta_2],
         }
-
-        # 2. Логистика: международный перелёт с учетом пожеланий по времени (день / вечер / утро)
-        logistics_1 = await MCPTools.check_logistics_compatibility(
-            airport_code=cfg["city_1"]["airport"],
-            hotel_id=hotel_1.get("id", ""),
-            origin_airport_code=profile.get("origin_airport"),
-            prefer_direct_flight=profile.get("prefer_direct_flight"),
-            without_transfer=profile.get("without_transfer", False),
-            flight_time_pref=profile.get("flight_time_pref"),
-            travelers_count=max(1, profile.get("adults_count") or 2) + (profile.get("kids_count") or 0),
-            return_airport_code=cfg["city_2"]["airport"],
-        )
-        if not logistics_1.get("compatible"):
-            reply = logistics_1.get("reason") or "Не удалось подтвердить перелёты и трансфер для составного тура."
-            previous_cart = getattr(session_obj, "current_cart", None) or {}
-            await AgentService._save_session(user_id, profile, previous_cart, message, reply)
-            return {"text": reply, "state": "NO_MATCHES", "cart": previous_cart, "compared_hotels": []}
-        outbound_flight = logistics_1["flight"]
-
-        # Проверяем в графе Neo4j наличие прямого межгородского транспортного ребра
-        graph_intercity = await GraphService.find_intercity_logistics(
-            cfg["city_1"]["airport"],
-            cfg["city_2"]["airport"]
-        )
-        if graph_intercity:
-            intercity = {
-                "type": "flight",
-                "name": f"Внутренний авиарейс {graph_intercity.get('flight_no', 'TK-2415')} {cfg['city_1']['airport']} ➔ {cfg['city_2']['airport']}",
-                "operator": graph_intercity.get("airline", "Turkish Airlines"),
-                "departure": graph_intercity.get("departure_time", "11:30"),
-                "arrival": graph_intercity.get("arrival_time", "12:45"),
-                "duration": f"{graph_intercity.get('duration_minutes', 75)} мин",
-                "price_rub": graph_intercity.get("price_rub", 3800),
-                "description": f"Прямой авиаперелёт {graph_intercity.get('airline')} ({graph_intercity.get('flight_no')}) между городами подтверждён графом логистики Neo4j."
-            }
-        else:
-            intercity = cfg["intercity"]
 
         ret_fl = outbound_flight["return_flight"]
         ret_airline = ret_fl["airline"]
@@ -1210,8 +1163,8 @@ class AgentService:
 
         if (is_cheapest_requested or is_any_time) and not profile.get("date_shifted"):
             avg_hotel_price = int((hotel_1.get("price_per_night_rub", 6000) * nights_1 + hotel_2.get("price_per_night_rub", 8500) * nights_2) / max(1, nights))
-            intercity_cost = intercity.get("price_rub", 3800) * travelers_count
-            tr_cost = 0 if profile.get("without_transfer") else 3500
+            intercity_cost = route["intercity_cost"]
+            tr_cost = transfers_price
             pf1 = (hotel_1.get("pet_surcharge_per_night_rub", 0) or 0) * nights_1 if profile.get("has_pets") else 0
             pf2 = (hotel_2.get("pet_surcharge_per_night_rub", 0) or 0) * nights_2 if profile.get("has_pets") else 0
             fixed_mc = intercity_cost + tr_cost + pf1 + pf2
@@ -1250,39 +1203,18 @@ class AgentService:
         hotel_2_dates = format_hotel_dates(d_mid.isoformat(), d_out.isoformat(), nights_2)
 
         # 4. Финансовый расчёт всего тура с учётом реального календарного тарифа
-        is_date_shifted = bool(profile.get("date_shifted") or cart.get("date_shifted"))
 
         # Реальный тариф на авиарейсы
         raw_flight_rt = outbound_flight.get("price_rub_roundtrip", 27000)
-        base_flight_half = raw_flight_rt * 0.5
-        if is_date_shifted:
-            f_out = AgentService.FLIGHT_DAY_FACTORS.get(d_in.weekday(), 1.0)
-            f_ret = AgentService.FLIGHT_DAY_FACTORS.get(d_out.weekday(), 1.0)
-            flight_out_price = int(round(base_flight_half * f_out / 100) * 100) * travelers_count
-            flight_ret_price = int(round(base_flight_half * f_ret / 100) * 100) * travelers_count
-            intl_flight_price = flight_out_price + flight_ret_price
+        intl_flight_price = raw_flight_rt * travelers_count
+        flight_out_price = intl_flight_price // 2
+        flight_ret_price = intl_flight_price - flight_out_price
+        cost_hotel_1 = hotel_1["price_per_night_rub"] * nights_1 * rooms_cnt
+        cost_hotel_2 = hotel_2["price_per_night_rub"] * nights_2 * rooms_cnt
 
-            # Реальный тариф на отели
-            h1_factors = [AgentService.HOTEL_NIGHT_FACTORS.get((d_in + timedelta(days=i)).weekday(), 1.0) for i in range(nights_1)]
-            avg_h1 = sum(h1_factors) / max(1, nights_1)
-            rate_h1 = int(round(hotel_1.get("price_per_night_rub", 6000) * avg_h1 / 100) * 100)
-            cost_hotel_1 = rate_h1 * nights_1 * rooms_cnt
-
-            h2_factors = [AgentService.HOTEL_NIGHT_FACTORS.get((d_mid + timedelta(days=i)).weekday(), 1.0) for i in range(nights_2)]
-            avg_h2 = sum(h2_factors) / max(1, nights_2)
-            rate_h2 = int(round(hotel_2.get("price_per_night_rub", 8500) * avg_h2 / 100) * 100)
-            cost_hotel_2 = rate_h2 * nights_2 * rooms_cnt
-        else:
-            intl_flight_price = raw_flight_rt * travelers_count
-            flight_out_price = int(round(intl_flight_price * 0.5))
-            flight_ret_price = int(intl_flight_price - flight_out_price)
-            cost_hotel_1 = hotel_1.get("price_per_night_rub", 6000) * nights_1 * rooms_cnt
-            cost_hotel_2 = hotel_2.get("price_per_night_rub", 8500) * nights_2 * rooms_cnt
-
-        intercity_price = intercity.get("price_rub", 3800) * travelers_count
-        transfers_price = 0 if profile.get("without_transfer") else 3500
-        tr_1_price = transfers_price // 2
-        tr_2_price = transfers_price - tr_1_price
+        intercity_price = route["intercity_cost"]
+        tr_1_price = transfer_1.get("price_rub", 0)
+        tr_2_price = transfer_2["price_rub"]
 
         pet_fee_1 = (hotel_1.get("pet_surcharge_per_night_rub", 0) or 0) * nights_1 if profile.get("has_pets") else 0
         pet_fee_2 = (hotel_2.get("pet_surcharge_per_night_rub", 0) or 0) * nights_2 if profile.get("has_pets") else 0
@@ -1325,9 +1257,10 @@ class AgentService:
 
         response_lines.append(f"💬 {ai_intro}")
         response_lines.append("")
+        response_lines.append("*Оценка по каталогу: доступность на даты и окончательные тарифы поставщика не подтверждены.*")
         response_lines.append(f"🌴 **Комбинированный тур: {cfg['title']}** | {cfg['climate']}")
         response_lines.append(f"📅 **Даты поездки:** {date_range_str} *(даты можно изменить: напишите «смени даты на ...»)*")
-        response_lines.append(f"🌤️ **Прогноз погоды по маршруту:** {cfg['city_1']['name']}: {cfg['city_1']['weather']} | {cfg['city_2']['name']}: {cfg['city_2']['weather']}")
+        response_lines.append(f"**Климат региона:** {cfg['climate']}")
         response_lines.append("")
 
         response_lines.append(f"🗺️ **Программа и маршрут тура по городам ({nights} ночей):**")
@@ -1339,13 +1272,13 @@ class AgentService:
         times_ret = f"{dest_code} {ret_dep} ➔ {orig_code} {ret_arr}"
 
         # 1. Перелет туда
-        response_lines.append(f"1️⃣ 🛫 **Перелёт туда в {cfg['city_1']['name']}{date_out_fmt}:** Прямой рейс {fl_code_out} ({times_out}) — **{flight_out_price:,} ₽**")
+        response_lines.append(f"1️⃣ 🛫 **Перелёт туда в {cfg['city_1']['name']}{date_out_fmt}:** Рейс {fl_code_out} ({times_out}) — **{flight_out_price:,} ₽**")
 
         # 2. Трансфер в отель 1
         if profile.get("without_transfer"):
-            response_lines.append(f"2️⃣ 🧳 **Трансфер в отель 1:** Самостоятельно на такси (Трансферы исключены по вашему запросу) — **0 ₽**")
+            response_lines.append("2️⃣ 🧳 **Трансфер в отель 1:** Самостоятельно на такси (Трансферы исключены по вашему запросу) — **0 ₽**")
         else:
-            response_lines.append(f"2️⃣ 🚗 **Трансфер в отель 1:** Аэропорт {cfg['city_1']['airport']} ➔ отель (~30 мин) — **{tr_1_price:,} ₽**")
+            response_lines.append(f"2️⃣ 🚗 **Трансфер в отель 1:** Аэропорт {cfg['city_1']['airport']} ➔ отель ({transfer_1.get('duration_min', 'не указано')} мин) — **{tr_1_price:,} ₽**")
 
         # 3. Отель 1
         h1_formatted = hotel_1.get('price_per_night_formatted', f"{hotel_1.get('price_per_night_rub', 6000):,} ₽")
@@ -1372,9 +1305,11 @@ class AgentService:
 
         # 6. Трансфер в аэропорт 2
         if profile.get("without_transfer"):
-            response_lines.append(f"6️⃣ 🧳 **Трансфер в аэропорт:** Самостоятельно на такси (Трансферы исключены по вашему запросу) — **0 ₽**")
+            response_lines.append("6️⃣ 🧳 **Трансфер в аэропорт:** Самостоятельно на такси (Трансферы исключены по вашему запросу) — **0 ₽**")
         else:
-            response_lines.append(f"6️⃣ 🚗 **Трансфер в аэропорт {cfg['city_2']['name']}:** Отель ➔ аэропорт {cfg['city_2']['airport']} (~30 мин) — **{tr_2_price:,} ₽**")
+            if tr_2_price:
+                response_lines.append(f"6️⃣ 🚗 **Трансфер после межгородского рейса во второй отель:** {transfer_2.get('name', '')} — **{tr_2_price:,} ₽**")
+            response_lines.append("**Обратный трансфер из отеля в аэропорт:** в каталоге не подтверждён, в стоимость не включён.")
 
         # 7. Перелет обратно
         response_lines.append(f"7️⃣ 🛬 **Перелёт обратно из {cfg['city_2']['name']}{date_ret_fmt}:** {fl_code_ret} ({times_ret}) — **{flight_ret_price:,} ₽**")
@@ -1417,7 +1352,7 @@ class AgentService:
         if flexible_dates:
             best_flex = flexible_dates[0]
             if best_flex["savings_rub"] > 0:
-                response_lines.append(f"📅 **Календарь выгоды (Гибкие даты ±2 дня):**")
+                response_lines.append("📅 **Календарь выгоды (Гибкие даты ±2 дня):**")
                 response_lines.append(
                     f"• 💡 Вылет на {abs(best_flex['days_shift'])} дня {best_flex['direction']} "
                     f"({best_flex['dates_formatted']}, {best_flex['target_weekday']}) "
@@ -1427,21 +1362,21 @@ class AgentService:
                 response_lines.append("")
             else:
                 cur_day_ru = AgentService.DAY_NAMES_RU[d_in.weekday()]
-                response_lines.append(f"📅 **Календарь тарифов (Гибкие даты ±2 дня):**")
+                response_lines.append("📅 **Календарь тарифов (Гибкие даты ±2 дня):**")
                 response_lines.append(
                     f"• 🌟 **У вас выбран самый выгодный день вылета:** {cur_day_ru} ({date_range_str}) — "
                     f"минимальный тариф **{mand_total:,} ₽**. Вылеты на соседние даты стоят дороже или столько же."
                 )
                 response_lines.append("")
 
-        response_lines.append("🛒 *Напишите «Забронировать» для покупки или уточните: «другой отель», «подешевле», «смени даты».*")
+        response_lines.append("🛒 *Можно уточнить: «другой отель», «подешевле», «смени даты».*")
 
         # Формируем аккордеон хода рассуждений агента
         reasoning_steps = [
             {"stage": "nlu", "title": "Анализ запроса и профиля", "detail": f"Составной тур «{cfg['title']}». Состав: {profile.get('party_size', 'стандартный')}, номеров: {rooms_cnt} ({profile.get('room_type', '1 номер')})."},
             {"stage": "ltr_ranking", "title": "ML-ранжирование (CatBoost LTR)", "detail": f"Движок {ltr_meta['engine']}: оценено {ltr_meta['candidates_count']} кандидатов для двух городов за {ltr_meta['latency_ms']} мс. Архетип: {ltr_meta['archetype']}; приоритет: {policy}."},
             {"stage": "multi_city", "title": "Сквозной маршрут", "detail": f"Программа: {cfg['city_1']['name']} ({nights_1} н.) ➔ {cfg['city_2']['name']} ({nights_2} н.)."},
-            {"stage": "logistics", "title": "Межгородская логистика", "detail": f"Сегмент: {intercity['name']} ({intercity['duration']}). Источник: {'граф Neo4j' if graph_intercity else 'демонстрационный справочник маршрутов'}."},
+            {"stage": "logistics", "title": "Межгородская логистика", "detail": f"Сегмент: {intercity['name']} ({intercity['duration']}). Источник: граф Neo4j."},
             {"stage": "compliance", "title": "Паспортный и визовый комплаенс", "detail": f"{compliance_info.get('passport_required')} ({compliance_info.get('passport_validity')}), {compliance_info.get('visa_policy')}."},
             {"stage": "budget", "title": "Двухкомпонентный расчёт", "detail": f"Обязательные расходы: {mand_total:,} ₽, на месте: {onsite_min:,}–{onsite_max:,} ₽."}
         ]
@@ -1469,6 +1404,7 @@ class AgentService:
         cart["compliance"] = compliance_info
 
         cart["ltr_ranking"] = ltr_meta
+        cart["intercity"] = intercity
 
         await AgentService._save_session(user_id, profile, cart, message, reply_text)
 
@@ -1490,26 +1426,6 @@ class AgentService:
                 "room_type": profile.get("room_type", "1 стандартный номер (Standard Room)")
             }
         }
-
-    FLIGHT_DAY_FACTORS = {
-        0: 0.98,  # Пн
-        1: 0.88,  # Вт (самый дешёвый день для авиабилетов)
-        2: 0.90,  # Ср (выгодный день)
-        3: 0.95,  # Чт
-        4: 1.18,  # Пт (вечерний пик выходного дня)
-        5: 1.15,  # Сб (утренний пик на уикенд)
-        6: 1.05,  # Вс
-    }
-
-    HOTEL_NIGHT_FACTORS = {
-        0: 0.96,  # Вс/Пн
-        1: 0.96,  # Пн/Вт
-        2: 0.96,  # Вт/Ср
-        3: 0.98,  # Ср/Чт
-        4: 1.15,  # Пт/Сб (уикенд)
-        5: 1.15,  # Сб/Вс (уикенд)
-        6: 0.96   # Вс
-    }
 
     DAY_NAMES_RU = {
         0: "понедельник",
@@ -1546,24 +1462,13 @@ class AgentService:
         rooms_count: int = 1,
         travelers_count: int = 1
     ) -> Dict[str, Any]:
-        """
-        Рассчитывает фактическую стоимость поездки с привязкой к реальным календарным датам:
-        - Авиабилеты: скидки во вторник-среду (-12%), наценки в пятницу-субботу (+18%).
-        - Отели: наценки на ночи уикенда (пятница-суббота).
-        """
+        """Calculate a catalogue estimate without inventing date-dependent tariffs."""
         checkout = checkin + timedelta(days=nights)
-        f_out = AgentService.FLIGHT_DAY_FACTORS.get(checkin.weekday(), 1.0)
-        f_ret = AgentService.FLIGHT_DAY_FACTORS.get(checkout.weekday(), 1.0)
-
-        half_flight = base_flight_roundtrip * 0.5
         actual_travelers = max(1, travelers_count)
-        flight_out = int(round(half_flight * f_out / 100) * 100) * actual_travelers
-        flight_ret = int(round(half_flight * f_ret / 100) * 100) * actual_travelers
-        flight_total = flight_out + flight_ret
-
-        h_factors = [AgentService.HOTEL_NIGHT_FACTORS.get((checkin + timedelta(days=i)).weekday(), 1.0) for i in range(nights)]
-        avg_h = sum(h_factors) / max(1, nights)
-        rate_h = int(round(base_hotel_per_night * avg_h / 100) * 100)
+        flight_total = base_flight_roundtrip * actual_travelers
+        flight_out = flight_total // 2
+        flight_ret = flight_total - flight_out
+        rate_h = base_hotel_per_night
         hotel_total = rate_h * nights * rooms_count
 
         total_mandatory = flight_total + hotel_total + fixed_costs
@@ -1629,7 +1534,7 @@ class AgentService:
         breakdown["checkin_date"] = checkin.isoformat()
         breakdown["checkout_date"] = calculation["checkout"].isoformat()
         breakdown["selected_flexible_date"] = selected_flex
-        breakdown["pricing_source"] = "synthetic_catalog_with_calendar_factors"
+        breakdown["pricing_source"] = "catalog_estimate"
         breakdown["pricing_inputs"] = {
             "flight_roundtrip_per_person_rub": flight_base,
             "hotel_per_room_night_rub": hotel["price_per_night_rub"],
@@ -1825,75 +1730,8 @@ class AgentService:
         rooms_count: int = 1,
         travelers_count: int = 1
     ) -> List[Dict[str, Any]]:
-        """
-        Рассчитывает честный календарь тарифов и выгоды (±2 дня) со смещением вылета.
-        Использует реальные тарифные кривые авиакомпаний (низкие тарифы во вторник-среду,
-        высокие пики в пятницу-субботу) и отелей (выходные/будни).
-        """
-        import datetime
-        options = []
-        base_dt = None
-        if checkin_date_str:
-            try:
-                base_dt = datetime.date.fromisoformat(checkin_date_str)
-            except Exception:
-                pass
-        if not base_dt:
-            base_dt = datetime.date.today() + datetime.timedelta(days=14)
-
-        if base_flight_price is None or base_hotel_price is None or fixed_costs is None:
-            return []
-        fl_base = base_flight_price
-        ht_base = base_hotel_price
-        fix_base = fixed_costs
-        if fix_base < 0:
-            fix_base = 0
-
-        current_res = AgentService.calculate_real_trip_cost_by_date(
-            base_dt, nights, fl_base, ht_base, fix_base, rooms_count, travelers_count
-        )
-        current_cost = current_res["total_mandatory"]
-
-        # Оцениваем соседние дни (±2 дня): -2, -1, +1, +2
-        shifts = [-2, -1, 1, 2]
-        for days_diff in shifts:
-            new_in = base_dt + datetime.timedelta(days=days_diff)
-            new_out = new_in + datetime.timedelta(days=nights)
-            cand_res = AgentService.calculate_real_trip_cost_by_date(
-                new_in, nights, fl_base, ht_base, fix_base, rooms_count, travelers_count
-            )
-            cand_cost = cand_res["total_mandatory"]
-            savings = current_cost - cand_cost
-            dir_word = "позже" if days_diff > 0 else "раньше"
-            day_name = AgentService.DAY_NAMES_RU[new_in.weekday()]
-            prep_day = AgentService.DAY_PREP_RU[new_in.weekday()]
-            date_label = f"{new_in.day} {AgentService.MONTH_RU_SHORT.get(new_in.month, '')} — {new_out.day} {AgentService.MONTH_RU_SHORT.get(new_out.month, '')}"
-
-            if savings > 0:
-                label_chip = f"📅 На {abs(days_diff)} дн. {dir_word} (-{savings:,} ₽)"
-            elif savings < 0:
-                label_chip = f"📅 На {abs(days_diff)} дн. {dir_word} (+{abs(savings):,} ₽)"
-            else:
-                label_chip = f"📅 На {abs(days_diff)} дн. {dir_word} (та же цена)"
-
-            msg = f"Сдвинь поездку на {abs(days_diff)} дня {dir_word}"
-
-            options.append({
-                "days_shift": days_diff,
-                "direction": dir_word,
-                "target_weekday": day_name,
-                "target_weekday_prep": prep_day,
-                "checkin_date": new_in.isoformat(),
-                "checkout_date": new_out.isoformat(),
-                "dates_formatted": date_label,
-                "savings_rub": savings,
-                "target_mandatory_rub": cand_cost,
-                "label": label_chip,
-                "message": msg
-            })
-
-        options.sort(key=lambda x: -x["savings_rub"])
-        return options
+        """No date-specific inventory is available; do not manufacture savings."""
+        return []
 
     @staticmethod
     def answer_dates_comparison(user_lower: str, profile: dict, cart: dict) -> Optional[str]:
@@ -1914,82 +1752,11 @@ class AgentService:
         if not cart.get("destination_id") and not profile.get("destination_id"):
             return None
 
-        nights = profile.get("nights", cart.get("nights", 7))
-        checkin_str = profile.get("checkin_date") or cart.get("checkin_date")
-        if not checkin_str:
-            base_dt = date.today() + timedelta(days=14)
-        else:
-            try:
-                base_dt = date.fromisoformat(checkin_str)
-            except Exception:
-                base_dt = date.today() + timedelta(days=14)
-
-        inputs = cart.get("pricing_inputs")
-        if not inputs:
-            return "Для сохранённого плана нет исходных тарифов. Пересчитайте поездку, чтобы сравнить соседние даты без выдуманных цен."
-        rooms_cnt = inputs["rooms_count"]
-        travelers_count = inputs["travelers_count"]
-        base_fl = inputs["flight_roundtrip_per_person_rub"]
-        base_ht = inputs["hotel_per_room_night_rub"]
-        fixed_c = inputs["fixed_costs_rub"]
-
-        cur_res = AgentService.calculate_real_trip_cost_by_date(
-            base_dt, nights, base_fl, base_ht, fixed_c, rooms_cnt, travelers_count
+        return (
+            "В каталоге нет тарифов по конкретным датам. Сравнить цены на соседние даты "
+            "и подтвердить экономию пока нельзя. Могу изменить даты и пересчитать "
+            "продолжительность поездки по базовым ценам каталога."
         )
-
-        all_dates = []
-        for shift in (-2, -1, 0, 1, 2):
-            dt = base_dt + timedelta(days=shift)
-            dt_out = dt + timedelta(days=nights)
-            res = AgentService.calculate_real_trip_cost_by_date(
-                dt, nights, base_fl, base_ht, fixed_c, rooms_cnt, travelers_count
-            )
-            diff = res["total_mandatory"] - cur_res["total_mandatory"]
-            day_name = AgentService.DAY_NAMES_RU[dt.weekday()]
-            date_str = f"{dt.day} {AgentService.MONTH_RU_SHORT.get(dt.month, '')} — {dt_out.day} {AgentService.MONTH_RU_SHORT.get(dt_out.month, '')}"
-            all_dates.append({
-                "shift": shift,
-                "dt": dt,
-                "day_name": day_name,
-                "date_str": date_str,
-                "cost": res["total_mandatory"],
-                "diff": diff,
-                "is_current": (shift == 0)
-            })
-
-        min_date = min(all_dates, key=lambda x: x["cost"])
-
-        lines = [
-            f"📊 **Сравнение расчётных тарифов на соседние даты (±2 дня, тур на {nights} н.):**",
-            "Демонстрационный каталог и календарные коэффициенты; цены поставщика не запрашивались.",
-            ""
-        ]
-        for item in all_dates:
-            flag = " *(текущий выбор)*" if item["is_current"] else ""
-            if item["cost"] == min_date["cost"]:
-                best_mark = " 🔥 **самый выгодный тариф!**"
-            elif item["diff"] > 0:
-                best_mark = f" (+{item['diff']:,} ₽)"
-            elif item["diff"] < 0:
-                best_mark = f" ({item['diff']:,} ₽)"
-            else:
-                best_mark = " (та же цена)"
-
-            lines.append(f"• **{item['date_str']} ({item['day_name']}):** **{item['cost']:,} ₽**{best_mark}{flag}")
-
-        lines.append("")
-        if min_date["is_current"]:
-            lines.append(f"✅ **У вас уже выбран самый дешёвый день вылета** ({min_date['day_name']}). Любой вылет на соседние даты обойдётся дороже.")
-        else:
-            diff_abs = abs(min_date["diff"])
-            shift_word = f"на {abs(min_date['shift'])} дня {'позже' if min_date['shift'] > 0 else 'раньше'}"
-            lines.append(
-                f"💡 **Самый дешёвый вариант:** вылет {AgentService.DAY_PREP_RU[min_date['dt'].weekday()]} ({min_date['date_str']}) "
-                f"сэкономит **{diff_abs:,} ₽** (стоимость составит {min_date['cost']:,} ₽ вместо {cur_res['total_mandatory']:,} ₽)."
-            )
-            lines.append(f"*Чтобы переключиться на эти даты, напишите: «Сдвинь поездку {shift_word}» или «заезд {min_date['dt']:%d.%m.%Y}».*")
-
-        return "\n".join(lines)
 
     @staticmethod
     async def process_message(user_id: str, message: str, progress_callback: Optional[Any] = None) -> Dict[str, Any]:
@@ -2046,13 +1813,11 @@ class AgentService:
             transfer_setting = profile.get("without_transfer") if "without_transfer" in changed_fields else None
             selected_hotel_query = profile.get("_resolved_hotel_query") if "hotel_id" in changed_fields else None
             direct_destination_choice = profile.get("preferred_destination") if profile.get("_structured_destination_changed") else None
-            slot_message = ""
             excluded_now = set()
         else:
             transfer_setting = transfer_preference(message)
             selected_hotel_query = hotel_selection(message)
             direct_destination_choice = destination_choice(message) if not selected_hotel_query else None
-            slot_message = "" if selected_hotel_query else user_lower
             excluded_now = rejected_destinations(message) if not selected_hotel_query else set()
             price_preference = profile.get("price_preference") or "any"
         slot_keys = ("nights", "adults_count", "kids_count", "has_kids", "has_pets",
@@ -2662,15 +2427,6 @@ class AgentService:
             ))
         elif is_luxury and not is_cheapest_requested:
             affordable.sort(key=lambda x: (-x[0]["price_per_night_rub"], -x[0].get("ltr_score", 0.0)))
-        elif budget_limit is not None and not is_budget:
-            def budget_quality_key(option):
-                hotel, _, breakdown = option
-                stars_match = re.search(r"\d+(?:[.,]\d+)?", str(hotel.get("stars") or ""))
-                stars = float(stars_match.group().replace(",", ".")) if stars_match else 0.0
-                total = breakdown["total_trip_budget_range_rub"][estimate_key]
-                return (-stars, -hotel.get("ltr_score", 0.0), -total)
-
-            affordable.sort(key=budget_quality_key)
         elif is_cheapest_requested or is_budget:
             affordable.sort(key=lambda x: (x[2]["total_trip_budget_range_rub"][estimate_key], -x[0].get("ltr_score", 0.0), x[0]["price_per_night_rub"]))
 
@@ -2886,7 +2642,7 @@ class AgentService:
         tr_info = logistics_info.get("transfer", {})
         tr_price = budget_breakdown["mandatory"]["transfer"]
         tr_name = tr_info.get("name", "Комфорт-трансфер")
-        tr_min = tr_info.get("duration_min", 30)
+        tr_min = tr_info.get("duration_min", "нет данных")
 
         # Автоматический выбор самой выгодной даты вылета при запросе самого дешевого варианта
         best_flex_found = budget_breakdown["selected_flexible_date"]
@@ -3018,7 +2774,7 @@ class AgentService:
                 f"{comparison['compared_amount_rub']:,} ₽; остаток {comparison['difference_rub']:,} ₽."
             )
             response_lines.append("")
-        response_lines.append("*Расчёт по демонстрационному каталогу с календарными коэффициентами; актуальная цена поставщика не запрашивалась.*\n")
+        response_lines.append("*Расчёт по демонстрационному каталогу; актуальная цена поставщика не запрашивалась.*\n")
 
         if budget_limit is not None and total_range['max'] > budget_limit:
             response_lines.append(
@@ -3084,7 +2840,7 @@ class AgentService:
                 )
                 response_lines.append("")
 
-        response_lines.append("🛒 *Напишите «Забронировать» для покупки или уточните: «другой отель», «подешевле», «только прямой».*")
+        response_lines.append("🛒 *Можно уточнить: «другой отель», «подешевле», «только прямой».*")
 
         rooms_cnt = profile.get("rooms_count", 1)
         reasoning_steps = [

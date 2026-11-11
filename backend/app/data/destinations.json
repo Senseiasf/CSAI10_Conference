@@ -17264,7 +17264,7 @@
         },
         {
           "from": "HKT",
-          "to": "thai_katathani_resort",
+          "to": "th_kata_katathani_resort",
           "type": "minivan",
           "name": "Групповой минивэн",
           "duration_minutes": 95,
@@ -17557,14 +17557,6 @@
           "name": "Трансфер из аэропорта HKT в Holiday Village & Natural",
           "duration_minutes": 38,
           "price_rub": 1440
-        },
-        {
-          "from": "HKT",
-          "to": "thailand_tbo_the_boathouse_phuket_34",
-          "type": "taxi",
-          "name": "Трансфер из аэропорта HKT в The Boathouse Phuket",
-          "duration_minutes": 39,
-          "price_rub": 1520
         },
         {
           "from": "HKT",
@@ -18456,7 +18448,7 @@
         },
         {
           "from": "HKT",
-          "to": "thailand_tbo_centara_grand_beach_reso_146",
+          "to": "th_karon_centara_grand",
           "type": "taxi",
           "name": "Трансфер из аэропорта HKT в Centara Grand Beach Resor",
           "duration_minutes": 31,

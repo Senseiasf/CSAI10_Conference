@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 from app.mcp.tools import MCPTools
 from app.services.agent_service import AgentService
+from app.services.ltr_service import LTRService
 
 
 def make_hotel(h_id, name, price, pet_friendly=True, pet_surcharge=1500):
@@ -48,15 +49,16 @@ class AgentFixesTest(unittest.IsolatedAsyncioTestCase):
             result = await AgentService.process_message("test", message)
         return result, save
 
-    async def test_budget_limit_ranks_by_quality_not_lowest_price(self):
+    async def test_budget_limit_preserves_ml_ranking(self):
         hotels = [
             {**make_hotel("expensive", "Гранд Люкс Отель", 12000), "stars": "5★"},
             make_hotel("mid", "Комфорт Отель", 6000),
             {**make_hotel("cheap", "Эконом Резорт", 3000), "stars": "1★"},
         ]
-        result, _ = await self.run_agent("Сочи бюджет до 300 тысяч", hotels)
+        with patch.object(LTRService, "score_features_batch", side_effect=lambda batch: ([9 if f["hotel_stars"] == 4 else 1 for f in batch], 0.1, "test")):
+            result, _ = await self.run_agent("Сочи бюджет до 300 тысяч", hotels)
         self.assertEqual(result["ltr_ranking"]["selection_policy"], "ltr")
-        self.assertEqual(result["cart"]["hotel_id"], "expensive")
+        self.assertEqual(result["cart"]["hotel_id"], "mid")
         self.assertLessEqual(result["cart"]["budget_comparison"]["compared_amount_rub"], 300000)
         self.assertEqual(result["cart"]["budget_comparison"]["basis"], "full_max")
 
@@ -74,11 +76,8 @@ class AgentFixesTest(unittest.IsolatedAsyncioTestCase):
             result = await AgentService.process_message("test", "Во сколько внутренний рейс?")
 
         self.assertEqual(result["state"], "INTERNAL_SCHEDULE_INFO")
-        self.assertIn("11:30", result["text"])
-        self.assertIn("12:45", result["text"])
-        self.assertIn("1 ч 15 мин", result["text"])
-        self.assertIn("Turkish Airlines", result["text"])
-        self.assertIn("Анталья ➔ Стамбул", result["text"])
+        self.assertIn("нет подтверждённого", result["text"])
+        self.assertNotIn("TK-2415", result["text"])
 
     async def test_pet_surcharge_included_in_mandatory_and_breakdown(self):
         """Fix 3: When traveling with pets, pet surcharge is included in budget and displayed."""
@@ -195,7 +194,6 @@ class AgentFixesTest(unittest.IsolatedAsyncioTestCase):
             base_hotel_price=hotel_base_price,
             fixed_costs=fixed_costs
         )
-        best_opt = flex_options[0]
-        expected_diff = cur_calc["total_mandatory"] - best_opt["target_mandatory_rub"]
-        self.assertEqual(expected_diff, best_opt["savings_rub"])
+        self.assertEqual(flex_options, [])
+        self.assertEqual(cur_calc["total_mandatory"], 57000)
 

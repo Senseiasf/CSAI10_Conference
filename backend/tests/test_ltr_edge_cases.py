@@ -45,7 +45,7 @@ class FeatureEdgeCasesTest(unittest.TestCase):
         for city, destination in (("Красная Поляна", "sochi"), ("Батуми", "georgia"),
                                   ("Анталья", "turkey"), ("Петергоф", "spb"), ("Манжерок", "altai")):
             self.assertEqual(LTRService.resolve_canonical_cities("bali", city), ltr.DESTINATION_TO_CANONICAL_CITIES[destination])
-        self.assertEqual(LTRService.resolve_canonical_cities("", "unknown"), ltr.DESTINATION_TO_CANONICAL_CITIES["sochi"])
+        self.assertEqual(LTRService.resolve_canonical_cities("", "unknown"), "unknown")
 
     def test_stars_are_bounded_and_missing_values_are_safe(self):
         for value, expected in (("5★", 5), ("3 звезды", 3), (4, 4), (0, 1), (7, 5),
@@ -96,12 +96,12 @@ class FeatureEdgeCasesTest(unittest.TestCase):
                 self.assertAlmostEqual(features["layover_hours"], hours, places=2)
         for missing in (None, {}):
             features = LTRService.extract_candidate_features({}, "sochi", logistics=missing)
-            self.assertEqual((features["transfers"], features["layover_hours"]), (1, 1.5))
+            self.assertEqual((features["transfers"], features["layover_hours"]), (0, 0))
 
     def test_package_price_room_scaling_and_positive_duration(self):
         features = LTRService.extract_candidate_features({"price_per_night_rub": 5000}, "sochi",
                                                          {"rooms_count": 2}, 10)
-        self.assertEqual(features["price"], 125000)
+        self.assertEqual(features["price"], 100000)
         actual = LTRService.extract_candidate_features({}, "sochi", breakdown={"mandatory": {"total_mandatory_rub": 145000}})
         self.assertEqual(actual["price"], 145000)
         for nights in (0, -3, None, "bad"):

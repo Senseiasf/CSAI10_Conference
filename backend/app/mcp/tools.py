@@ -3,13 +3,10 @@ import logging
 import httpx
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-from sqlalchemy import select, text
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm.attributes import flag_modified
+from sqlalchemy import select
 
 from app.database import async_session_maker
 from app.models import DestinationModel, HotelModel, RiskAlertModel, UserSessionModel
-from app.services.vector_service import generate_text_embedding
 from app.services.graph_repository import graph_repository
 
 logger = logging.getLogger("mcp_tools")
@@ -377,12 +374,18 @@ class MCPTools:
         travelers_count: Optional[int] = None,
         strict_graph_validation: bool = True,
         return_airport_code: str | None = None,
+        transfer_arrival_time: str | None = None,
     ) -> Dict[str, Any]:
         """
         MCP Tool: Запрашивает графовую базу Neo4j для проверки сквозной цепочки:
         (Аэропорт вылета) -[:FLIGHT_TO]-> (Аэропорт прибытия) -[:TRANSFER_TO]-> (Отель)
         """
         logger.info(f"[MCP] Calling check_logistics_compatibility: {origin_airport_code} -> {airport_code} -> {hotel_id}, direct={prefer_direct_flight}, no_transfer={without_transfer}, time_pref={flight_time_pref}")
+        if transfer_arrival_time is not None:
+            from app.services.graph_service import GraphService
+            return await GraphService.validate_transfer(
+                airport_code, hotel_id, transfer_arrival_time, max(1, travelers_count or 1)
+            )
         return await graph_repository.check_compatibility(
             airport_code,
             hotel_id,
@@ -482,48 +485,10 @@ class MCPTools:
 
     @staticmethod
     async def checkout_cart(user_id: str, payment_method: str = "Банковская карта онлайн") -> Dict[str, Any]:
-        """
-        MCP Tool: Имитирует процесс покупки и бронирования тура (билеты + отель + трансфер).
-        """
-        logger.info(f"[MCP] Calling checkout_cart for {user_id}")
+        """Return the explicit provider availability status for checkout."""
+        from app.services.booking_stub import booking_stub
         async with async_session_maker() as session:
-            sess_obj = await session.get(UserSessionModel, user_id)
-            if not sess_obj:
+            current = await session.get(UserSessionModel, user_id)
+            if current is None:
                 return {"status": "error", "message": "Сессия не найдена"}
-
-            cart = sess_obj.current_cart or {}
-            booking_id = f"OST-{abs(hash(user_id)) % 899999 + 100000}"
-            nights = cart.get("nights", 7)
-
-            mandatory_cost = cart.get("total_mandatory_rub")
-            if not mandatory_cost:
-                raw_price = cart.get("price_per_night_rub", 15000)
-                mandatory_cost = int(raw_price) * nights + 25000 + 2500
-
-            confirmation = {
-                "booking_id": booking_id,
-                "status": "CONFIRMED",
-                "payment_status": "PAID_SIMULATION",
-                "payment_method": payment_method,
-                "destination": cart.get("destination", "Выбранный курорт"),
-                "hotel": cart.get("hotel", "Выбранный отель"),
-                "flight": cart.get("flight", "Прямой рейс"),
-                "transfer": cart.get("transfer", "Стандартный трансфер"),
-                "dates": cart.get("dates", f"{nights} ночей"),
-                "nights": nights,
-                "total_paid_rub": mandatory_cost,
-                "flight_tracking": "Включен мониторинг задержек рейса и бесплатное ожидание трансфера до 90 мин",
-                "baggage_protection": "Включена страховка задержки выдачи багажа",
-                "hotel_checkin_guarantee": "Гарантированный круглосуточный Late Check-in 24/7",
-                "onsite_spending_guide": cart.get("onsite_spending_guide", "Рекомендуется иметь с собой наличные/карту"),
-                "voucher_url": f"/api/voucher/{booking_id}",
-                "message": f"🎉 Поездка успешно оформлена! Ваучер бронирования #{booking_id} готов."
-            }
-
-            sess_obj.current_state = "CONFIRMED"
-            cart["booking_confirmation"] = confirmation
-            sess_obj.current_cart = dict(cart)
-            flag_modified(sess_obj, "current_cart")
-            await session.commit()
-
-            return confirmation
+            return booking_stub("book", current.current_cart or {})

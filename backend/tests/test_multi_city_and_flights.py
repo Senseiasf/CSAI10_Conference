@@ -44,7 +44,7 @@ def make_logistics(airline="Аэрофлот", flight_no="SU-2144", dep="13:40",
                 "dest_code": orig
             }
         },
-        "transfer": {"price_rub": 2500, "name": "Комфорт-трансфер"},
+        "transfer": {"price_rub": 2500, "name": "Комфорт-трансфер", "duration_min": 60},
         "timeline": {
             "flight_departure": dep,
             "flight_arrival": arr,
@@ -101,7 +101,16 @@ class SlotExtractionTest(unittest.TestCase):
                 self.assertTrue(profile.get("is_multi_city"), f"Failed for phrase: {phrase}")
 
 
-class MultiCityRegionsTest(unittest.IsolatedAsyncioTestCase):
+class MultiCityFixture(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        flight = {"flight_no": "TK-2415", "airline": "Turkish Airlines", "departure_time": "11:30",
+                  "arrival_time": "12:45", "duration_minutes": 75, "price_rub": 3800}
+        patcher = patch.object(GraphService, "find_intercity_logistics", new=AsyncMock(return_value=flight))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+
+class MultiCityRegionsTest(MultiCityFixture):
     async def test_turkey_multi_city_itinerary(self):
         user = SimpleNamespace(
             profile={"nights": 7},
@@ -167,7 +176,7 @@ class MultiCityRegionsTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result.get("is_multi_city"))
         self.assertIn("Сириус", result["text"])
         self.assertIn("Красная Поляна", result["text"])
-        self.assertIn("Ласточка", result["text"])
+        self.assertIn("Комфорт-трансфер", result["text"])
         self.assertIn("Сириус Ривьера", result["text"])
         self.assertIn("Гранд Спа Поляна", result["text"])
 
@@ -201,7 +210,7 @@ class MultiCityRegionsTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result.get("is_multi_city"))
         self.assertIn("Дубай", result["text"])
         self.assertIn("Абу-Даби", result["text"])
-        self.assertIn("экспресс-трансфер", result["text"])
+        self.assertIn("Комфорт-трансфер", result["text"])
         self.assertIn("Rixos Premium Dubai", result["text"])
         self.assertIn("Emirates Palace", result["text"])
 
@@ -235,10 +244,10 @@ class MultiCityRegionsTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result.get("is_multi_city"))
         self.assertIn("Горно-Алтайск", result["text"])
         self.assertIn("Чемал", result["text"])
-        self.assertIn("Чуйскому тракту", result["text"])
+        self.assertIn("Комфорт-трансфер", result["text"])
 
 
-class MultiCityConstraintsAndEdgeCasesTest(unittest.IsolatedAsyncioTestCase):
+class MultiCityConstraintsAndEdgeCasesTest(MultiCityFixture):
     async def test_multi_city_preserves_pet_and_kids_constraints(self):
         user = SimpleNamespace(
             profile={"nights": 7, "has_pets": True, "has_kids": True},
@@ -538,7 +547,7 @@ class DynamicMultiCityProcessMessageTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Сочи (Побережье + Красная Поляна)", result["text"])
         self.assertIn("Сириус", result["text"])
         self.assertIn("Красная Поляна", result["text"])
-        self.assertIn("Ласточка", result["text"])
+        self.assertIn("Комфорт-трансфер", result["text"])
         self.assertIn("сочетание теплого моря и горных панорам", result["text"])
         self.assertIn("Красная Поляна", result["destination"]["name"])
         self.assertEqual(result["cart"]["destination"], result["destination"]["name"])
@@ -590,7 +599,7 @@ class DynamicMultiCityProcessMessageTest(unittest.IsolatedAsyncioTestCase):
             result = await AgentService.process_message("test-graph-flight", "составь тур по городам в Турцию")
 
         self.assertIn("TK-2415", result["text"])
-        self.assertIn("подтверждён графом логистики Neo4j", result["text"])
+        self.assertIn("Рейс из каталога", result["text"])
 
 
 if __name__ == "__main__":

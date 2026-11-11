@@ -221,7 +221,8 @@ def evaluate_ndcg(
     # Дополнительно посчитаем Pairwise Accuracy (долю угаданных победителей в парах)
     pred_winner = np.argmax(y_score, axis=1)
     true_winner = np.argmax(y_true, axis=1)
-    pairwise_acc = float(np.mean(pred_winner == true_winner))
+    ties = y_score[:, 0] == y_score[:, 1]
+    pairwise_acc = float(np.mean(np.where(ties, 0.5, pred_winner == true_winner)))
 
     return {
         "catboost_ndcg": cb_ndcg_last,
@@ -300,9 +301,12 @@ def main() -> None:
         f"Test: {len(test_df)} строк ({test_df['group_id'].nunique()} групп)"
     )
 
+    train_df, validation_df = split_by_group(train_df, test_size=0.2, random_state=args.seed + 1)
+
     # Создание объектов catboost.Pool
     train_pool = create_catboost_pool(train_df)
     test_pool = create_catboost_pool(test_df)
+    validation_pool = create_catboost_pool(validation_df)
 
     # 3. Инициализация и обучение CatBoostRanker
     print(
@@ -322,7 +326,7 @@ def main() -> None:
 
     ranker.fit(
         train_pool,
-        eval_set=test_pool,
+        eval_set=validation_pool,
         use_best_model=True,
     )
 

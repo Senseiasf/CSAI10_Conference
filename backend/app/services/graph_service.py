@@ -80,6 +80,8 @@ class GraphService:
         - Отели (:Hotel)
         - Трансферы (:Airport)-[:TRANSFER_TO]->(:Hotel)
         """
+        from app.services.catalog_validation import validate_catalog
+        validate_catalog(data)
         driver = get_neo4j_driver()
         await GraphService.init_schema()
 
@@ -180,11 +182,11 @@ class GraphService:
                         "layover_city": fl.get("layover_city"),
                         "layover_duration_minutes": fl.get("layover_duration_minutes"),
                         "layover_risk_note": fl.get("layover_risk_note", ""),
-                        "on_time_pct": fl.get("on_time_pct", 85.0),
-                        "aircraft_type": fl.get("aircraft_type", "Airbus A320"),
-                        "baggage_allowance": fl.get("baggage_allowance", "Багаж 23 кг"),
-                        "meal_service": fl.get("meal_service", "Питание включено"),
-                        "seat_pitch": fl.get("seat_pitch", "79-81 см")
+                        "on_time_pct": fl.get("on_time_pct"),
+                        "aircraft_type": fl.get("aircraft_type"),
+                        "baggage_allowance": fl.get("baggage_allowance"),
+                        "meal_service": fl.get("meal_service"),
+                        "seat_pitch": fl.get("seat_pitch")
                     }
                     for fl in dest.get("flights", [])
                 ]
@@ -260,7 +262,11 @@ class GraphService:
                         MATCH (h2:Hotel {id: item.to_id})
                         MERGE (h1)-[r:INTERHOTEL_TRANSFER_TO {type: item.type, name: item.name}]->(h2)
                         SET r.duration_minutes = item.duration,
-                            r.price_rub = item.price
+                            r.price_rub = item.price,
+                            r.capacity = item.capacity,
+                            r.bridge_crossing_minutes = item.bridge_crossing_minutes,
+                            r.bridge_closed_from = item.bridge_closed_from,
+                            r.bridge_closed_until = item.bridge_closed_until
                         """,
                         batch=interhotel_transfers_batch
                     )
@@ -276,12 +282,15 @@ class GraphService:
         driver = get_neo4j_driver()
         query = """
         MATCH (a1:Airport {code: $orig})-[f:FLIGHT_TO]->(a2:Airport {code: $dest})
+        WHERE coalesce(f.flight_type, 'direct') = 'direct'
+          AND f.price_rub_roundtrip >= 0 AND f.duration_minutes > 0
         RETURN f.airline AS airline,
                f.flight_no AS flight_no,
                f.departure_time AS departure_time,
                f.arrival_time AS arrival_time,
                f.duration_minutes AS duration_minutes,
                f.price_rub_roundtrip AS price_rub
+        ORDER BY f.price_rub_roundtrip, f.duration_minutes, f.flight_no
         LIMIT 1
         """
         try:
@@ -289,9 +298,12 @@ class GraphService:
                 result = await session.run(query, orig=origin_airport, dest=dest_airport)
                 record = await result.single()
                 if record:
-                    return dict(record)
+                    data = dict(record)
+                    minutes_since_midnight(data["departure_time"])
+                    minutes_since_midnight(data["arrival_time"])
+                    return data
         except Exception as e:
-            logger.debug(f"Direct graph intercity query skipped (mock/fallback mode): {e}")
+            logger.warning("Intercity route lookup failed: %s", e)
         return None
 
     @staticmethod
@@ -645,6 +657,43 @@ class GraphService:
             except (KeyError, TypeError, ValueError):
                 continue
         return None
+
+
+    @staticmethod
+    async def validate_transfer(airport_code: str, hotel_id: str, arrival_time: str,
+                                travelers_count: int = 1) -> dict:
+        """Validate the ground leg after arrival of an intercity service."""
+        try:
+            ready = minutes_since_midnight(arrival_time)
+        except (ValueError, TypeError):
+            return rejection("invalid_timeline")
+        async with get_neo4j_driver().session() as session:
+            result = await session.run(
+                """
+                MATCH (start)-[t:TRANSFER_TO|INTERHOTEL_TRANSFER_TO]->(:Hotel {id: $hotel})
+                WHERE start.code = $airport OR start.id = $airport
+                RETURN start:Airport AS is_airport, $airport AS dest_code, t.name AS transfer_name, t.type AS transfer_type,
+                       t.duration_minutes AS transfer_duration, t.price_rub AS transfer_price,
+                       t.capacity AS transfer_capacity,
+                       t.bridge_crossing_minutes AS bridge_crossing_minutes,
+                       t.bridge_closed_from AS bridge_closed_from, t.bridge_closed_until AS bridge_closed_until
+                ORDER BY t.price_rub, t.duration_minutes, t.name
+                """, airport=airport_code, hotel=hotel_id,
+            )
+            for row in await result.data():
+                try:
+                    if row["transfer_price"] < 0 or row["transfer_duration"] < 0:
+                        continue
+                    if transfer_rejection(row, ready + (post_flight_buffer(airport_code) if row["is_airport"] else 0), travelers_count, True):
+                        continue
+                except (KeyError, ValueError, TypeError):
+                    continue
+                return {"compatible": True, "transfer": {
+                    "name": row["transfer_name"], "type": row["transfer_type"],
+                    "price_rub": row["transfer_price"], "duration_min": row["transfer_duration"],
+                    "capacity": row["transfer_capacity"],
+                }}
+        return rejection("no_outbound_route")
 
     @staticmethod
     async def get_graph_stats() -> Dict[str, int]:

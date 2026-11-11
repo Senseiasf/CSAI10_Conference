@@ -29,7 +29,7 @@ def logistics():
             "departure_time": "01:00", "arrival_time": "05:00", "flight_type": "direct",
             "return_flight": {"flight_no": "TA-2", "airline": "Test Air", "origin_code": "AER",
                               "departure_time": "15:00", "arrival_time": "18:00"}},
-            "transfer": {"price_rub": 2000, "name": "Taxi", "type": "taxi"},
+            "transfer": {"price_rub": 2000, "name": "Taxi", "type": "taxi", "duration_min": 30},
             "timeline": {"flight_departure": "01:00", "flight_arrival": "05:00", "transfer_start": "05:50",
                          "hotel_arrival": "06:00", "hotel_checkin_policy": "15:00", "checkin_wait_minutes": 540}}
 
@@ -87,7 +87,7 @@ class AgentLTRIntegrationTest(unittest.IsolatedAsyncioTestCase):
         result, _, _ = await self.run_agent(profile={"interests": ["luxury"]}, hotels=hotels)
         self.assertEqual(result["cart"]["hotel_id"], "hotel-0")
         self.assertEqual(result["ltr_ranking"]["top_score"], result["compared_hotels"][0]["ltr_score"])
-        tied, _, _ = await self.run_agent(profile={"budget_rub": 200000}, hotels=[hotel(index) for index in range(3)])
+        tied, _, _ = await self.run_agent(profile={"budget_rub": 220000}, hotels=[hotel(index) for index in range(3)])
         self.assertEqual(tied["ltr_ranking"]["selection_policy"], "ltr")
 
     async def test_price_filter_cannot_be_undone_by_ltr(self):

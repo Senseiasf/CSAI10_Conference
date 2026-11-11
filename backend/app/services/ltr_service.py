@@ -77,13 +77,12 @@ DESTINATION_TO_CANONICAL_CITIES: Dict[str, str] = {
     "sochi": "Сочи -> Красная Поляна -> Сириус",
     "georgia": "Тбилиси -> Батуми -> Кутаиси",
     "turkey": "Стамбул -> Анталья -> Каппадокия",
-    "spb": "Москва -> СПб -> Казань",
-    "altai": "Екатеринбург -> Тюмень -> Тобольск",
-    # Ближайшие по структуре и логистике маршруты для остальных курортных направлений
-    "uae": "Стамбул -> Анталья -> Каппадокия",
-    "thailand": "Стамбул -> Анталья -> Каппадокия",
-    "maldives": "Стамбул -> Анталья -> Каппадокия",
-    "egypt": "Стамбул -> Анталья -> Каппадокия",
+    "spb": "Санкт-Петербург",
+    "altai": "Горно-Алтайск -> Чемал",
+    "uae": "Дубай -> Абу-Даби",
+    "thailand": "Бангкок -> Пхукет",
+    "maldives": "Мале",
+    "egypt": "Хургада -> Шарм-эль-Шейх",
 }
 
 DEFAULT_MODEL_PATH = Path(__file__).resolve().parent.parent / "data" / "catboost_travel_ranker.cbm"
@@ -221,12 +220,12 @@ class LTRService:
             return "Тбилиси -> Батуми -> Кутаиси"
         if any(w in city_lower for w in ("стамбул", "анталь", "каппадок", "кемер", "белек", "каш", "алань")):
             return "Стамбул -> Анталья -> Каппадокия"
-        if any(w in city_lower for w in ("петербург", "спб", "москв", "казан", "петергоф")):
-            return "Москва -> СПб -> Казань"
-        if any(w in city_lower for w in ("екатеринбург", "тюмен", "тобольск", "алтай", "манжерок", "чемал")):
-            return "Екатеринбург -> Тюмень -> Тобольск"
+        if any(w in city_lower for w in ("петербург", "спб", "петергоф")):
+            return DESTINATION_TO_CANONICAL_CITIES["spb"]
+        if any(w in city_lower for w in ("алтай", "манжерок", "чемал")):
+            return DESTINATION_TO_CANONICAL_CITIES["altai"]
 
-        return "Сочи -> Красная Поляна -> Сириус"
+        return dest_key or "unknown"
 
     @staticmethod
     def _parse_stars(raw_stars: Any) -> int:
@@ -323,13 +322,13 @@ class LTRService:
         if breakdown and "mandatory" in breakdown:
             price = max(0.0, finite_number((breakdown["mandatory"] or {}).get("total_mandatory_rub")))
         else:
-            per_night = max(0.0, finite_number(hotel.get("price_per_night_rub"), 5000))
+            per_night = max(0.0, finite_number(hotel.get("price_per_night_rub")))
             rooms = max(1, int(finite_number(profile.get("rooms_count"), 1)))
-            price = per_night * days * rooms + 25000.0
+            price = per_night * days * rooms
 
         # Параметры пересадок и стыковок из графа логистики Neo4j
-        transfers_count = 1
-        layover_hours = 1.5
+        transfers_count = 0
+        layover_hours = 0.0
         if logistics:
             flight = logistics.get("flight") or {}
             timeline = logistics.get("timeline") or {}
