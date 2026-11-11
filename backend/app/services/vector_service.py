@@ -1,70 +1,36 @@
-import hashlib
+"""Multilingual sentence embeddings projected into the existing pgvector schema."""
+from functools import lru_cache
 import re
-from typing import List
 import numpy as np
-import logging
-
-logger = logging.getLogger(__name__)
 
 VECTOR_DIM = 128
+MODEL_REVISION = "e8f8c211226b894fcb81acc59f3b34ba3efd5f42"
+EMBEDDING_VERSION = "minilm-multilingual-128-v1"
+MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
-# Семантические концепт-якоря предметной области (первые 12 компонент вектора)
-SEMANTIC_CLUSTERS = [
-    ("море", "морск", "пляж", "побереж", "купат", "загар", "океан", "бухт", "риф", "снорклинг", "дайвинг", "коралл", "лагун"),
-    ("гор", "вершин", "ущел", "лыж", "сноуборд", "канатк", "треккинг", "поход", "альп", "кавказ", "алтай", "полян"),
-    ("семь", "дет", "ребен", "ребён", "малыш", "аквапарк", "анимац", "коляск", "семейн"),
-    ("люкс", "премиум", "роскош", "спа", "вилла", "бассейн", "пятизвезд", "5 звезд", "vip", "яхт", "гидросамолет"),
-    ("бюджет", "дешев", "недорог", "эконом", "выгодн", "хостел", "доступн", "студенч"),
-    ("питом", "собак", "кошк", "животн", "пес", "пёс", "pet", "джек-рассел", "шпиц", "корги", "лабрадор", "пудел"),
-    ("истор", "музе", "архитектур", "дворц", "экскурс", "культур", "древн", "храм", "собор", "парадн", "канал", "мост"),
-    ("природ", "озер", "озёр", "лес", "тайг", "водопад", "воздух", "тишин", "уедин", "эко", "шале", "река", "катун"),
-    ("тусовк", "ночн", "клуб", "бар", "шопинг", "мегаполис", "небоскреб", "современ", "молл", "бурдж"),
-    ("тепл", "жарк", "солнечн", "тропик", "экзотик", "пальм", "остров", "зимовк", "фрукт"),
-    ("гастро", "вин", "кухн", "ресторан", "вкусн", "хачапур", "хинкал", "морепродукт", "все включено", "all inclusive"),
-    ("романтик", "вдвоем", "медов", "закат", "панорам", "уютн"),
-]
+@lru_cache(maxsize=1)
+def get_embedding_model():
+    from sentence_transformers import SentenceTransformer
+    return SentenceTransformer(MODEL_NAME, revision=MODEL_REVISION, device="cpu")
 
+@lru_cache(maxsize=4)
+def projection(source_dim: int, target_dim: int) -> np.ndarray:
+    # Fixed projection keeps queries and catalogue in the same vector space.
+    matrix = np.random.default_rng(42).normal(size=(source_dim, target_dim))
+    return np.linalg.qr(matrix)[0].astype(np.float32)
 
-def generate_text_embedding(text: str, dim: int = VECTOR_DIM) -> List[float]:
-    """
-    Генерирует семантически согласованный 128-мерный вектор (Concept-Anchored Char-Ngram):
-    - Компоненты [0..len(SEMANTIC_CLUSTERS)-1]: активация предметных концептов (устойчива к словоформам).
-    - Компоненты [len(SEMANTIC_CLUSTERS)..dim-1]: проекция символьных 3-грамм и 4-грамм очищенных токенов.
-    Нормализуется по L2 для точного косинусного оператора `<=>` в pgvector.
-    """
-    clean_text = re.sub(r"[^а-яёa-z0-9\s]", " ", (text or "").lower().replace("ё", "е"))
-    tokens = [t for t in clean_text.split() if len(t) >= 2]
-    vector = np.zeros(dim, dtype=np.float32)
-
-    if not tokens:
-        vector[0] = 1.0
-        return vector.tolist()
-
-    joined = " ".join(tokens)
-    offset = len(SEMANTIC_CLUSTERS)
-
-    # 1. Семантические концепт-якоря (вес 2.5 для сильного совпадения по смыслу)
-    for idx, stems in enumerate(SEMANTIC_CLUSTERS):
-        matches = sum(1 for stem in stems if stem in joined)
-        if matches > 0:
-            vector[idx] = 2.5 * min(3.0, float(matches))
-
-    # 2. Символьные n-граммы (n=3, 4) для морфологической близости однокоренных слов
-    ngram_dim = dim - offset
-    for token in tokens:
-        padded = f"<{token}>"
-        for n in (3, 4):
-            for i in range(max(0, len(padded) - n + 1)):
-                ngram = padded[i : i + n]
-                digest = hashlib.md5(ngram.encode("utf-8")).digest()
-                bucket = offset + (int.from_bytes(digest[:2], "little") % ngram_dim)
-                sign = 1.0 if (digest[2] % 2 == 0) else -1.0
-                vector[bucket] += sign * 0.35
-
-    norm = float(np.linalg.norm(vector))
-    if norm > 1e-8:
-        vector /= norm
-    else:
-        vector[0] = 1.0
-
-    return [round(float(x), 6) for x in vector]
+def generate_text_embedding(text: str, dim: int = VECTOR_DIM) -> list[float]:
+    normalized = " ".join(re.findall(r"\w+", (text or "").casefold().replace("ё", "е")))
+    if not normalized:
+        v = np.zeros(dim, dtype=np.float32)
+        v[0] = 1.0
+        return v.tolist()
+    vector = get_embedding_model().encode(normalized, convert_to_numpy=True)
+    if not 1 <= dim <= len(vector):
+        raise ValueError("Invalid embedding dimension")
+    if dim < len(vector):
+        vector = vector @ projection(len(vector), dim)
+    norm = np.linalg.norm(vector)
+    if norm > 0:
+        vector = vector / norm
+    return vector.tolist()

@@ -5,7 +5,7 @@ from pathlib import Path
 from sqlalchemy import text, select
 from app.database import engine, async_session_maker, check_postgres_health, check_neo4j_health
 from app.models import Base, DestinationModel, HotelModel, RiskAlertModel
-from app.services.vector_service import generate_text_embedding
+from app.services.vector_service import generate_text_embedding, EMBEDDING_VERSION
 from app.services.graph_service import GraphService
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -88,6 +88,12 @@ async def seed_postgres(data: dict):
                 dest_obj.vibe_description = dest["vibe_description"]
                 dest_obj.climate_summary = dest["climate_summary"]
                 dest_obj.embedding = vector
+                dest_obj.metadata_json = {
+                    **(dest_obj.metadata_json or {}),
+                    "cities": dest.get("cities", []),
+                    "airports": dest.get("airports", []),
+                    "embedding_version": EMBEDDING_VERSION,
+                }
 
             # Отели
             for h in dest.get("hotels", []):
