@@ -1,5 +1,6 @@
 import json
 import unittest
+from datetime import date
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -42,6 +43,12 @@ def hotel(hotel_id, name, stars, price):
     }
 
 
+class DialogueTestDate(date):
+    @classmethod
+    def today(cls):
+        return cls(2026, 10, 30)
+
+
 class AgentDialogueE2ETest(unittest.TestCase):
     def setUp(self):
         self.user = SimpleNamespace(
@@ -71,6 +78,7 @@ class AgentDialogueE2ETest(unittest.TestCase):
             "timeline": {},
         }
         self.patches = [
+            patch("app.services.trip_dates.date", DialogueTestDate),
             patch.object(AgentService, "get_or_create_session", new=AsyncMock(return_value=self.user)),
             patch("app.services.agent_service.async_session_maker", side_effect=lambda: FakeSession(self.user)),
             patch("app.services.graph_repository.graph_repository.save_tour_version", new_callable=AsyncMock),

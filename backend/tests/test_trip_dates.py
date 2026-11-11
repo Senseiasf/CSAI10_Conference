@@ -17,7 +17,7 @@ class TripDatesTest(unittest.TestCase):
                                   ("раньше на 4 дня", "2026-11-06")):
             with self.subTest(message=message):
                 profile = {"checkin_date": "2026-11-10", "nights": 7}
-                self.assertIsNone(update_trip_dates(message, profile))
+                self.assertIsNone(update_trip_dates(message, profile, today=date(2026, 10, 30)))
                 self.assertEqual(profile["checkin_date"], expected)
                 self.assertEqual(profile["nights"], 7)
                 self.assertEqual(int(profile["checkout_date"][-2:]), int(expected[-2:]) + 7)
@@ -75,7 +75,7 @@ class TripDatesTest(unittest.TestCase):
     def test_shift_with_cart_fallback_succeeds(self):
         profile = {"nights": 7}
         cart = {"checkin_date": "2026-11-15", "checkout_date": "2026-11-22"}
-        self.assertIsNone(update_trip_dates("Сдвинь поездку на 2 дня позже", profile, cart))
+        self.assertIsNone(update_trip_dates("Сдвинь поездку на 2 дня позже", profile, cart, today=date(2026, 10, 30)))
         self.assertEqual(profile["checkin_date"], "2026-11-17")
         self.assertEqual(profile["checkout_date"], "2026-11-24")
 
