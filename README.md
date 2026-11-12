@@ -7,7 +7,7 @@
 [![SentenceTransformers](https://img.shields.io/badge/SentenceTransformers-MiniLM--L12--v2%20(384D)-orange.svg)](https://huggingface.co/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2)
 [![Docker Compose](https://img.shields.io/badge/Docker-Compose%20v2-2496ed.svg)](https://www.docker.com/)
 
-> **Active Branch:** `exp/catboost-soft-preferences`  
+> **Active Branch:** `release/csai2026-final-practice`  
 > **Key Innovations:** Native 384D SentenceTransformer (`paraphrase-multilingual-MiniLM-L12-v2`), strict Neo4j catalog topology validation, calibrated semantic vibes without lexical attractors, and CatBoost V2 LTR (`FEATURE_SCHEMA_V2`, 22 features) with soft preference trade-offs and non-linear surcharge modeling.  
 
 Official experimental benchmark stand and codebase for the research paper:
