@@ -233,7 +233,7 @@ def plot_fig2_tradeoffs_single(output: Path) -> None:
     ax.set_title("Pairwise Trade-Off Decision Accuracy Under Budget Constraints")
     ax.set_xticks(x)
     ax.set_xticklabels([r[0] for r in regimes], fontweight="bold")
-    ax.set_ylim(0, 118)
+    ax.set_ylim(0, 130)
     ax.grid(axis="y", linestyle="--", alpha=0.35, zorder=0)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
@@ -272,7 +272,7 @@ def plot_fig3_feature_importance(data: dict, output: Path) -> None:
 
     colors = [get_color(k) for k in labels]
 
-    fig, ax = plt.subplots(figsize=(8.2, 4.6))
+    fig, ax = plt.subplots(figsize=(8.8, 4.8))
     bars = ax.barh(labels, values, color=colors, height=0.65, edgecolor="white", zorder=3)
 
     for b in bars:
@@ -299,8 +299,8 @@ def plot_fig3_feature_importance(data: dict, output: Path) -> None:
     ]
     ax.legend(handles=legend_elements, loc="lower right", frameon=True, fontsize=8.5)
 
-    ax.set_xlabel("Normalized Feature Importance (%)")
-    ax.set_title("CatBoostRanker V2: Grouped Feature Importance (PredictionValuesChange)")
+    ax.set_xlabel("Normalized Feature Attribution (%)")
+    ax.set_title("CatBoostRanker V2: Grouped Feature Importance", fontsize=11.5, fontweight="bold")
     ax.set_xlim(0, max(values) * 1.18)
     ax.grid(axis="x", linestyle="--", alpha=0.35, zorder=0)
     ax.spines["top"].set_visible(False)

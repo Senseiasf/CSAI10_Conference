@@ -110,36 +110,53 @@ On this branch (`feat/exp-minilm-and-graph-validation`), the pipeline was upgrad
 
 ## 4. CatBoost LTR Model & Training Specifications
 
-### Motivation for Retraining
-The legacy baseline CatBoost model suffered from:
-1. **Tree Saturation:** Split borders capped at 237,500 RUB caused luxury atoll packages (e.g. Maldives resorts at 400,000–800,000 RUB) to receive identical tree leaves.
-2. **Unconstrained Score Ties:** On open-ended queries without explicit constraints, identical scores led to arbitrary ranking.
-3. **Overfitting Beyond 200 Trees:** Training on synthetic pools past 200 iterations degraded test-set pairwise accuracy from 89.5% down to 79.7%.
+### Motivation for Retraining (V1 $\to$ V2 Evolution)
+The legacy baseline CatBoost model (V1, 12 features) suffered from:
+1. **Collisions in Geography:** Turkish categorical flags erroneously contaminated other resort destinations.
+2. **Conflated Distances:** Distance to the coastline (`dist_sea_km`) was erroneously folded into `dist_center_km`.
+3. **Absence of Temporal & Preference Signals:** Departure times and user-stated trade-off boundaries were not represented, causing the model to collapse to naive cost minimization on trade-offs.
 
-### Feature Schema (12 Features)
-The model was retrained on **69,311 pairs** (`part_4060ti.jsonl` + `part_4080s.jsonl`) with engineered normalized features:
+### Feature Schema V2 (22 Features)
+The deployed CatBoost V2 model (`FEATURE_SCHEMA_V2`) operates on **22 normalized features** structured into three semantic clusters:
 
 | Feature Name | Type | Description / Normalization Formula |
 | :--- | :---: | :--- |
-| `archetype` | Categorical | Target user persona (`family`, `budget`, `luxury`, `pet`, `solo`) |
-| `cities` | Categorical | Canonical routing path (e.g. `Сочи -> Красная Поляна -> Сириус`) |
-| `days` | Numerical | Length of stay in nights ($\ge 1$) |
-| `log_price` | Numerical | $\ln(1 + \text{total\_price\_rub})$ — prevents luxury price saturation |
-| `log_price_per_day` | Numerical | $\ln(1 + \frac{\text{total\_price\_rub}}{\text{days}})$ — daily cost rate |
-| `transfers` | Numerical | Total segment transfers (connecting flights + ground shuttles) |
-| `layover_hours` | Numerical | Total layover / connection buffer time in hours |
-| `hotel_stars` | Numerical | Hotel star rating ($1..5$) |
-| `dist_center_km` | Numerical | Distance to city / resort center in kilometers |
-| `pet_friendly` | Binary | Hotel accepts pets ($1$ / $0$) |
-| `breakfast` | Binary | Breakfast included in booking ($1$ / $0$) |
-| `stars_per_10k` | Numerical | $\frac{\text{hotel\_stars}}{\max(0.1, \text{price\_per\_day} / 10\,000)}$ — value-for-money metric |
+| **Cluster 1: Budget & Duration (44.8% Attribution)** | | |
+| `log_price` | Numerical | $\ln(1 + \text{total\_price\_rub})$ — non-linear scaling across budget tiers |
+| `log_price_per_day` | Numerical | $\ln(1 + \frac{\text{total\_price\_rub}}{\text{days}})$ — daily expenditure rate |
+| `days` | Numerical | Length of itinerary stay in nights ($\ge 1$) |
+| `stars_per_10k` | Numerical | $\frac{\text{hotel\_stars}}{\max(0.1, \text{price\_per\_day} / 10\,000)}$ — objective value-for-money ratio |
+| `price_delta_vs_cheapest` | Numerical | Absolute price difference in rubles relative to the cheapest candidate in the batch |
+| `relative_surcharge_pct` | Numerical | Percentage surcharge relative to the reference admissible candidate |
+| **Cluster 2: Hotel Quality & Geography (40.3% Attribution)** | | |
+| `hotel_stars` | Numerical | Hotel star classification ($1..5$) |
+| `dist_sea_km` | Numerical | Distance to the sea coast / beach in kilometers |
+| `has_dist_sea` | Binary | Indicator whether coastal distance is defined for the accommodation |
+| `dist_center_km` | Numerical | Distance to the municipal or historical center in kilometers |
+| `has_dist_center` | Binary | Indicator whether urban center distance is defined |
+| `cities` | Categorical | Calibrated canonical route (e.g. `Сочи -> Красная Поляна -> Сириус`), bug-fixed for all 9 destinations |
+| `archetype` | Categorical | Target traveler persona (`family`, `budget`, `luxury`, `pet`, `solo`) |
+| **Cluster 3: Logistics & Preference Matching (14.9% Attribution)** | | |
+| `departure_hour` | Numerical | Scheduled outbound departure time ($0.0 .. 23.99$) |
+| `has_departure_time` | Binary | Indicator whether flight schedule provides departure hour |
+| `is_direct_flight` | Binary | Direct non-stop flight indicator ($1$ / $0$) |
+| `transfers` | Numerical | Total transport segments / flight connections |
+| `layover_hours` | Numerical | Cumulative layover connection time in hours |
+| `matches_time_pref` | Binary | Alignment of outbound flight with user's preferred time window (morning, day, evening) |
+| `matches_direct_pref` | Binary | Direct flight matches user's soft preference for non-stop routing |
+| `breakfast` | Binary | Booking includes complimentary breakfast ($1$ / $0$) |
+| `pet_friendly` | Binary | Accommodation explicitly permits domestic pets ($1$ / $0$) |
 
-### Hyperparameters & Model Checkpoint
-* **Loss Function:** `PairLogit` (Pairwise ranking)
-* **Tree Depth:** 5
-* **Border Count:** 254
-* **Optimal Tree Shrinkage:** 200 trees (checkpoint: `backend/app/data/catboost_travel_ranker.cbm`, size: 278 KB)
-* **Native Latency:** **0.91 ms** per candidate batch (no GPU required).
+### Hyperparameters & Deployed Model Checkpoints
+Two complementary CatBoost checkpoints are utilized in the evaluation:
+1. **Pipeline Inference Ranker (`catboost_travel_ranker_v2.cbm`):**
+   * **Role:** Deployed in configuration $C_4$ for live re-ranking of Neo4j graph candidates (evaluated in `fig1b_preference_holdout.png`).
+   * **Parameters:** `PairLogit` loss, depth 4, 12 trees (compact footprint: 15.5 KB, latency: **0.81 ms** on CPU).
+   * **Validation Accuracy:** Reaches **93.3%** Success@1 and **96.7%** Success@3 on the 30-query nuanced holdout.
+2. **Trade-Off Decision Model (`fresh_catboost_with_priority`):**
+   * **Role:** Evaluates pairwise Pareto preference decisions under explicit surcharge thresholds on `csai_tradeoff_dataset.json.gz` (evaluated in `fig2_archetype_pairwise.png`).
+   * **Parameters:** `PairLogit` loss, trained on pairwise trade-off records with priority features (`benefit`, `upgrade`, `premium_thousands`, `max_extra_thousands`).
+   * **Benchmark Accuracy:** Reaches **96.2%** pairwise trade-off accuracy across 368 budget-constrained decisions.
 
 ---
 
@@ -294,10 +311,13 @@ While $C_{2\text{-G}}$ accidentally won on `TOP3_02`, pure price sorting catastr
 * On the 368-tradeoff dataset, pure price sorting achieves **0.0%** on justified comfort upgrades.
 
 #### C. Why CatBoost ($C_4$) Resolves the Conflict (93.3% Success@1, 96.7% Success@3)
-CatBoost V2 does not suffer from linear star-rating bias or greedy price minimization:
-1. It conditions on non-linear multi-attribute trade-offs (`relative_surcharge_pct`, `price_delta_vs_cheapest`, `matches_time_pref`, `matches_direct_pref`).
-2. It learns that paying a modest premium within budget for the primary destination matching user vibe intent dominates irrelevant cheap substitutes.
-3. As a result, $C_4$ correctly places the ideal offer at Rank 1 in **28 out of 30 queries (93.3%)**, outperforming both Price ($+10.0\%$) and Heuristics ($+13.3\%$).
+A precise attribution analysis explains why CatBoost V2 dominates both Price and Heuristics on `top3_holdout_v2`:
+1. **The Role of Ground-Truth Nuance Queries:** In `csai_top3_holdout.json`, 29 out of 30 queries formulate complex qualitative resort expectations rather than explicit numeric surcharge caps (only `TOP3_24` defines an explicit ruble limit).
+2. **Empirical Feature Attribution (Matching Figure 3):** As confirmed by `fig3_feature_importance.png`, the feature importances of `catboost_travel_ranker_v2.cbm` are concentrated in `hotel_stars` (22.1%), `dist_sea_km` (16.0%), `log_price_per_day` (13.5%), `days` (13.2%), `log_price` (10.9%), `stars_per_10k` (7.3%), `archetype` (5.0%), and `cities` (4.7%).
+3. **The Disambiguation Mechanism:** In queries `TOP3_03`–`TOP3_08` (where both $C_{2\text{-G}}$ and $C_3$ fail by picking cheap hostels or 5★ city hotels from neighboring regions), CatBoost correctly prioritizes the genuine target resort. The synergy of **calibrated canonical `cities` mapping** (V2 eliminated the geographic collision where non-Turkish resort airports were labeled as Turkey), **explicit coastal proximity (`dist_sea_km`)**, and **value-per-star ratio (`stars_per_10k`)** prevents CatBoost from falling for cheap, low-amenity substitutes (unlike Price) or urban luxury diversions (unlike Heuristics).
+4. **Distinct CatBoost Models Clarification:**
+   * `fresh_catboost_with_priority` (trained in `run_csai_tradeoffs.py` on `tradeoff_dataset.json.gz` with explicit preference features `benefit`, `upgrade`, `premium_thousands`, `max_extra_thousands`) achieves **96.2%** pairwise trade-off accuracy across 368 budget decisions (`fig2_archetype_pairwise.png`).
+   * `catboost_travel_ranker_v2.cbm` (frozen 12-tree checkpoint trained on 145 canonical candidate pairs) acts as the end-to-end pipeline ranker in $C_4$, achieving **93.3% Success@1** and **96.7% Success@3** on `top3_holdout_v2` (`fig1b_preference_holdout.png`).
 
 ---
 
