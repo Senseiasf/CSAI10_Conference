@@ -29,7 +29,7 @@ This repository originally originated from a conversational travel booking proto
 ### What is preserved (The Core Scientific Pipeline)
 * **Symbolic Knowledge Graph:** Neo4j logistics graph validating routes, transfers, and layover windows.
 * **Vector Semantic Retrieval:** PostgreSQL with `pgvector` performing 384-d cosine similarity search (`sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`).
-* **Learning-to-Rank Engine:** CatBoost LTR model with 12 normalized value-for-money features.
+* **Learning-to-Rank Engine:** CatBoost V2 LTR model (`FEATURE_SCHEMA_V2`, 22 normalized features across pricing, logistics, comfort, and soft preferences).
 * **Evaluation Suite:** Deterministic 200-query benchmark harness (`run_csai_benchmark.py`), publication figure plotting (`plot_csai_figures.py`), and regression tests.
 
 ---
@@ -66,9 +66,9 @@ Modern LLMs struggle with hard temporal, topological, and budgetary constraints,
                                   │
                                   ▼
       ┌────────────────────────────────────────────────────────┐
-      │  Stage 4: Learning-to-Rank Selection (CatBoost LTR)    │
-      │  - 12 normalized value-for-money features              │
-      │  - Shrunk 200-tree PairLogit ranking model             │
+      │  Stage 4: Learning-to-Rank Selection (CatBoost V2 LTR) │
+      │  - 22 normalized features (pricing, comfort, pref)     │
+      │  - PairLogit ranking model with soft-preference bounds │
       │  - Optimal candidate package selection                │
       └───────────────────────────┬────────────────────────────┘
                                   │
@@ -90,7 +90,7 @@ While mathematically preserving pairwise distances in expectation, this compress
 3. **Catastrophic CSR Collapse (40.8%):** Because Turkey's catalog packages are predominantly premium/deluxe (hotels: 42,000–128,000 RUB/night + 44,500 RUB roundtrip flight), budget queries (50,000–120,000 RUB) assigned to Turkey could not satisfy user budget constraints, driving Constraint Satisfaction Rate (CSR@3) down to 40.8%.
 
 ### The Native 384D Solution with Calibrated Vibes
-On this branch (`feat/exp-minilm-and-graph-validation`), the pipeline was upgraded to native 384D:
+On this branch (`release/csai2026-final-practice`), the pipeline was upgraded to native 384D:
 1. **Schema Upgrade:** PostgreSQL column migrated natively to `vector(384)`. pgvector performs sub-millisecond exact cosine distance computations ($<=>$) without dimensionality reduction.
 2. **Lexical De-biasing:** All generic attractor words (*"отель"*, *"пляж"*, *"отдых"*, *"все включено"*) were stripped across all 9 catalog regions.
 3. **Distinctive Semantic Markers:** Destination descriptions were calibrated with culturally distinct, natural semantic markers:
@@ -344,7 +344,8 @@ A precise attribution analysis explains why CatBoost V2 dominates both Price and
 │   │   ├── data/
 │   │   │   ├── destinations.json     # 9 destinations, 1327 hotels, 276 flights
 │   │   │   ├── csai_150_benchmark_queries.json  # 200 queries (40 per archetype)
-│   │   │   └── catboost_travel_ranker.cbm      # Shrunk 200-tree CatBoost LTR model
+│   │   │   ├── catboost_travel_ranker.cbm      # Legacy baseline CatBoost V1 model (12 features)
+│   │   │   └── catboost_travel_ranker_v2.cbm   # Deployed CatBoost V2 model (22 features, 12 trees)
 │   │   ├── domain/
 │   │   │   ├── experiment.py         # Benchmark data contracts
 │   │   │   ├── route.py              # Flight/transfer route entities
@@ -361,8 +362,10 @@ A precise attribution analysis explains why CatBoost V2 dominates both Price and
 │   │       ├── ltr_service.py        # CatBoost inference & feature engineering
 │   │       └── vector_service.py     # Native 384D MiniLM pgvector search
 │   └── tests/
+│       ├── test_csai_benchmark.py    # End-to-end benchmark regression tests
 │       ├── test_ltr_edge_cases.py    # Robustness, boundary conditions, fallbacks
-│       └── test_ltr_service.py       # Feature extraction & schema unit tests
+│       ├── test_ltr_service.py       # Feature extraction & schema V2 unit tests
+│       └── test_travel_preferences.py # User preference trade-off verification
 ├── docker-compose.yml                # Multi-container orchestration (db, neo4j)
 ├── experiment_outputs/               # CSV, LaTeX tables, JSON, PNG/PDF figures
 ├── Makefile                          # Build targets (up, down, test, benchmark)

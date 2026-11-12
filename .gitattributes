@@ -1,0 +1,10 @@
+# Standardize line endings across Windows and Linux environments
+* text=auto eol=lf
+
+# Binary assets
+*.png binary
+*.pdf binary
+*.cbm binary
+*.gz binary
+*.jpg binary
+
