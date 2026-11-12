@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -18,7 +19,6 @@ import numpy as np
 BASE_DIR = Path(__file__).resolve().parents[1]
 repo_root = BASE_DIR.parents[1] if (BASE_DIR.parents[1] / "docker-compose.yml").exists() else BASE_DIR.parent
 OUT_DIR = repo_root / "experiment_outputs"
-RESULTS_FILE = OUT_DIR / "benchmark_results.json"
 
 # Академический стиль оформления для одноколоночного шаблона ACM / CSAI
 plt.rcParams.update({
@@ -35,14 +35,14 @@ plt.rcParams.update({
 PALETTE = ["#64748B", "#0EA5E9", "#F59E0B", "#10B981"]
 
 
-def plot_fig1_ablation(data: dict) -> None:
+def plot_fig1_ablation(data: dict, output: Path) -> None:
     summary = data["summary"]
     configs = [r["Configuration"].replace(" (", "\n(") for r in summary]
     metrics = [
-        ("Dest_Recall_at_2_pct", "Destination Recall@2 (%)"),
-        ("Logistics_Feasibility_pct", "Logistics Feasibility (LFR, %)"),
-        ("Constraint_Satisfaction_pct", "Constraint Satisfaction (CSR, %)"),
-        ("Pairwise_Accuracy_pct", "Pairwise Ranking Acc. (%)"),
+        ("Destination_Hit_at_2_pct", "Destination Hit@2 (%)"),
+        ("Logistics_Feasibility_pct", "Logistics Feasibility@3 (%)"),
+        ("Constraint_Satisfaction_pct", "Constraint Satisfaction@3 (%)"),
+        ("Success_at_3_pct", "Success@3 (%)"),
     ]
 
     x = np.arange(len(configs))
@@ -55,6 +55,8 @@ def plot_fig1_ablation(data: dict) -> None:
         bars = ax.bar(x + offset, vals, width, label=m_label, color=PALETTE[idx], edgecolor="white")
         for b in bars:
             h = b.get_height()
+            if not np.isfinite(h):
+                continue
             ax.annotate(
                 f"{h:.1f}",
                 xy=(b.get_x() + b.get_width() / 2, h),
@@ -66,7 +68,7 @@ def plot_fig1_ablation(data: dict) -> None:
             )
 
     ax.set_ylabel("Score (%)")
-    ax.set_title("Pipeline Ablation Study Across Four Architectural Configurations")
+    ax.set_title("Travel Planning Benchmark Across Four Configurations")
     ax.set_xticks(x)
     ax.set_xticklabels(configs)
     ax.set_ylim(0, 115)
@@ -76,19 +78,22 @@ def plot_fig1_ablation(data: dict) -> None:
     ax.legend(loc="upper left", ncol=2, frameon=True)
 
     fig.tight_layout()
-    fig.savefig(OUT_DIR / "fig1_pipeline_ablation.png", dpi=300)
-    fig.savefig(OUT_DIR / "fig1_pipeline_ablation.pdf")
+    fig.savefig(output / "fig1_pipeline_ablation.png", dpi=300)
+    fig.savefig(output / "fig1_pipeline_ablation.pdf")
     plt.close(fig)
 
 
-def plot_fig2_archetypes(data: dict) -> None:
+def plot_fig2_archetypes(data: dict, output: Path) -> None:
     arch_data = data["archetype_comparison"]
     archetypes = ["pet", "family", "luxury", "budget", "solo"]
     arch_labels = ["Pet-Friendly", "Family (w/ Kids)", "Luxury", "Budget", "Solo Explorer"]
 
-    c1_acc = [arch_data["C1_Baseline_SQL"][a]["pairwise_acc"] for a in archetypes]
-    c3_acc = [arch_data["C3_Graph_Heuristic"][a]["pairwise_acc"] for a in archetypes]
-    c4_acc = [arch_data["C4_Full_CatBoost"][a]["pairwise_acc"] for a in archetypes]
+    def values(key):
+        return [np.nan if arch_data[key][a]["pairwise_acc"] is None else arch_data[key][a]["pairwise_acc"] for a in archetypes]
+
+    c1_acc = values("C1_Baseline_SQL")
+    c3_acc = values("C3_Graph_Heuristic")
+    c4_acc = values("C4_Full_CatBoost")
 
     x = np.arange(len(archetypes))
     width = 0.25
@@ -101,6 +106,8 @@ def plot_fig2_archetypes(data: dict) -> None:
     for bars in (b1, b2, b3):
         for b in bars:
             h = b.get_height()
+            if not np.isfinite(h):
+                continue
             ax.annotate(
                 f"{h:.1f}%",
                 xy=(b.get_x() + b.get_width() / 2, h),
@@ -112,7 +119,8 @@ def plot_fig2_archetypes(data: dict) -> None:
             )
 
     ax.set_ylabel("Pairwise Preference Accuracy (%)")
-    ax.set_title("Tour Ranking Accuracy by Traveler Archetype (Cold-Start Evaluation)")
+    source = data["metadata"]["pair_labels"].replace("_", " ")
+    ax.set_title(f"Pairwise Ranking Accuracy by Traveler Archetype ({source})")
     ax.set_xticks(x)
     ax.set_xticklabels(arch_labels)
     ax.set_ylim(0, 112)
@@ -122,24 +130,15 @@ def plot_fig2_archetypes(data: dict) -> None:
     ax.legend(loc="lower right", frameon=True)
 
     fig.tight_layout()
-    fig.savefig(OUT_DIR / "fig2_archetype_ndcg.png", dpi=300)
-    fig.savefig(OUT_DIR / "fig2_archetype_ndcg.pdf")
+    fig.savefig(output / "fig2_archetype_pairwise.png", dpi=300)
+    fig.savefig(output / "fig2_archetype_pairwise.pdf")
     plt.close(fig)
 
 
-def plot_fig3_feature_importance(data: dict) -> None:
-    fi = data.get("feature_importances") or {
-        "price": 24.8,
-        "archetype": 19.5,
-        "hotel_stars": 14.2,
-        "pet_friendly": 11.6,
-        "transfers": 8.9,
-        "breakfast": 7.4,
-        "layover_hours": 5.3,
-        "dist_center_km": 4.1,
-        "cities": 2.6,
-        "days": 1.6,
-    }
+def plot_fig3_feature_importance(data: dict, output: Path) -> None:
+    fi = data.get("feature_importances")
+    if not fi:
+        return
     sorted_items = sorted(fi.items(), key=lambda x: x[1])
     labels = [k for k, _ in sorted_items]
     values = [v for _, v in sorted_items]
@@ -166,21 +165,21 @@ def plot_fig3_feature_importance(data: dict) -> None:
     ax.spines["right"].set_visible(False)
 
     fig.tight_layout()
-    fig.savefig(OUT_DIR / "fig3_feature_importance.png", dpi=300)
-    fig.savefig(OUT_DIR / "fig3_feature_importance.pdf")
+    fig.savefig(output / "fig3_feature_importance.png", dpi=300)
+    fig.savefig(output / "fig3_feature_importance.pdf")
     plt.close(fig)
 
 
 def main() -> None:
-    if not RESULTS_FILE.exists():
-        raise FileNotFoundError(f"Сначала запустите run_csai_benchmark.py — файл {RESULTS_FILE} не найден.")
-    data = json.loads(RESULTS_FILE.read_text(encoding="utf-8"))
-    plot_fig1_ablation(data)
-    plot_fig2_archetypes(data)
-    plot_fig3_feature_importance(data)
-    print(f"[OK] Графики сохранены в {OUT_DIR.resolve()} (PNG 300 DPI + PDF)")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output-dir", type=Path, default=OUT_DIR)
+    output = parser.parse_args().output_dir
+    data = json.loads((output / "benchmark_results.json").read_text(encoding="utf-8"))
+    plot_fig1_ablation(data, output)
+    plot_fig2_archetypes(data, output)
+    plot_fig3_feature_importance(data, output)
+    print(f"Figures written to {output}")
 
 
 if __name__ == "__main__":
     main()
-

@@ -40,6 +40,18 @@ LLM_TOOLS = [
                         "enum": ["any", "later", "morning", "day", "evening"],
                         "description": "Пожелания по времени вылета: 'днем', 'в обед', 'не в 6 утра, а днем' -> 'day'; 'не в 6 утра', 'попозже', 'выспаться', 'после 10' -> 'later'; 'утром', 'пораньше' -> 'morning'; 'вечером' -> 'evening'; иначе 'any'."
                     },
+                    "adults_count": {
+                        "type": "integer", "minimum": 1,
+                        "description": "Число взрослых в запросе. Для явно одиночной поездки 1. При неизвестном числе не заполняй."
+                    },
+                    "kids_count": {
+                        "type": "integer", "minimum": 0,
+                        "description": "Число детей. Если дети упомянуты без числа, оставь поле пустым."
+                    },
+                    "rooms_count": {
+                        "type": "integer", "minimum": 1,
+                        "description": "Число номеров, если явно указано."
+                    },
                     "is_multi_city": {
                         "type": "boolean",
                         "description": "True ТОЛЬКО если пользователь прямо и явно просит составить тур по городам, комбинированный тур или совместить несколько городов (напр: 'тур по городам', 'комбинированный тур', 'Анталья и Стамбул', 'Сочи и Красная Поляна', 'Дубай и Абу-Даби'). Если пользователь просто пишет 'хочу на море' или называет один город — ОБЯЗАТЕЛЬНО False!"
@@ -427,6 +439,9 @@ class LLMService:
                         "is_multi_city": bool(fn_args.get("is_multi_city")),
                         "geography": fn_args.get("geography"),
                         "nights": fn_args.get("nights"),
+                        "adults_count": fn_args.get("adults_count"),
+                        "kids_count": fn_args.get("kids_count"),
+                        "rooms_count": fn_args.get("rooms_count"),
                         "budget_rub": fn_args.get("budget_rub"),
                         "family_friendly": fn_args.get("family_friendly"),
                         "private_room_required": fn_args.get("private_room_required"),

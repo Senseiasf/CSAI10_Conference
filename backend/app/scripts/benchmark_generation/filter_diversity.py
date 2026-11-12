@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set
 
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -240,69 +240,21 @@ def audit_catalog_feasibility(
     items: List[Dict[str, Any]],
     catalog: Dict[str, Any],
 ) -> List[Dict[str, Any]]:
-    """
-    Проверяет выполнимость запросов относительно каталога destinations.json (перенос из 06_finalise_datasets.py).
-    Гарантирует, что для каждого запроса существуют:
-    1) Допустимые пакеты (отель + рейс + трансфер), укладывающиеся в ограничения;
-    2) Недопустимые пакеты (для проверки работы графовых фильтров C3/C4).
-    """
-    dest_map = {d["id"]: d for d in catalog.get("destinations", [])}
-    feasible_items: List[Dict[str, Any]] = []
+    """Record catalogue feasibility without changing the request or its labels."""
+    from app.scripts.benchmark_routes import assess, build_routes, select_return
 
+    routes = build_routes(catalog)
+    audited = []
     for item in items:
-        exp_dests = item.get("expected_destinations", [])
-        budget = item.get("budget", 200000)
-        days = item.get("days", 7)
-        has_pets = item.get("has_pets", False)
-        has_kids = item.get("has_kids", False)
-
-        found_valid = False
-        found_invalid = False
-
-        for dest_id in exp_dests:
-            dest = dest_map.get(dest_id)
-            if not dest:
-                continue
-
-            hotels = dest.get("hotels", [])
-            flights = dest.get("flights", [])
-            transfers = dest.get("transfers", [])
-
-            for h in hotels:
-                # Проверка ограничений отеля
-                h_pets_ok = bool(h.get("pet_friendly", False)) if has_pets else True
-                h_kids_ok = (not any("adults_only" in str(f).lower() for f in (h.get("features") or []))) if has_kids else True
-                h_night = h.get("price_per_night_rub", 5000)
-
-                for fl in flights:
-                    fl_price = fl.get("price_rub_roundtrip", 25000)
-                    layover = fl.get("layover_duration_minutes", 0) or 0
-                    is_logistics_valid = (layover == 0 or layover >= 60)
-
-                    for tr in transfers:
-                        tr_price = tr.get("price_rub", 2000)
-                        total_cost = fl_price + h_night * days + tr_price
-
-                        is_budget_valid = (total_cost <= budget * 1.05)
-
-                        if is_logistics_valid and h_pets_ok and h_kids_ok and is_budget_valid:
-                            found_valid = True
-                        if not is_logistics_valid or not is_budget_valid:
-                            found_invalid = True
-
-                        if found_valid and found_invalid:
-                            break
-                    if found_valid and found_invalid:
-                        break
-                if found_valid and found_invalid:
+        feasible = False
+        for dest in item["expected_destinations"]:
+            for route in routes[dest]:
+                back = select_return(route, item.get("prefer_direct_flight"))
+                logistics, constraints, _ = assess(route, item, back)
+                if not logistics and not constraints:
+                    feasible = True
                     break
-
-        if found_valid:
-            feasible_items.append(item)
-        else:
-            # Если бюджет слишком занижен для направления, корректируем его под минимально реализуемый
-            print(f"[FEASIBILITY WARN] Запрос {item.get('id', '')} ({item.get('archetype')}) скорректирован по бюджету")
-            item["budget"] = int(budget * 1.35 // 5000 * 5000)
-            feasible_items.append(item)
-
-    return feasible_items
+            if feasible:
+                break
+        audited.append({**item, "catalog_feasible": feasible})
+    return audited

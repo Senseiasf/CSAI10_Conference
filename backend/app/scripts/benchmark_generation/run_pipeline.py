@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Скрипт полного цикла генерации и многоступенчатой фильтрации эталонного датасета
-из ровно 150 запросов (по 30 на каждый из 5 архетипов: budget, pet, family, luxury, solo)
+из ровно 200 запросов (по 40 на каждый из 5 архетипов: budget, pet, family, luxury, solo)
 для статьи CSAI 2026.
 
 Сохраняет результат в backend/app/data/csai_150_benchmark_queries.json.
@@ -90,10 +90,7 @@ def main() -> None:
         audited = audit_catalog_feasibility(items, catalog)
 
         if len(audited) < QUOTA_PER_ARCH:
-            print(f"  [WARN] Архетип '{arch}': доступно {len(audited)} запросов после фильтрации, дополняем из пула до {QUOTA_PER_ARCH}")
-            needed = QUOTA_PER_ARCH - len(audited)
-            available = [it for it in cleaned_pool if it["archetype"] == arch and it not in audited]
-            audited.extend(available[:needed])
+            raise RuntimeError(f"Only {len(audited)} diverse queries for {arch}; generate a larger raw pool")
 
         selected = audited[:QUOTA_PER_ARCH]
         final_pool.extend(selected)

@@ -9,7 +9,6 @@
 
 > **Active Branch:** `feat/exp-minilm-and-graph-validation`  
 > **Key Innovations:** Native 384D SentenceTransformer (`paraphrase-multilingual-MiniLM-L12-v2`), strict Neo4j catalog topology validation, calibrated semantic vibes without lexical attractors, and optimal 200-tree CatBoost LTR.  
-> **Peak Metrics:** **Recall@2: 80.0%** | **CSR@3: 90.3%** | **LFR@3: 83.5%** | **TCR@3: 60.3%** | **Pairwise Acc: 89.50%** | **NDCG@2: 0.9585**.
 
 Official experimental benchmark stand and codebase for the research paper:
 > **"Hybrid Neuro-Symbolic Routing and Learning-to-Rank for Complex Multi-Constraint Travel Synthesis"**  
@@ -19,7 +18,7 @@ Official experimental benchmark stand and codebase for the research paper:
 
 ## 1. Project Transformation & Repository Scope
 
-This repository originally originated from a conversational travel booking prototype and has been rigorously **refactored into an academic research stand** to guarantee 100% deterministic reproducibility for the CSAI 2026 evaluation:
+This repository originally originated from a conversational travel booking prototype and has been rigorously **refactored into an academic research stand** for controlled CSAI 2026 evaluation:
 
 ### What was removed (Production & Hackathon Overhead)
 * **Web UI & Static Assets:** Deleted Jinja2 templates (`backend/app/templates/`) and static frontend assets (`backend/app/static/`).
@@ -31,7 +30,7 @@ This repository originally originated from a conversational travel booking proto
 * **Symbolic Knowledge Graph:** Neo4j logistics graph validating routes, transfers, and layover windows.
 * **Vector Semantic Retrieval:** PostgreSQL with `pgvector` performing 384-d cosine similarity search (`sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`).
 * **Learning-to-Rank Engine:** CatBoost LTR model with 12 normalized value-for-money features.
-* **Evaluation Suite:** Deterministic 200-query benchmark harness (`run_csai_benchmark.py`), publication figure plotting (`plot_csai_figures.py`), and 28 unit tests.
+* **Evaluation Suite:** Deterministic 200-query benchmark harness (`run_csai_benchmark.py`), publication figure plotting (`plot_csai_figures.py`), and regression tests.
 
 ---
 
@@ -144,156 +143,75 @@ The model was retrained on **69,311 pairs** (`part_4060ti.jsonl` + `part_4080s.j
 
 ---
 
-## 5. Benchmark Dataset & Methodology (CSAI-200)
+## 5. Benchmark Dataset and Configurations
 
-### Dataset Composition
-The benchmark comprises **200 realistic natural language queries** across 5 archetypes (40 queries each):
-1. **Family with children:** High sensitivity to direct flights, breakfast inclusion, and child-friendly hotels.
-2. **Budget travelers:** Strict budget ceilings, tolerance for layovers, priority on low price per day.
-3. **Luxury seekers:** 5-star requirements, high amenity expectations, premium private transfers.
-4. **Pet owners:** Strict `pet_friendly=1` requirement; violations are disqualifying.
-5. **Solo travelers:** Flexibility in flights, focus on central location and mobility.
+The frozen catalogue benchmark contains 200 synthetic Russian-language queries,
+40 per traveler archetype. The query file retains its historical name
+`csai_150_benchmark_queries.json`. The generation pipeline cleans and
+deduplicates texts, then records catalogue feasibility without changing budgets.
+The three corrected reference budgets agree with the explicit sums in their text.
 
-### Deduplication Protocol
-Generated queries underwent a 3-tier diversity filter:
-* Exact hash deduplication.
-* Levenshtein distance filtering.
-* TF-IDF + Cosine similarity thresholding ($< 0.70$ inter-query similarity).
+| Config | Retrieval | Candidate source and filtering | Ranking |
+| --- | --- | --- | --- |
+| C1 | Lexical names and aliases | Connected catalogue packages | Price |
+| C2 | Explicit names, otherwise MiniLM cosine | Connected catalogue packages | Price |
+| C3 | Same as C2 | Live Neo4j paths and hard predicates | Analytical heuristic |
+| C4 | Same as C2 | Same as C3 | CatBoost |
 
-### Evaluation Methodology (Method 2: In-Query Ranking)
-Candidates are evaluated **within the specific context of the user query**:
-* For each query $q$, candidate itineraries are generated from the database according to configuration constraints.
-* Pairwise preference is judged by user persona satisfaction.
-* **Uniform Baseline (C1):** In configuration C1 (unindexed SQL), destination selection rotates uniformly across the 9 catalog destinations rather than collapsing to `ORDER BY id LIMIT 2` (which previously caused an artificial Altai skew).
+Candidates from both retrieved destinations are considered. C1 returns an empty
+result if it finds no explicit match. C3 and C4 return an empty result when all
+candidates fail. Flight and transfer endpoints must match in every configuration.
+The budget model uses catalogue round-trip estimates per traveler, hotel cost per
+room-night, pet fees where present and the listed transfer cost per package.
 
----
+## 6. Metrics and Run Types
 
-## 6. Experimental Results (Ablation Study)
+- **Destination Hit@2** uses any match with a reference destination.
+- **LFR@3** and **CSR@3** average per-query fractions of returned packages passing
+  logistics and user constraints respectively. Empty responses contribute zero.
+- **Success@3** counts queries with at least one returned package that satisfies
+  relevance, logistics and all evaluated constraints simultaneously.
+- **Coverage** counts queries with any returned package.
+- **Pairwise Accuracy** and **NDCG@2** use the same pairs of admissible candidates
+  for all rankers. Both pair positions are recorded before labeling. Exact score
+  and price ties contribute half credit to accuracy and have their own counts.
+- **Ranking latency** measures only ordering the candidates, in milliseconds.
 
-Evaluated on 200 benchmark queries against live PostgreSQL (`pgvector`, native 384D MiniLM) and Neo4j Docker containers:
+`--slots oracle` evaluates downstream components on reference slots. `--slots live`
+uses extracted slots and evaluates the resulting offers against the references.
+`--judge pareto` creates diagnostic labels only where one admissible tour dominates
+the other on the defined features. This test favors the price baseline by design
+and does not measure preference on trade-offs. `--judge live` obtains A/B/tie
+labels from the configured model with the actual departure time shown for each tour.
+Live modes require valid provider settings and fail on unavailable dependencies.
+Historical headline metrics use a different protocol. See the [audit](csai2026_benchmark_fix_audit.md)
+for the corrected run and its scope.
 
-| Config ID | Pipeline Configuration | Dest Recall@2 (%) | Logistics Feasibility LFR@3 (%) | Constraint Satisfaction CSR@3 (%) | Task Completion Rate TCR@3 (%) | Pairwise Accuracy (%) | NDCG@2 | Latency (ms) |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **C1** | Baseline (SQL / Uniform / Price Sort) | 36.0% | 35.5% | 58.7% | 7.5% | 65.0% | 0.8708 | 0.02 |
-| **C2** | + Dense Retrieval (`pgvector` 384D) | 80.0% | 39.5% | 65.5% | 20.7% | 65.0% | 0.8708 | 0.05 |
-| **C3** | + Knowledge Graph (Neo4j Heuristic) | 80.0% | 83.5% | 89.5% | 59.8% | 87.5% | 0.9539 | 0.17 |
-| **C4** | **Full Pipeline (+ CatBoost LTR)** | **80.0%** | **83.5%** | **90.3%** | **60.3%** | **89.50%** | **0.9585** | **1.41** |
+## 7. Run and Reproduce
 
-### Mathematical Metric Definitions
-* **Destination Recall@2:** $\frac{|\text{Retrieved}_2 \cap \text{GroundTruth}|}{|\text{GroundTruth}|}$
-* **Logistics Feasibility Rate (LFR@3):** Fraction of Top-3 packages with valid flight connections ($\ge 60$ min buffer) and ground transfers.
-* **Constraint Satisfaction Rate (CSR@3):** Fraction of Top-3 packages meeting all explicit user constraints (budget, pets, kids, meal).
-* **Task Completion Rate (TCR@3):** Joint fraction satisfying destination, logistics, and constraints simultaneously:
-  $$\text{TCR@3} = \text{Recall@2} \times \text{LFR@3} \times \text{CSR@3}$$
-* **Pairwise Accuracy:** Percentage of in-query candidate pairs correctly ordered according to ground-truth persona utility.
-* **NDCG@2:** Normalized Discounted Cumulative Gain over the top-2 ranked itineraries.
-
----
-
-## 7. Reproducibility & Quick Start
-
-### 1. Start Docker Containers
-```bash
-docker compose up -d db neo4j
-```
-Verify that PostgreSQL (`5432`) and Neo4j (`7687`, `7474`) are healthy:
-```bash
-docker compose ps
-```
-
-### 2. Environment Configuration
-Create `.env` from `.env.example`:
-```bash
-cp .env.example .env
-```
-Default connection parameters:
-```env
-POSTGRES_USER=app
-POSTGRES_PASSWORD=app_secure_password
-POSTGRES_DB=app
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=secretpassword
-```
-
-### 3. Seed Knowledge Base
-```bash
-python -m app.seed
-```
-Seeds 9 destinations (with 384D MiniLM embeddings), 1,327 hotels, 276 flight routes, and 1,352 transfers into PostgreSQL and Neo4j.
-
-### 4. Run Unit Tests (28 tests)
-```bash
-python -m unittest discover backend/tests
-```
-
-### 5. Run Benchmark & Generate Paper Artifacts
-```bash
-python backend/app/scripts/run_csai_benchmark.py
-```
-This automatically produces:
-* `experiment_outputs/benchmark_results.json`
-* `experiment_outputs/summary_table.csv`
-* `experiment_outputs/summary_table.tex`
-* `experiment_outputs/fig1_pipeline_ablation.png` / `.pdf`
-* `experiment_outputs/fig2_archetype_ndcg.png` / `.pdf`
-* `experiment_outputs/fig3_feature_importance.png` / `.pdf`
-
----
-
-## 8. Branch Architecture & Team Synchronization
-
-The project follows a two-tier experimental branch structure to ensure zero risk to paper submission deadlines:
-
-```
-                      [main / master]
-                             │
-            ┌────────────────┴────────────────┐
-            ▼                                 ▼
-[feat/exp-ltr-and-plots]          [feat/exp-minilm-and-graph-validation]
-• Golden Baseline Reference       • Active Advanced Research Branch
-• 128D Deterministic Hash         • Native 384D MiniLM (pgvector 384D)
-• CSR@3: 77.5%                    • Strict Neo4j Catalog Validator
-• Recall@2: 74.0%                 • Calibrated Semantic Vibes
-• Pairwise Acc: 89.50%            • CSR@3: 90.3% | Recall@2: 80.0%
-• Frozen & safe on origin         • Work-in-progress (stand-alone, unmerged)
-```
-
-### Branch Profiles
-
-1. **`feat/exp-ltr-and-plots` (Stable Reference Branch):**
-   - Frozen reference stand based on 128D deterministic hash embeddings.
-   - Guaranteed baseline metrics: Recall@2 = 74.0%, CSR@3 = 77.5%, Pairwise Acc = 89.50%.
-   - Push completed; preserved as safety rollback target.
-
-2. **`feat/exp-minilm-and-graph-validation` (This Branch — Active Experimental):**
-   - Full integration of real SentenceTransformer (`paraphrase-multilingual-MiniLM-L12-v2`).
-   - Native 384-dimensional vector schema in PostgreSQL `pgvector`.
-   - Strict graph catalog validation (`validate_catalog_data` in `graph_service.py`).
-   - Cleaned destination vibes (no lexical attractors).
-   - All-time high metrics: **Recall@2 = 80.0%**, **CSR@3 = 90.3%**, **TCR@3 = 60.3%**, **Pairwise Acc = 89.50%**, **NDCG@2 = 0.9585**.
-   - **Merge Policy:** Remains an independent, self-contained branch for ongoing verification; will not be merged into `main` or `feat/exp-ltr-and-plots` until final review.
-
-### Switching Between Branches Safely
-
-Because the two branches use different vector column schemas (128D vs. 384D), always re-seed databases when switching:
+With seeded services in Docker Compose:
 
 ```bash
-# To switch to the 128D baseline reference:
-git checkout feat/exp-ltr-and-plots
-python -m app.seed
-python backend/app/scripts/run_csai_benchmark.py
-
-# To return to this 384D MiniLM branch:
-git checkout feat/exp-minilm-and-graph-validation
-python -m app.seed
-python backend/app/scripts/run_csai_benchmark.py
+docker compose up -d --build
+docker compose exec app python -m app.scripts.run_csai_benchmark --slots oracle --retrieval pgvector --judge pareto
+docker compose exec app python -m app.scripts.plot_csai_figures
 ```
 
----
+From `backend/` with a seeded Neo4j and local Python dependencies:
+
+```bash
+python -m unittest discover -s tests -v
+python -m app.scripts.run_csai_benchmark --slots oracle --retrieval numpy --judge pareto
+python -m app.scripts.plot_csai_figures
+```
+
+Set the database endpoints to the running services. The NumPy mode computes exact
+cosine similarity from real 384D MiniLM embeddings. The pgvector mode checks that
+stored embeddings match the catalogue snapshot and fails on stale or missing rows.
+Use a freshly seeded graph when changing catalogue or branch. Output includes
+CSV, LaTeX, PNG/PDF and per-query, per-pair and failure diagnostics. Both scripts
+accept `--output-dir` so different protocols can be saved independently.
+`experiment_outputs/` is ignored by Git.
 
 ## 9. Repository Layout
 

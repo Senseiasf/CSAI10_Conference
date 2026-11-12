@@ -147,7 +147,7 @@
       "turkey"
     ],
     "is_implicit_vibe": false,
-    "budget": 100000,
+    "budget": 120000,
     "days": 7,
     "has_pets": false,
     "has_kids": false,
@@ -2202,7 +2202,7 @@
       "altai"
     ],
     "is_implicit_vibe": true,
-    "budget": 465000,
+    "budget": 550000,
     "days": 6,
     "has_pets": false,
     "has_kids": false,
@@ -2389,7 +2389,7 @@
       "turkey"
     ],
     "is_implicit_vibe": false,
-    "budget": 530000,
+    "budget": 500000,
     "days": 7,
     "has_pets": false,
     "has_kids": false,
