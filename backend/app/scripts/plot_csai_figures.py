@@ -41,47 +41,25 @@ plt.rcParams.update({
 PALETTE = ["#64748B", "#0EA5E9", "#F59E0B", "#10B981"]
 
 
-def plot_fig1_ablation(output: Path) -> None:
-    """Fig 1: Абляция пайплайна с реальным разделением качества C1-C4 (включая Success@1 и Success@3)."""
-    holdout_summary = output / "top3_holdout_v2" / "summary_table.csv"
-    holdout_top3 = output / "top3_holdout_v2" / "top3_comparison.csv"
-
-    if holdout_summary.exists() and holdout_top3.exists():
-        df_sum = pd.read_csv(holdout_summary)
-        df_top3 = pd.read_csv(holdout_top3)
-        merged = pd.merge(df_sum, df_top3, left_on="Config_ID", right_on="config")
-        configs = [r["Configuration"].replace(" (", "\n(") for _, r in merged.iterrows()]
-        
-        hit2 = merged["Destination_Hit_at_2_pct"].tolist()
-        lfr = merged["Logistics_Feasibility_pct"].tolist()
-        succ1 = (merged["success_at_1"] * 100).tolist()
-        succ3 = (merged["success_score_at_3"] * 100).tolist()
-        latencies = merged["Ranking_Latency_ms"].tolist()
-    else:
-        # Резервный источник данных
-        data = json.loads((output / "benchmark_results.json").read_text(encoding="utf-8"))
-        summary = data["summary"]
-        configs = [r["Configuration"].replace(" (", "\n(") for r in summary]
-        hit2 = [float(r["Destination_Hit_at_2_pct"]) for r in summary]
-        lfr = [float(r["Logistics_Feasibility_pct"]) for r in summary]
-        succ1 = [16.7, 23.3, 80.0, 93.3]
-        succ3 = [30.0, 36.7, 80.0, 96.7]
-        latencies = [float(r.get("Ranking_Latency_ms", 0.0)) for r in summary]
-
+def plot_fig1_ablation(data: dict, output: Path) -> None:
+    """Fig 1: Сквозная абляция компонентов пайплайна (основной датасет статьи 200 запросов)."""
+    summary = data["summary"]
+    configs = [r["Configuration"].replace(" (", "\n(") for r in summary]
     metrics = [
-        ("Destination Hit@2 (%)", hit2, PALETTE[0]),
-        ("Logistics Feasibility (%)", lfr, PALETTE[1]),
-        ("Success@1 (Top-1 Offer) (%)", succ1, PALETTE[2]),
-        ("Success@3 (Top-3 Offers) (%)", succ3, PALETTE[3]),
+        ("Destination_Hit_at_2_pct", "Destination Hit@2 (%)"),
+        ("Logistics_Feasibility_pct", "Logistics Feasibility@3 (%)"),
+        ("Constraint_Satisfaction_pct", "Constraint Satisfaction@3 (%)"),
+        ("Success_at_3_pct", "Success@3 (%)"),
     ]
 
     x = np.arange(len(configs))
     width = 0.18
 
-    fig, ax = plt.subplots(figsize=(9.2, 4.8))
-    for idx, (m_label, vals, col) in enumerate(metrics):
+    fig, ax = plt.subplots(figsize=(9.0, 4.6))
+    for idx, (m_key, m_label) in enumerate(metrics):
+        vals = [float(r[m_key]) for r in summary]
         offset = (idx - 1.5) * width
-        bars = ax.bar(x + offset, vals, width, label=m_label, color=col, edgecolor="white", zorder=3)
+        bars = ax.bar(x + offset, vals, width, label=m_label, color=PALETTE[idx], edgecolor="white", zorder=3)
         for b in bars:
             h = b.get_height()
             if not np.isfinite(h):
@@ -98,6 +76,7 @@ def plot_fig1_ablation(output: Path) -> None:
 
     # Вторая ось Y для времени отклика (Latency ms)
     ax2 = ax.twinx()
+    latencies = [float(r.get("Ranking_Latency_ms", 0.0)) for r in summary]
     line = ax2.plot(x, latencies, color="#E11D48", marker="o", linewidth=2.0, markersize=6, label="Ranking Latency (ms)", zorder=4)
     for xi, yi in zip(x, latencies):
         ax2.annotate(
@@ -117,7 +96,7 @@ def plot_fig1_ablation(output: Path) -> None:
     ax2.tick_params(axis="y", labelcolor="#BE123C")
     ax2.set_ylim(0, max(latencies) * 2.2)
 
-    ax.set_title("Travel Planning Pipeline Ablation: Recommendation Quality vs. Latency")
+    ax.set_title("Travel Planning Pipeline Ablation: Quality vs. Ranking Latency")
     ax.set_xticks(x)
     ax.set_xticklabels(configs)
     ax.set_ylim(0, 118)
@@ -276,7 +255,7 @@ def main() -> None:
     output = parser.parse_args().output_dir
     data = json.loads((output / "benchmark_results.json").read_text(encoding="utf-8"))
 
-    plot_fig1_ablation(output)
+    plot_fig1_ablation(data, output)
     plot_fig2_tradeoffs_single(output)
     plot_fig3_feature_importance(data, output)
     print(f"Informative and clear figures successfully written to {output}")
