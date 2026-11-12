@@ -275,7 +275,34 @@ Rather than treating 76.5% Hit@2 and 67.0% Success@3 as sub-optimal, authors sho
 
 ---
 
-### 8.4 The Four Publication Figures (Available in `experiment_outputs/`)
+### 8.4 Deep Dive: Why Price Baseline ($C_{2\text{-G}}$, 83.3%) Edges Out Static Heuristics ($C_3$, 80.0%), and How CatBoost ($C_4$, 93.3%) Dominates Both
+
+On the 30-query nuanced preference holdout (`top3_holdout_v2`), a counter-intuitive observation arises: simple price sort on graph-filtered candidates ($C_{2\text{-G}}$) achieves **83.3%** Success@1 (25/30), marginally beating the static analytical heuristic ($C_3$) at **80.0%** (24/30). A rigorous per-query audit (`per_query_audit.json`) explains this discrepancy and provides essential material for Section 6 (*Discussion and Limitations*):
+
+#### A. The Heuristic Star-Rating Trap (Case Study: `TOP3_02`)
+* **User Query:** *"Five nights with a dog: cedar taiga, Katun riverbank and a secluded chalet. For two under 250,000 RUB."* (Target: Altai, `pet` archetype).
+* **Retrieved Regions:** `pgvector` dense search retrieved `['altai', 'georgia']` (Georgia as an alternative mountain region).
+* **The Heuristic Dilemma ($C_3$):** 
+  The analytical heuristic formula employs fixed linear expert weights: $\text{Score} = \dots + 0.35 \cdot \text{stars} - 0.000004 \cdot \text{price}$.
+  In Georgia, the 5★ Swissôtel Tbilisi yields a $+1.75$ bonus for luxury, suffering only a $-0.70$ price penalty for its 175,550 RUB cost. In Altai, the secluded river campsite (`altai_kemping_tent`, 56,850 RUB) has 1★. 
+  Because $C_3$ rigidly overweights hotel star ratings regardless of query semantics, it promoted the 5★ urban hotel in Tbilisi to Rank 1 over the rustic Altai chalet. For a user seeking secluded wilderness with a pet, an urban hotel in Tbilisi represents a destination miss (`Success@1 = 0`).
+* **The Blind Price Coincidence ($C_{2\text{-G}}$):**
+  $C_{2\text{-G}}$ ignores star ratings and strictly minimizes price. Since the Altai campsite (56,850 RUB) happened to be cheaper than Swissôtel (175,550 RUB), $C_{2\text{-G}}$ placed Altai at Rank 1, scoring `Success@1 = 1` purely by accident.
+
+#### B. The Greedy Economizer Pathology of Price Sort
+While $C_{2\text{-G}}$ accidentally won on `TOP3_02`, pure price sorting catastrophically fails wherever true preference trade-offs exist:
+* Across four critical test queries (`TOP3_03` UAE, `TOP3_04` Maldives, `TOP3_05` Georgia, `TOP3_08` Thailand), $C_{2\text{-G}}$ consistently chose cheap, unappealing alternatives from competitor regions (e.g., offering a 96,250 RUB backpacker hostel in Sharm El Sheikh instead of the requested Maldives resort).
+* On the 368-tradeoff dataset, pure price sorting achieves **0.0%** on justified comfort upgrades.
+
+#### C. Why CatBoost ($C_4$) Resolves the Conflict (93.3% Success@1, 96.7% Success@3)
+CatBoost V2 does not suffer from linear star-rating bias or greedy price minimization:
+1. It conditions on non-linear multi-attribute trade-offs (`relative_surcharge_pct`, `price_delta_vs_cheapest`, `matches_time_pref`, `matches_direct_pref`).
+2. It learns that paying a modest premium within budget for the primary destination matching user vibe intent dominates irrelevant cheap substitutes.
+3. As a result, $C_4$ correctly places the ideal offer at Rank 1 in **28 out of 30 queries (93.3%)**, outperforming both Price ($+10.0\%$) and Heuristics ($+13.3\%$).
+
+---
+
+### 8.5 The Four Publication Figures (Available in `experiment_outputs/`)
 
 1. **`fig1_pipeline_ablation.png` (.pdf):** General Queries Pipeline Ablation ($N=200$). Proves vector retrieval (+46.0%) and Neo4j graph validation (+43.2% LFR, +42.5% Success@3).
 2. **`fig1b_preference_holdout.png` (.pdf):** Recommendation Quality on Nuanced Preferences ($N=30$). Proves CatBoost advantage on Top-1 offer (**93.3% vs. 80.0%**) and Top-3 set (**96.7% vs. 80.0%**).
