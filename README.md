@@ -185,8 +185,8 @@ the other on the defined features. This test favors the price baseline by design
 and does not measure preference on trade-offs. `--judge live` obtains A/B/tie
 labels from the configured model with the actual departure time shown for each tour.
 Live modes require valid provider settings and fail on unavailable dependencies.
-Historical headline metrics use a different protocol. See the [audit](csai2026_benchmark_fix_audit.md)
-for the corrected run and its scope.
+Historical headline metrics use a different protocol. See [Section 8](#8-scientific-insights-discussion--error-analysis-for-paper-authors)
+for the corrected run, protocol scope, and full audit.
 
 ## 7. Run and Reproduce
 
@@ -212,8 +212,7 @@ stored embeddings match the catalogue snapshot and fails on stale or missing row
 Use a freshly seeded graph when changing catalogue or branch. C3 and C4
 apply explicit soft premiums after hard filtering and diversify the top three
 while retaining the first offer. Use `--top3 score` to disable diversification
-or `--queries` to run another reference set. See the
-[preference evaluation](csai2026_preference_ranking.md) for results and scope.
+or `--queries` to run another reference set. See [Section 8.1 and Section 8.4](#81-the-three-complementary-benchmark-datasets) for preference evaluation results, holdout analysis, and scope.
 Output includes
 CSV, LaTeX, PNG/PDF and per-query, per-pair and failure diagnostics. Both scripts
 accept `--output-dir` so different protocols can be saved independently.
