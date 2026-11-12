@@ -17,6 +17,9 @@ catboost_info/
 pg_data/
 neo4j_data/
 
+# Experiment outputs
+experiment_outputs/
+
 # IDE & Editor files
 .vscode/
 .idea/
