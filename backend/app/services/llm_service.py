@@ -38,7 +38,16 @@ LLM_TOOLS = [
                     "flight_time_pref": {
                         "type": "string",
                         "enum": ["any", "later", "morning", "day", "evening"],
-                        "description": "Пожелания по времени вылета: 'днем', 'в обед', 'не в 6 утра, а днем' -> 'day'; 'не в 6 утра', 'попозже', 'выспаться', 'после 10' -> 'later'; 'утром', 'пораньше' -> 'morning'; 'вечером' -> 'evening'; иначе 'any'."
+                        "description": "Обязательное окно вылета. Если время лишь предпочтительно или зависит от доплаты, используй soft_preference и оставь здесь any."
+                    },
+                    "soft_preference": {
+                        "type": "object",
+                        "description": "Одно мягкое предпочтение, которое не исключает другие туры. Для 'прямой, если доплата до 15000 ₽' верни direct и 15000. Не копируй этот лимит в budget_rub и не ставь prefer_direct_flight=true. При отсутствии точной суммы не заполняй max_extra_rub.",
+                        "properties": {
+                            "attribute": {"type": "string", "enum": ["direct", "morning", "day", "evening", "breakfast", "stars"]},
+                            "max_extra_rub": {"type": "integer", "minimum": 0},
+                        },
+                        "required": ["attribute"],
                     },
                     "adults_count": {
                         "type": "integer", "minimum": 1,
@@ -83,7 +92,7 @@ LLM_TOOLS = [
                     },
                     "prefer_direct_flight": {
                         "type": "boolean",
-                        "description": "True, если нужен только прямой рейс, False если согласен на стыковку"
+                        "description": "True только при обязательном прямом рейсе. Мягкое пожелание или условие доплаты передай в soft_preference."
                     },
                     "without_transfer": {
                         "type": "boolean",
@@ -358,7 +367,7 @@ class LLMService:
             "1. 'plan_vacation_route' — подбор тура, выбор отеля/направления, изменение времени рейса, смена отеля, бюджета или состава:\n"
             "   - Если турист пишет широкое неопределенное пожелание БЕЗ указания конкретного города/страны (например: 'хочу на море', 'хочу отдохнуть', 'посоветуй тур', 'куда поехать', 'хочу в горы') — НЕ придумывай случайные города или бюджеты! Вызывай consult_travel_inquiry с предложением вариантов и уточняющими вопросами по формату отдыха, датам и бюджету.\n"
             "   - Определяй аэропорт вылета: 'из Питера', 'Пулково' -> LED; 'из Сочи' -> AER; 'из Москвы' -> SVO; 'Горный Алтай' -> RGK; 'из Дубая' -> DXB; 'из Стамбула' -> IST.\n"
-            "   - Определяй время вылета: 'днем', 'в обед', 'не в 6 утра, а днем' -> flight_time_pref='day'; 'не ни свет ни заря', 'попозже', 'выспаться', 'не в 6 утра' -> flight_time_pref='later'; 'утром' -> 'morning'; 'вечером' -> 'evening'.\n"
+            "   - Передавай обязательное окно вылета в flight_time_pref. Пожелание или условие доплаты передавай в soft_preference. Не делай предпочтение обязательным и не переноси доплату в общий бюджет.\n"
             "   - Определяй комбинированный тур: 'тур по городам', 'много городов у моря', 'несколько городов', 'комбинированный тур', 'Анталья и Стамбул', 'Сочи и Красная Поляна' -> is_multi_city=True. Для обычных туров — строго False!\n"
             "   - Определяй географию: 'за границу', 'за бугор', 'за рубеж', 'не в РФ' -> geography='abroad'; 'по России' -> 'domestic'.\n"
             "   - Если турист называет город/страну вне нашего каталога (Бали, Рим, Париж, Кипр, Греция, Токио, Занзибар, Норвегия и т.д.) — обязательно заполни 'unknown_destination' с лучшей альтернативой из наших 9 направлений (sochi, uae, turkey, thailand, maldives, egypt, spb, altai, georgia) и кратким обоснованием vibe_reason.\n"
@@ -436,6 +445,7 @@ class LLMService:
                         "destination_query": fn_args.get("destination_query"),
                         "origin_airport": orig_code,
                         "flight_time_pref": fn_args.get("flight_time_pref"),
+                        "soft_preference": fn_args.get("soft_preference"),
                         "is_multi_city": bool(fn_args.get("is_multi_city")),
                         "geography": fn_args.get("geography"),
                         "nights": fn_args.get("nights"),

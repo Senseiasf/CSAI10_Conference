@@ -208,7 +208,12 @@ python -m app.scripts.plot_csai_figures
 Set the database endpoints to the running services. The NumPy mode computes exact
 cosine similarity from real 384D MiniLM embeddings. The pgvector mode checks that
 stored embeddings match the catalogue snapshot and fails on stale or missing rows.
-Use a freshly seeded graph when changing catalogue or branch. Output includes
+Use a freshly seeded graph when changing catalogue or branch. C3 and C4
+apply explicit soft premiums after hard filtering and diversify the top three
+while retaining the first offer. Use `--top3 score` to disable diversification
+or `--queries` to run another reference set. See the
+[preference evaluation](csai2026_preference_ranking.md) for results and scope.
+Output includes
 CSV, LaTeX, PNG/PDF and per-query, per-pair and failure diagnostics. Both scripts
 accept `--output-dir` so different protocols can be saved independently.
 `experiment_outputs/` is ignored by Git.

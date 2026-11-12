@@ -29,6 +29,7 @@ from app.config import settings
 from app.scripts.benchmark_routes import assess, build_routes, read_graph_routes, select_return
 from app.services.llm_service import LLMService
 from app.services.ltr_service import ARCHETYPES, CAT_FEATURES, FEATURE_COLUMNS, LTRService
+from app.services.travel_preferences import merge_preferences, prioritize_preference, select_offers
 from app.services.vector_service import EMBEDDING_VERSION, generate_text_embedding
 
 DATA = BACKEND / "app" / "data"
@@ -92,7 +93,7 @@ async def retrieve(text, destinations, embeddings, pg, vector, explicit=None):
     return sorted(embeddings, key=lambda identifier: (-float(np.dot(query, embeddings[identifier])), identifier))[:2]
 
 
-def request_from_prediction(pred):
+def request_from_prediction(pred, text=""):
     """Convert tool slots to the benchmark schema. Missing essential slots require clarification."""
     if not pred or pred.get("action") != "plan":
         return None
@@ -113,13 +114,14 @@ def request_from_prediction(pred):
         "has_pets": bool(pred.get("pet_friendly")), "has_kids": kids > 0 or bool(pred.get("family_friendly")),
         "interests": pred.get("tags") or [], "budget_rub": budget, "adults_count": adults,
     }
-    return {**profile, "budget": budget, "days": days, "kids_count": kids,
+    request = {**profile, "budget": budget, "days": days, "kids_count": kids,
             "rooms_count": pred.get("rooms_count") or 1,
             "prefer_direct_flight": bool(pred.get("prefer_direct_flight")),
             "private_room_required": bool(pred.get("private_room_required")),
             "flight_time_pref": pred.get("flight_time_pref"), "origin_airport": pred.get("origin_airport"),
             "destination_id": pred.get("destination_id"), "destination_query": pred.get("destination_query"),
             "archetype": LTRService.resolve_archetype(profile)}
+    return merge_preferences(request, text, pred.get("soft_preference"), from_model=True)
 
 
 def nlu_slot_metrics(queries, predictions):
@@ -188,11 +190,20 @@ def scores(candidates, mode, model):
     ), thread_count=2)
 
 
-def rank(candidates, mode, model):
-    return [candidate for candidate, _ in sorted(
+def rank(candidates, mode, model, preference=None):
+    ranked = [candidate for candidate, _ in sorted(
         zip(candidates, scores(candidates, mode, model)),
         key=lambda item: (-item[1], item[0]["features"]["price"], item[0]["route"].key),
     )]
+    return prioritize_preference(ranked, preference)
+
+
+def offer_is_success(candidate, reference):
+    route = candidate["route"]
+    if route.destination not in reference["expected_destinations"]:
+        return False
+    logistics, constraints, _ = assess(route, reference, candidate["back"])
+    return not logistics and not constraints
 
 
 def pareto_winner(a, b):
@@ -319,7 +330,7 @@ def file_hash(path):
 
 
 async def run(args):
-    data_path, queries_path = DATA / "destinations.json", DATA / "csai_150_benchmark_queries.json"
+    data_path, queries_path = DATA / "destinations.json", args.queries
     model_path = DATA / "catboost_travel_ranker.cbm"
     catalog = json.loads(data_path.read_text(encoding="utf-8"))
     queries = json.loads(queries_path.read_text(encoding="utf-8"))
@@ -365,9 +376,9 @@ async def run(args):
             if args.slots == "live":
                 pred = await LLMService.dispatch_intent(q["query"], profile={}, current_cart={})
                 predictions[q["id"]] = pred
-                request = request_from_prediction(pred)
+                request = request_from_prediction(pred, q["query"])
             else:
-                request = q
+                request = merge_preferences(q, q["query"])
             for vector in (False, True):
                 ids = await retrieve(q["query"], destinations, embeddings, pg, vector,
                                      request.get("destination_id") if request and args.slots == "live" else None)
@@ -383,8 +394,12 @@ async def run(args):
             candidates, rejected = candidate_pool(paths, request, strict) if request else ([], Counter())
             detected.update(rejected)
             t0 = time.perf_counter()
-            top = rank(candidates, mode, model)[:3]
+            preference = request.get("soft_preference") if strict and request else None
+            ranked = rank(candidates, mode, model, preference)
+            top = select_offers(ranked, diversify=strict and args.top3 == "diverse")
             elapsed = (time.perf_counter() - t0) * 1000
+            score_top = select_offers(ranked)
+            diverse_top = select_offers(ranked, diversify=strict)
             emitted_packages = []
             for c in top:
                 route = c["route"]
@@ -405,6 +420,11 @@ async def run(args):
                 "csr": sum(not p["constraint_errors"] for p in emitted_packages) / n if n else 0,
                 "success": any(p["destination_match"] and not p["logistics_errors"] and not p["constraint_errors"]
                                for p in emitted_packages),
+                "success_at_1": bool(top and offer_is_success(top[0], q)),
+                "success_score_at_3": any(offer_is_success(c, q) for c in score_top),
+                "success_diverse_at_3": any(offer_is_success(c, q) for c in diverse_top),
+                "score_top_destinations": len({c["route"].destination for c in score_top}),
+                "diverse_top_destinations": len({c["route"].destination for c in diverse_top}),
                 "ranking_ms": elapsed, "packages": emitted_packages,
                 "candidate_count": len(paths), "rankable_count": len(candidates),
                 "rejection_reasons": dict(rejected), "needs_clarification": request is None,
@@ -433,12 +453,17 @@ async def run(args):
     out = args.output_dir
     out.mkdir(parents=True, exist_ok=True)
     metadata = {"slots": args.slots, "retrieval": args.retrieval, "graph": "live_neo4j",
+                "top3": args.top3,
                 "pair_labels": "llm" if args.judge == "live" else "pareto_dominance",
                 "llm_model": settings.OPENAI_MODEL if client else None,
                 "query_count": len(queries), "pair_count": len(pairs), "embedding_version": EMBEDDING_VERSION,
                 "catalog_sha256": file_hash(data_path), "queries_sha256": file_hash(queries_path),
                 "model_sha256": file_hash(model_path)}
     pd.DataFrame(summaries).to_csv(out / "summary_table.csv", index=False)
+    pd.DataFrame(query_runs).groupby("config")[[
+        "success_at_1", "success_score_at_3", "success_diverse_at_3",
+        "score_top_destinations", "diverse_top_destinations",
+    ]].mean().to_csv(out / "top3_comparison.csv")
     pd.DataFrame(pair_rows).to_csv(out / "pairwise_confusion_matrix.csv", index=False)
     pd.DataFrame(failures).to_csv(out / "failure_modes_breakdown.csv", index=False)
     (out / "summary_table.tex").write_text(summary_latex(summaries, LABELS), encoding="utf-8")
@@ -484,6 +509,8 @@ def main():
     parser.add_argument("--retrieval", choices=("numpy", "pgvector"), default="numpy")
     parser.add_argument("--judge", choices=("pareto", "live"), default="pareto")
     parser.add_argument("--output-dir", type=Path, default=OUT_DIR)
+    parser.add_argument("--queries", type=Path, default=DATA / "csai_150_benchmark_queries.json")
+    parser.add_argument("--top3", choices=("score", "diverse"), default="diverse")
     logging.basicConfig(level=logging.WARNING)
     asyncio.run(run(parser.parse_args()))
 
