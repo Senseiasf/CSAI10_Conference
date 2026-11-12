@@ -48,6 +48,7 @@ OUT_DIR = (BACKEND.parent if (BACKEND.parent / "docker-compose.yml").exists() el
 CONFIGS = (
     ("C1_Baseline_SQL", "C1: Lexical / Price", False, False, "price"),
     ("C2_Vector_RAG", "C2: Hybrid / Price", True, False, "price"),
+    ("C2G_Graph_Price", "C2-G: Graph / Price", True, True, "price"),
     ("C3_Graph_Heuristic", "C3: Graph / Heuristic", True, True, "heuristic"),
     ("C4_Full_CatBoost", "C4: Graph / CatBoost", True, True, "catboost"),
 )
@@ -508,7 +509,7 @@ async def run(args):
         frame = pd.DataFrame({"reference_primary": [r["expected"][0] for r in rows],
                               "retrieved_top1": [r["top2"][0] if r["top2"] else "no_hit" for r in rows]})
         pd.crosstab(frame["reference_primary"], frame["retrieved_top1"]).to_csv(
-            out / f"destination_confusion_matrix_{key[:2].lower()}.csv")
+            out / f"destination_confusion_matrix_{key.split('_')[0].lower()}.csv")
         dest_audit[key] = {
             dest: {"queries": len(subset),
                    "primary_hit_at_1_pct": percent(sum(r["top2"][:1] == [dest] for r in subset), len(subset)),

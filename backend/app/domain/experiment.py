@@ -23,6 +23,12 @@ EXPERIMENT_CONFIGS = {
         use_strict_graph=False,
         ranking_mode="price",
     ),
+    "C2G_Graph_Price": PipelineConfig(
+        name="C2-G: + Neo4j Graph (Price)",
+        use_vector_search=True,
+        use_strict_graph=True,
+        ranking_mode="price",
+    ),
     "C3_Graph_Heuristic": PipelineConfig(
         name="C3: + Neo4j Graph (Heuristic)",
         use_vector_search=True,

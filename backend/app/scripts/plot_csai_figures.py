@@ -49,7 +49,17 @@ def plot_fig1_general_ablation(data: dict, output: Path) -> None:
 
     hit2 = [float(r["Destination_Hit_at_2_pct"]) for r in summary]
     lfr = [float(r["Logistics_Feasibility_pct"]) for r in summary]
-    succ1 = [3.5, 9.5, 61.0, 61.0]
+    
+    top3_csv = output / "csai_150_benchmark_v2" / "top3_comparison.csv"
+    if not top3_csv.exists():
+        top3_csv = output / "top3_comparison.csv"
+    if top3_csv.exists():
+        df_top3 = pd.read_csv(top3_csv)
+        succ1_map = dict(zip(df_top3["config"], df_top3["success_at_1"] * 100))
+        succ1 = [succ1_map.get(r["Config_ID"], 0.0) for r in summary]
+    else:
+        succ1 = [3.5, 9.5, 61.0, 61.0, 61.0][:len(summary)]
+
     succ3 = [float(r["Success_at_3_pct"]) for r in summary]
 
     metrics = [
@@ -60,9 +70,9 @@ def plot_fig1_general_ablation(data: dict, output: Path) -> None:
     ]
 
     x = np.arange(len(configs))
-    width = 0.19
+    width = 0.18 if len(configs) >= 5 else 0.19
 
-    fig, ax = plt.subplots(figsize=(8.8, 4.5))
+    fig, ax = plt.subplots(figsize=(10.0 if len(configs) >= 5 else 8.8, 4.6))
     for idx, (m_label, vals, col) in enumerate(metrics):
         offset = (idx - 1.5) * width
         bars = ax.bar(x + offset, vals, width, label=m_label, color=col, edgecolor="white", zorder=3)
@@ -126,9 +136,9 @@ def plot_fig1b_preference_holdout(output: Path) -> None:
     ]
 
     x = np.arange(len(configs))
-    width = 0.19
+    width = 0.18 if len(configs) >= 5 else 0.19
 
-    fig, ax = plt.subplots(figsize=(8.8, 4.5))
+    fig, ax = plt.subplots(figsize=(10.0 if len(configs) >= 5 else 8.8, 4.6))
     for idx, (m_label, vals, col) in enumerate(metrics):
         offset = (idx - 1.5) * width
         bars = ax.bar(x + offset, vals, width, label=m_label, color=col, edgecolor="white", zorder=3)

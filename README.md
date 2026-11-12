@@ -155,11 +155,12 @@ The three corrected reference budgets agree with the explicit sums in their text
 | --- | --- | --- | --- |
 | C1 | Lexical names and aliases | Connected catalogue packages | Price |
 | C2 | Explicit names, otherwise MiniLM cosine | Connected catalogue packages | Price |
-| C3 | Same as C2 | Live Neo4j paths and hard predicates | Analytical heuristic |
-| C4 | Same as C2 | Same as C3 | CatBoost |
+| C2-G | Same as C2 | Live Neo4j paths and hard predicates | Price |
+| C3 | Same as C2 | Same as C2-G | Analytical heuristic |
+| C4 | Same as C2 | Same as C2-G | CatBoost |
 
 Candidates from both retrieved destinations are considered. C1 returns an empty
-result if it finds no explicit match. C3 and C4 return an empty result when all
+result if it finds no explicit match. C2-G, C3 and C4 return an empty result when all
 candidates fail. Flight and transfer endpoints must match in every configuration.
 The budget model uses catalogue round-trip estimates per traveler, hotel cost per
 room-night, pet fees where present and the listed transfer cost per package.
@@ -227,29 +228,30 @@ This section provides the rigorous methodology, empirical interpretations, and r
 The evaluation suite operates across three complementary datasets, each answering a distinct research question:
 
 1. **CSAI-200 Macro-Pipeline Benchmark (`csai_150_benchmark_queries.json`, $N=200$):**
-   * **Purpose:** Evaluates the end-to-end topological pipeline ablation ($C_1 \to C_2 \to C_3 \to C_4$) on standard user requests without explicit soft trade-off prompts.
+   * **Purpose:** Evaluates the end-to-end topological pipeline ablation ($C_1 \to C_2 \to C_{2\text{-G}} \to C_3 \to C_4$) on standard user requests without explicit soft trade-off prompts.
    * **Headline Results:** Destination Hit@2 = **76.5%**, LFR@3 = **93.0%**, CSR@3 = **93.0%**, Success@3 = **67.0%**.
-   * **Scientific Role:** Proves the necessity of dense semantic retrieval (+46.0% destination recall) and strict symbolic graph pruning (+43.2% logistics feasibility).
+   * **Scientific Role:** Decouples dense semantic retrieval ($C_1 \to C_2$: +46.0% recall), symbolic graph feasibility ($C_2 \to C_{2\text{-G}}$: +43.2% LFR, +65.8% CSR, +42.5% Success@3), heuristic weighting ($C_{2\text{-G}} \to C_3$), and ML ranking ($C_3 \to C_4$).
 
 2. **Top-3 Nuanced Preference Benchmark (`csai_top3_holdout.json`, $N=30$):**
    * **Purpose:** Evaluates the ranking and selection of top-1 and top-3 packages on queries where users express soft constraints (preferred departure windows, specific star ratings, direct flight preferences).
-   * **Headline Results:** CatBoost $C_4$ reaches **Success@1 = 93.3%** (28/30) vs. Heuristic $C_3$ = **80.0%** (24/30), achieving a **+13.3%** advantage on the primary recommendation. On score-based Top-3 coverage, $C_4$ achieves **96.7%** vs. $C_3$'s **80.0%** (**+16.7%** advantage).
+   * **Headline Results:** CatBoost $C_4$ reaches **Success@1 = 93.3%** (28/30) vs. Heuristic $C_3$ = **80.0%** (24/30) and Graph Price $C_{2\text{-G}}$ = **83.3%** (25/30), achieving a **+13.3%** advantage on the primary recommendation. On score-based Top-3 coverage, $C_4$ achieves **96.7%** vs. $C_3$'s **80.0%** (**+16.7%** advantage).
    * **Scientific Role:** Validates that ML ranking significantly outperforms static heuristics on personalized user intent.
 
 3. **Preference Trade-Off Benchmark (`csai_tradeoff_dataset.json.gz`, $N=368$):**
    * **Purpose:** Evaluates pairwise decision accuracy on non-dominated trade-offs between cost and comfort (morning flights, 4★/5★ upgrades, direct routing, breakfast inclusion) under explicit and implicit budget thresholds.
-   * **Headline Results:** Price Sort Baseline = **50.0%**, Analytical Heuristic $C_3$ = **50.0%**, **CatBoost V2 $C_4$ = 96.2%** (354/368 correct choices).
+   * **Headline Results:** Price Sort Baseline ($C_1$ / $C_{2\text{-G}}$) = **50.0%**, Analytical Heuristic $C_3$ = **50.0%**, **CatBoost V2 $C_4$ = 96.2%** (354/368 correct choices).
    * **Scientific Role:** Provides statistical proof ($p < 0.001$) that CatBoost successfully balances multi-criteria Pareto trade-offs.
 
 ---
 
-### 8.2 Why Destination Hit@2 and Logistics Feasibility Are Identical for $C_3$ and $C_4$
+### 8.2 Stage Separation: Decoupling Graph Feasibility ($C_2 \to C_{2\text{-G}}$) from Ranking ($C_{2\text{-G}} \to C_3 \to C_4$)
 
-A common inquiry on Figure 1 is why the macro-feasibility bars are identical between $C_3$ and $C_4$:
+A common inquiry on Figure 1 is why the macro-feasibility bars are identical between $C_{2\text{-G}}$, $C_3$, and $C_4$:
 * **Stage Separation Principle:**
-  1. *Destination Retrieval (Step 1):* Executed exclusively by `pgvector` MiniLM dense semantic search **before** graph expansion and before ranking. $C_2$, $C_3$, and $C_4$ share the identical vector retrieval layer, producing identical candidate regions ($76.5\%$).
-  2. *Symbolic Feasibility (Step 2):* Executed exclusively by the Neo4j Knowledge Graph (`strict=True`) **before** scoring. Graph validation discards any itinerary with airport transfer gaps $< 120$ min or budget overruns. Both $C_3$ and $C_4$ receive the *exact same pool of 100% admissible candidate packages* ($93.0\%$).
-  3. *Learning-to-Rank (Step 3):* CatBoost does **not** discover cities or validate flight timetables; its sole scientific responsibility is **ranking the pre-validated candidates according to user preferences**.
+  1. *Destination Retrieval (Step 1):* Executed exclusively by `pgvector` MiniLM dense semantic search **before** graph expansion and before ranking. $C_2$, $C_{2\text{-G}}$, $C_3$, and $C_4$ share the identical vector retrieval layer, producing identical candidate regions ($76.5\%$).
+  2. *Symbolic Feasibility (Step 2):* Executed exclusively by the Neo4j Knowledge Graph (`strict=True`) **before** scoring. Graph validation discards any itinerary with airport transfer gaps $< 120$ min or budget overruns. $C_{2\text{-G}}$, $C_3$, and $C_4$ receive the *exact same pool of 100% admissible candidate packages* ($93.0\%$ feasibility).
+  3. *Isolated Graph Effect ($C_2 \to C_{2\text{-G}}$):* Holding the ranker constant (both sort by Price), introducing Neo4j strictly eliminates hallucinations, rocketing Logistics Feasibility from **49.8% to 93.0%** (+43.2%) and Success@3 from **24.5% to 67.0%** (+42.5%).
+  4. *Learning-to-Rank (Step 3, $C_{2\text{-G}} \to C_3 \to C_4$):* CatBoost does **not** discover cities or validate flight timetables; its sole scientific responsibility is **ranking the pre-validated candidates according to user preferences**.
 * **Key Paper Argument:** Figure 1 confirms that symbolic constraints are strictly enforced at the graph layer, while Figure 2 and Figure 1b confirm that machine learning dominates the subsequent preference ranking layer.
 
 ---
