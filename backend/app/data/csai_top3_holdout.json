@@ -1,0 +1,432 @@
+[
+  {
+    "id": "TOP3_01",
+    "query": "Пять ночей на двоих. Хочется рассвет над Невой, музеев и прогулок по каналам. Лимит 140 тысяч.",
+    "expected_destinations": [
+      "spb"
+    ],
+    "archetype": "budget",
+    "budget": 140000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_02",
+    "query": "На пять ночей с собакой: кедровая тайга, берег Катуни и уединённое шале. На двоих до 250 тысяч.",
+    "expected_destinations": [
+      "altai"
+    ],
+    "archetype": "pet",
+    "budget": 250000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": true
+  },
+  {
+    "id": "TOP3_03",
+    "query": "Нас двое взрослых и ребёнок. Пять ночей среди небоскрёбов и парков у залива, один день джип-сафари по дюнам. До 430 тысяч.",
+    "expected_destinations": [
+      "uae"
+    ],
+    "archetype": "family",
+    "budget": 430000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 1,
+    "has_kids": true,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_04",
+    "query": "На пять ночей вдвоём хочется бунгало над водой в Индийском океане и посмотреть мант. До 850 тысяч.",
+    "expected_destinations": [
+      "maldives"
+    ],
+    "archetype": "luxury",
+    "budget": 850000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_05",
+    "query": "Один взрослый, пять ночей, до 230 тысяч. Старый город с резными балконами, серные бани и хинкали.",
+    "expected_destinations": [
+      "georgia"
+    ],
+    "archetype": "solo",
+    "budget": 230000,
+    "days": 5,
+    "adults_count": 1,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_06",
+    "query": "На двоих на пять ночей ищем снорклинг на Красном море и экскурсию к пирамидам. Лимит 350 тысяч.",
+    "expected_destinations": [
+      "egypt"
+    ],
+    "archetype": "budget",
+    "budget": 350000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_07",
+    "query": "На двоих с собакой, пять ночей, 240 тысяч. Утром гулять по набережной Чёрного моря, потом на канатной дороге к вершинам. Без загранпаспорта.",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "archetype": "pet",
+    "budget": 240000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": true
+  },
+  {
+    "id": "TOP3_08",
+    "query": "Двое взрослых и двое детей, пять ночей до 520 тысяч. Хотим песчаные пляжи у Сиамского залива, буддийские храмы и фрукты.",
+    "expected_destinations": [
+      "thailand"
+    ],
+    "archetype": "family",
+    "budget": 520000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 2,
+    "has_kids": true,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_09",
+    "query": "Пять ночей вдвоём, лимит 430 тысяч. Утром Босфор, восточные базары, потом тёплое Средиземноморье.",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "archetype": "luxury",
+    "budget": 430000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_10",
+    "query": "Пять ночей одна, до 150 тысяч. Хочу ходить пешком по мостам через Неву, смотреть картины и театральные постановки.",
+    "expected_destinations": [
+      "spb"
+    ],
+    "archetype": "solo",
+    "budget": 150000,
+    "days": 5,
+    "adults_count": 1,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_11",
+    "query": "Выбираем между Алтаем и Красной Поляной, пять ночей для двоих, 190 тысяч на всё.",
+    "expected_destinations": [
+      "altai",
+      "sochi"
+    ],
+    "archetype": "budget",
+    "budget": 190000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_12",
+    "query": "Пять ночей с собакой на двоих. Подойдёт Тбилиси или Сочи, бюджет 240 тысяч.",
+    "expected_destinations": [
+      "georgia",
+      "sochi"
+    ],
+    "archetype": "pet",
+    "budget": 240000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": true
+  },
+  {
+    "id": "TOP3_13",
+    "query": "Сравни отели в Анталье и Дубае для двух взрослых и ребёнка. Пять ночей, до 470 тысяч.",
+    "expected_destinations": [
+      "turkey",
+      "uae"
+    ],
+    "archetype": "family",
+    "budget": 470000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 1,
+    "has_kids": true,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_14",
+    "query": "Готовы на Пхукет или на Мальдивы на пять ночей вдвоём, до 850 тысяч. Интересует хороший сервис.",
+    "expected_destinations": [
+      "thailand",
+      "maldives"
+    ],
+    "archetype": "luxury",
+    "budget": 850000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_15",
+    "query": "Еду один на пять ночей в Санкт-Петербург или Тбилиси. Лимит 160 тысяч.",
+    "expected_destinations": [
+      "spb",
+      "georgia"
+    ],
+    "archetype": "solo",
+    "budget": 160000,
+    "days": 5,
+    "adults_count": 1,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_16",
+    "query": "Ищу на пять ночей на двоих Хургаду либо Кемер. 280 тысяч на всю поездку.",
+    "expected_destinations": [
+      "egypt",
+      "turkey"
+    ],
+    "archetype": "budget",
+    "budget": 280000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_17",
+    "query": "Пять ночей с собакой вдвоём, хочу на Алтай или в Сочи. Бюджет 230 тысяч.",
+    "expected_destinations": [
+      "altai",
+      "sochi"
+    ],
+    "archetype": "pet",
+    "budget": 230000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": true
+  },
+  {
+    "id": "TOP3_18",
+    "query": "Хотим в Сочи или Питер с двумя детьми, двое взрослых. Пять ночей, 260 тысяч.",
+    "expected_destinations": [
+      "sochi",
+      "spb"
+    ],
+    "archetype": "family",
+    "budget": 260000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 2,
+    "has_kids": true,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_19",
+    "query": "На пять ночей на двоих ищем комфорт в Абу-Даби или Стамбуле. Лимит 550 тысяч.",
+    "expected_destinations": [
+      "uae",
+      "turkey"
+    ],
+    "archetype": "luxury",
+    "budget": 550000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_20",
+    "query": "Один взрослый, пять ночей. Хургада или Самуи. До 320 тысяч.",
+    "expected_destinations": [
+      "egypt",
+      "thailand"
+    ],
+    "archetype": "solo",
+    "budget": 320000,
+    "days": 5,
+    "adults_count": 1,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_21",
+    "query": "На двоих на пять ночей только Тбилиси, бюджет 175 тысяч.",
+    "expected_destinations": [
+      "georgia"
+    ],
+    "archetype": "budget",
+    "budget": 175000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_22",
+    "query": "В Сочи с собакой на пять ночей, двое взрослых, бюджет 260 тысяч.",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "archetype": "pet",
+    "budget": 260000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": true
+  },
+  {
+    "id": "TOP3_23",
+    "query": "В Анталью на пять ночей, двое взрослых и двое детей, лимит 460 тысяч.",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "archetype": "family",
+    "budget": 460000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 2,
+    "has_kids": true,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_24",
+    "query": "Пять ночей вдвоём в Дубае, отели более высокой категории желательны. До 520 тысяч.",
+    "expected_destinations": [
+      "uae"
+    ],
+    "archetype": "luxury",
+    "budget": 520000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_25",
+    "query": "В Пхукет на пять ночей для одного, бюджет 290 тысяч.",
+    "expected_destinations": [
+      "thailand"
+    ],
+    "archetype": "solo",
+    "budget": 290000,
+    "days": 5,
+    "adults_count": 1,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_26",
+    "query": "Горный Алтай на двоих на пять ночей, 140 тысяч.",
+    "expected_destinations": [
+      "altai"
+    ],
+    "archetype": "budget",
+    "budget": 140000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_27",
+    "query": "Поездка с собакой в Санкт-Петербург, двое взрослых, пять ночей, до 160 тысяч.",
+    "expected_destinations": [
+      "spb"
+    ],
+    "archetype": "pet",
+    "budget": 160000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": true
+  },
+  {
+    "id": "TOP3_28",
+    "query": "Пять ночей в Египте для двух взрослых и ребёнка, лимит 380 тысяч.",
+    "expected_destinations": [
+      "egypt"
+    ],
+    "archetype": "family",
+    "budget": 380000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 1,
+    "has_kids": true,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_29",
+    "query": "Пять ночей на Мальдивах вдвоём. Готовы потратить 950 тысяч.",
+    "expected_destinations": [
+      "maldives"
+    ],
+    "archetype": "luxury",
+    "budget": 950000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_30",
+    "query": "Пять ночей в Стамбуле для одного, общий лимит 240 тысяч.",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "archetype": "solo",
+    "budget": 240000,
+    "days": 5,
+    "adults_count": 1,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false
+  }
+]
