@@ -1,0 +1,30 @@
+{
+  "split_seed": 42,
+  "source_labeled_file": "csai_tradeoffs_labeled_v2.json",
+  "total_pairs": 213,
+  "definitive_pairs": 210,
+  "tie_pairs": 3,
+  "train_pairs": 145,
+  "val_pairs": 41,
+  "test_pairs": 24,
+  "train_families": [
+    "budget_direct_vs_price_georgia",
+    "budget_stars_vs_price_spb",
+    "luxury_comfort_vs_price_turkey",
+    "luxury_direct_vs_price_uae",
+    "luxury_stars_vs_price_maldives",
+    "solo_stars_vs_price_thailand",
+    "solo_time_vs_price_uae"
+  ],
+  "val_families": [
+    "family_breakfast_vs_price_egypt",
+    "pet_time_vs_price_georgia"
+  ],
+  "test_families": [
+    "family_time_vs_price_sochi",
+    "pet_stars_vs_price_altai"
+  ],
+  "train_sha256": "e936604cf2cf675770c349feb50dbc9ada710e2665d22b29c1555cd8a0cdc70f",
+  "val_sha256": "53af864609f2373fb1e923c1e29ee55e8f69874fc6ca8c0031307a4b050b82e4",
+  "test_sha256": "bdcc09498382197f38cdcf8e3d285685a149c91dfb5072490b031aa3c992f56a"
+}

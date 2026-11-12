@@ -24,7 +24,7 @@ async def check(output):
     qualitative = {q["pair_id"]: q for q in json.loads(qualitative_file.read_text(encoding="utf-8"))}
     catalog = json.loads((DATA / "destinations.json").read_text(encoding="utf-8"))
     checkpoint = DATA / "catboost_travel_ranker.cbm"
-    model = LTRService.load_model(checkpoint)
+    model = LTRService.load_model(checkpoint, fail_fast=True)
     if model is None:
         raise RuntimeError("C4 checkpoint could not be loaded")
     async with AsyncGraphDatabase.driver(

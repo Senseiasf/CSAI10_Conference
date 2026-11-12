@@ -28,7 +28,18 @@ if str(BACKEND) not in sys.path:
 from app.config import settings
 from app.scripts.benchmark_routes import assess, build_routes, read_graph_routes, select_return
 from app.services.llm_service import LLMService
-from app.services.ltr_service import ARCHETYPES, CAT_FEATURES, FEATURE_COLUMNS, LTRService
+from app.services.ltr_service import (
+    ARCHETYPES,
+    CAT_FEATURES,
+    FEATURE_COLUMNS,
+    FEATURE_COLUMNS_V1,
+    FEATURE_COLUMNS_V2,
+    CAT_FEATURES_V1,
+    CAT_FEATURES_V2,
+    FEATURE_SCHEMA_V1,
+    FEATURE_SCHEMA_V2,
+    LTRService,
+)
 from app.services.travel_preferences import merge_preferences, prioritize_preference, select_offers
 from app.services.vector_service import EMBEDDING_VERSION, generate_text_embedding
 
@@ -140,7 +151,18 @@ def nlu_slot_metrics(queries, predictions):
     return metrics
 
 
-def features(route, request, price):
+def features(route, request, price, min_price=None):
+    schema = LTRService.get_feature_schema()
+    if schema == FEATURE_SCHEMA_V2:
+        return LTRService.extract_candidate_features_v2(
+            hotel=route.hotel,
+            destination_id=route.destination,
+            profile=request,
+            nights=request.get("days", 7),
+            logistics={"flight": route.flight, "timeline": {}},
+            breakdown={"mandatory": {"total_mandatory_rub": price}},
+            reference_price=min_price,
+        )
     flight = route.flight
     days = request["days"]
     per_day = price / days
@@ -162,6 +184,7 @@ def features(route, request, price):
 def candidate_pool(routes, request, strict):
     candidates, rejected = [], Counter()
     returns = {}
+    valid_assessed = []
     for route in routes:
         flight = route.flight
         key = (flight["from"], flight["to"], flight["flight_no"])
@@ -172,7 +195,11 @@ def candidate_pool(routes, request, strict):
         rejected.update(logistics | constraints)
         if price is None or (strict and (logistics or constraints)):
             continue
-        candidates.append({"route": route, "back": back, "features": features(route, request, price)})
+        valid_assessed.append((route, back, price))
+    
+    min_price = min((p for _, _, p in valid_assessed), default=None)
+    for route, back, price in valid_assessed:
+        candidates.append({"route": route, "back": back, "features": features(route, request, price, min_price)})
     return candidates, rejected
 
 
@@ -184,9 +211,12 @@ def scores(candidates, mode, model):
         return [-f["price"] for f in feats]
     if mode == "heuristic":
         return [LTRService._surrogate_score(f) for f in feats]
+    schema = LTRService.get_feature_schema()
+    cols = FEATURE_COLUMNS_V2 if schema == FEATURE_SCHEMA_V2 else FEATURE_COLUMNS_V1
+    cat_cols = CAT_FEATURES_V2 if schema == FEATURE_SCHEMA_V2 else CAT_FEATURES_V1
     return model.predict(Pool(
-        [[f[name] for name in FEATURE_COLUMNS] for f in feats],
-        cat_features=CAT_FEATURES, feature_names=FEATURE_COLUMNS, thread_count=2,
+        [[f.get(name, 0.0) for name in cols] for f in feats],
+        cat_features=cat_cols, feature_names=cols, thread_count=2,
     ), thread_count=2)
 
 
@@ -331,10 +361,10 @@ def file_hash(path):
 
 async def run(args):
     data_path, queries_path = DATA / "destinations.json", args.queries
-    model_path = DATA / "catboost_travel_ranker.cbm"
+    model_path = Path(args.model) if getattr(args, "model", None) else DATA / "catboost_travel_ranker.cbm"
     catalog = json.loads(data_path.read_text(encoding="utf-8"))
     queries = json.loads(queries_path.read_text(encoding="utf-8"))
-    model = LTRService.load_model(model_path)
+    model = LTRService.load_model(model_path, fail_fast=True)
     if model is None:
         raise RuntimeError("C4 requires a loadable CatBoost model with matching feature schema.")
     destinations = catalog["destinations"]
@@ -486,11 +516,12 @@ async def run(args):
             for dest in sorted(embeddings)
             if (subset := [r for r in rows if r["expected"][0] == dest])
         }
+    active_cols = FEATURE_COLUMNS_V2 if LTRService.get_feature_schema() == FEATURE_SCHEMA_V2 else FEATURE_COLUMNS_V1
     output = {
         "benchmark_results.json": {
             "summary": summaries, "metadata": metadata, "archetype_comparison": archetypes,
             "nlu_slot_metrics": nlu_slot_metrics(queries, predictions) if args.slots == "live" else None,
-            "feature_importances": dict(zip(FEATURE_COLUMNS, model.get_feature_importance(type="PredictionValuesChange").tolist())),
+            "feature_importances": dict(zip(active_cols, model.get_feature_importance(type="PredictionValuesChange").tolist())),
         },
         "per_query_audit.json": query_runs,
         "in_query_pairs_judged.json": pair_labels,
@@ -511,6 +542,7 @@ def main():
     parser.add_argument("--output-dir", type=Path, default=OUT_DIR)
     parser.add_argument("--queries", type=Path, default=DATA / "csai_150_benchmark_queries.json")
     parser.add_argument("--top3", choices=("score", "diverse"), default="diverse")
+    parser.add_argument("--model", type=Path, default=DATA / "catboost_travel_ranker_v2.cbm" if (DATA / "catboost_travel_ranker_v2.cbm").exists() else DATA / "catboost_travel_ranker.cbm")
     logging.basicConfig(level=logging.WARNING)
     asyncio.run(run(parser.parse_args()))
 

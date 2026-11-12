@@ -17,25 +17,17 @@ from catboost import CatBoostRanker, Pool
 from sklearn.metrics import ndcg_score
 from sklearn.model_selection import GroupShuffleSplit
 
+from app.services.ltr_service import (
+    FEATURE_COLUMNS_V1,
+    FEATURE_COLUMNS_V2,
+    CAT_FEATURES_V1,
+    CAT_FEATURES_V2,
+    FEATURE_SCHEMA_V1,
+    FEATURE_SCHEMA_V2,
+)
 
-# Список 12 признаков для обучения модели
-FEATURE_COLUMNS: List[str] = [
-    "archetype",
-    "cities",
-    "days",
-    "log_price",
-    "log_price_per_day",
-    "transfers",
-    "layover_hours",
-    "hotel_stars",
-    "dist_center_km",
-    "pet_friendly",
-    "breakfast",
-    "stars_per_10k",
-]
-
-# Категориальные признаки
-CAT_FEATURES: List[str] = ["archetype", "cities"]
+FEATURE_COLUMNS: List[str] = FEATURE_COLUMNS_V1
+CAT_FEATURES: List[str] = CAT_FEATURES_V1
 
 
 def parse_binary(value: Any) -> int:
@@ -73,10 +65,11 @@ def load_and_flatten_jsonl(file_path: Path | str) -> pd.DataFrame:
     return load_and_flatten_jsonl_sources([Path(file_path)])
 
 
-def load_and_flatten_jsonl_sources(file_paths: List[Path]) -> pd.DataFrame:
+def load_and_flatten_jsonl_sources(file_paths: List[Path], schema_version: str = FEATURE_SCHEMA_V1) -> pd.DataFrame:
     """
     Читает список JSONL-файлов с парными сравнениями туров и разворачивает каждую строку
     в ДВЕ записи DataFrame (для tour_a и tour_b), объединённые общим group_id.
+    Поддерживает схему V1 (12 признаков) и схему V2 (22 признака).
     """
     records: List[Dict[str, Any]] = []
     seen_groups = set()
@@ -121,33 +114,76 @@ def load_and_flatten_jsonl_sources(file_paths: List[Path]) -> pd.DataFrame:
                     layover_hours = float(tour_data["layover_hours"])
                     if not math.isfinite(layover_hours):
                         raise ValueError(f"Нечисловой layover_hours в строке {line_num}")
-                    dist_center_km = float(tour_data["dist_center_km"])
-                    if not math.isfinite(dist_center_km):
-                        raise ValueError(f"Нечисловой dist_center_km в строке {line_num}")
 
                     log_price = float(np.log1p(price))
                     log_price_per_day = float(np.log1p(price_per_day))
                     stars_per_10k = float(stars / max(0.1, price_per_day / 10000.0))
 
-                    records.append(
-                        {
-                            "group_id": group_id,
-                            "archetype": archetype,
-                            "cities": str(tour_data["cities"]),
-                            "days": days,
-                            "price": price,
-                            "log_price": log_price,
-                            "log_price_per_day": log_price_per_day,
-                            "transfers": transfers,
-                            "layover_hours": layover_hours,
-                            "hotel_stars": stars,
-                            "dist_center_km": dist_center_km,
-                            "pet_friendly": pet_friendly,
-                            "breakfast": breakfast,
-                            "stars_per_10k": stars_per_10k,
-                            "target": int(target),
-                        }
-                    )
+                    if schema_version == FEATURE_SCHEMA_V2:
+                        dist_center_km = float(tour_data.get("dist_center_km", 0.0))
+                        has_dist_center = int(tour_data.get("has_dist_center", 1 if dist_center_km > 0 else 0))
+                        dist_sea_km = float(tour_data.get("dist_sea_km", 0.0))
+                        has_dist_sea = int(tour_data.get("has_dist_sea", 1 if dist_sea_km > 0 else 0))
+                        dep_hour = float(tour_data.get("departure_hour", 0.0))
+                        has_dep_time = int(tour_data.get("has_departure_time", 1 if dep_hour > 0 else 0))
+                        is_direct = int(tour_data.get("is_direct_flight", 1 if transfers <= 1 else 0))
+                        matches_time = int(tour_data.get("matches_time_pref", 0))
+                        matches_direct = int(tour_data.get("matches_direct_pref", 0))
+                        p_delta = float(tour_data.get("price_delta_vs_cheapest", 0.0))
+                        rel_surcharge = float(tour_data.get("relative_surcharge_pct", 0.0))
+
+                        records.append(
+                            {
+                                "group_id": group_id,
+                                "archetype": archetype,
+                                "cities": str(tour_data["cities"]),
+                                "days": days,
+                                "price": price,
+                                "log_price": log_price,
+                                "log_price_per_day": log_price_per_day,
+                                "transfers": transfers,
+                                "layover_hours": layover_hours,
+                                "hotel_stars": stars,
+                                "stars_per_10k": stars_per_10k,
+                                "pet_friendly": pet_friendly,
+                                "breakfast": breakfast,
+                                "dist_center_km": dist_center_km,
+                                "has_dist_center": has_dist_center,
+                                "dist_sea_km": dist_sea_km,
+                                "has_dist_sea": has_dist_sea,
+                                "departure_hour": dep_hour,
+                                "has_departure_time": has_dep_time,
+                                "is_direct_flight": is_direct,
+                                "matches_time_pref": matches_time,
+                                "matches_direct_pref": matches_direct,
+                                "price_delta_vs_cheapest": p_delta,
+                                "relative_surcharge_pct": rel_surcharge,
+                                "target": int(target),
+                            }
+                        )
+                    else:
+                        dist_center_km = float(tour_data["dist_center_km"])
+                        if not math.isfinite(dist_center_km):
+                            raise ValueError(f"Нечисловой dist_center_km в строке {line_num}")
+                        records.append(
+                            {
+                                "group_id": group_id,
+                                "archetype": archetype,
+                                "cities": str(tour_data["cities"]),
+                                "days": days,
+                                "price": price,
+                                "log_price": log_price,
+                                "log_price_per_day": log_price_per_day,
+                                "transfers": transfers,
+                                "layover_hours": layover_hours,
+                                "hotel_stars": stars,
+                                "dist_center_km": dist_center_km,
+                                "pet_friendly": pet_friendly,
+                                "breakfast": breakfast,
+                                "stars_per_10k": stars_per_10k,
+                                "target": int(target),
+                            }
+                        )
 
         pair_id_offset += 1_000_000
 
@@ -177,14 +213,16 @@ def split_by_group(
     return train_df, test_df
 
 
-def create_catboost_pool(df: pd.DataFrame) -> Pool:
-    """Создаёт catboost.Pool с матрицей 12 признаков."""
+def create_catboost_pool(df: pd.DataFrame, schema_version: str = FEATURE_SCHEMA_V1) -> Pool:
+    """Создаёт catboost.Pool с матрицей признаков соответствующей схемы."""
     validate_groups(df)
+    cols = FEATURE_COLUMNS_V2 if schema_version == FEATURE_SCHEMA_V2 else FEATURE_COLUMNS_V1
+    cat_cols = CAT_FEATURES_V2 if schema_version == FEATURE_SCHEMA_V2 else CAT_FEATURES_V1
     return Pool(
-        data=df[FEATURE_COLUMNS],
+        data=df[cols],
         label=df["target"],
         group_id=df["group_id"],
-        cat_features=CAT_FEATURES,
+        cat_features=cat_cols,
     )
 
 
@@ -270,30 +308,65 @@ def main() -> None:
         help="Доля групп в тестовой выборке (по умолчанию: 0.15)",
     )
     parser.add_argument(
+        "--schema-version",
+        type=str,
+        default=FEATURE_SCHEMA_V1,
+        choices=[FEATURE_SCHEMA_V1, FEATURE_SCHEMA_V2],
+        help="Версия схемы признаков ('v1' - legacy 12 фичей, 'v2' - новая схема 22 фичи)",
+    )
+    parser.add_argument(
         "--seed",
         type=int,
         default=42,
         help="Random seed (по умолчанию: 42)",
     )
+    parser.add_argument(
+        "--eval-input",
+        type=str,
+        default=None,
+        help="Путь к отдельному валидационному файлу JSONL (если не задан, используется случайный сплит)",
+    )
+    parser.add_argument(
+        "--ablate-preferences",
+        action="store_true",
+        help="Занулить признаки предпочтений для контрольного ablation-эксперимента",
+    )
     args = parser.parse_args()
+
+    active_cols = FEATURE_COLUMNS_V2 if args.schema_version == FEATURE_SCHEMA_V2 else FEATURE_COLUMNS_V1
 
     # 1. Чтение и сведение данных
     file_paths = [Path(p) for p in args.inputs]
     print("=" * 70)
-    print("CSAI 2026: Обучение CatBoostRanker на объединенном датасете")
+    print(f"CSAI 2026: Обучение CatBoostRanker (схема {args.schema_version}, {len(active_cols)} признаков)")
+    if args.ablate_preferences:
+        print("[ABLATION] Признаки предпочтений будут занулены (Ablation-модель).")
     print("=" * 70)
     print(f"\n[1/4] Считывание и векторизация признаков из {len(file_paths)} файлов...")
-    df = load_and_flatten_jsonl_sources(file_paths)
-    print(f"      Всего загружено: {len(df)} записей ({df['group_id'].nunique()} парных сравнений)")
+    train_df = load_and_flatten_jsonl_sources(file_paths, schema_version=args.schema_version)
+    print(f"      Train загружено: {len(train_df)} записей ({train_df['group_id'].nunique()} парных сравнений)")
 
     # 2. Train/Test Split
-    print(f"\n[2/4] Разделение на train и validation по группам (test_size={args.test_size})...")
-    train_df, test_df = split_by_group(df, test_size=args.test_size, random_state=args.seed)
-    print(f"      Train : {len(train_df)} записей ({train_df['group_id'].nunique()} пар)")
-    print(f"      Valid : {len(test_df)} записей ({test_df['group_id'].nunique()} пар)")
+    if args.eval_input:
+        print(f"\n[2/4] Загрузка отдельного валидационного датасета из: {args.eval_input}...")
+        test_df = load_and_flatten_jsonl_sources([Path(args.eval_input)], schema_version=args.schema_version)
+        print(f"      Train : {len(train_df)} записей ({train_df['group_id'].nunique()} пар)")
+        print(f"      Valid : {len(test_df)} записей ({test_df['group_id'].nunique()} пар)")
+    else:
+        print(f"\n[2/4] Разделение на train и validation по группам (test_size={args.test_size})...")
+        train_df, test_df = split_by_group(train_df, test_size=args.test_size, random_state=args.seed)
+        print(f"      Train : {len(train_df)} записей ({train_df['group_id'].nunique()} пар)")
+        print(f"      Valid : {len(test_df)} записей ({test_df['group_id'].nunique()} пар)")
 
-    train_pool = create_catboost_pool(train_df)
-    test_pool = create_catboost_pool(test_df)
+    if args.ablate_preferences and args.schema_version == FEATURE_SCHEMA_V2:
+        for pref_col in ["matches_time_pref", "matches_direct_pref", "price_delta_vs_cheapest", "relative_surcharge_pct"]:
+            if pref_col in train_df.columns:
+                train_df[pref_col] = 0
+            if pref_col in test_df.columns:
+                test_df[pref_col] = 0
+
+    train_pool = create_catboost_pool(train_df, schema_version=args.schema_version)
+    test_pool = create_catboost_pool(test_df, schema_version=args.schema_version)
 
     # 3. Обучение модели
     print(f"\n[3/4] Обучение CatBoostRanker (loss='{args.loss_function}', depth={args.depth}, lr={args.learning_rate}, borders={args.border_count})...")
@@ -327,8 +400,8 @@ def main() -> None:
     # Важность признаков
     print("\n=== Важность признаков (Feature Importance) ===")
     imps = ranker.get_feature_importance(type="PredictionValuesChange")
-    for feat, imp in sorted(zip(FEATURE_COLUMNS, imps), key=lambda x: -x[1]):
-        print(f"  {feat:<20}: {imp:6.2f}%")
+    for feat, imp in sorted(zip(active_cols, imps), key=lambda x: -x[1]):
+        print(f"  {feat:<24}: {imp:6.2f}%")
 
     # 4. Сохранение модели
     out_path = Path(args.output_model)

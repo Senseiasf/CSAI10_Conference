@@ -38,8 +38,11 @@ except (ImportError, OSError):
     Pool = None  # type: ignore
     HAS_CATBOOST = False
 
-# Точный порядок и состав признаков, на которых обучена модель catboost_travel_ranker.cbm
-FEATURE_COLUMNS: List[str] = [
+FEATURE_SCHEMA_V1: str = "v1"
+FEATURE_SCHEMA_V2: str = "v2"
+
+# Точный порядок и состав признаков V1 (на которых обучена legacy-модель catboost_travel_ranker.cbm)
+FEATURE_COLUMNS_V1: List[str] = [
     "archetype",
     "cities",
     "days",
@@ -53,8 +56,43 @@ FEATURE_COLUMNS: List[str] = [
     "breakfast",
     "stars_per_10k",
 ]
+CAT_FEATURES_V1: List[str] = ["archetype", "cities"]
 
-CAT_FEATURES: List[str] = ["archetype", "cities"]
+# Точный порядок и состав признаков V2:
+# 1. Честные канонические маршруты для всех 9 направлений каталога
+# 2. Разделение dist_center_km и dist_sea_km с бинарными флагами наличия (has_dist_center, has_dist_sea)
+# 3. Фактический час вылета (departure_hour, has_departure_time) и признак прямого перелета (is_direct_flight)
+# 4. Признаки соответствия предпочтениям пользователя (matches_time_pref, matches_direct_pref)
+# 5. Относительные метрики доплаты (price_delta_vs_cheapest, relative_surcharge_pct)
+FEATURE_COLUMNS_V2: List[str] = [
+    "archetype",
+    "cities",
+    "days",
+    "log_price",
+    "log_price_per_day",
+    "transfers",
+    "layover_hours",
+    "hotel_stars",
+    "stars_per_10k",
+    "pet_friendly",
+    "breakfast",
+    "dist_center_km",
+    "has_dist_center",
+    "dist_sea_km",
+    "has_dist_sea",
+    "departure_hour",
+    "has_departure_time",
+    "is_direct_flight",
+    "matches_time_pref",
+    "matches_direct_pref",
+    "price_delta_vs_cheapest",
+    "relative_surcharge_pct",
+]
+CAT_FEATURES_V2: List[str] = ["archetype", "cities"]
+
+# По умолчанию для сохранения полной обратной совместимости
+FEATURE_COLUMNS: List[str] = FEATURE_COLUMNS_V1
+CAT_FEATURES: List[str] = CAT_FEATURES_V1
 ARCHETYPES = ("pet", "family", "luxury", "budget", "solo")
 NATIVE_ENGINE = "CatBoostRanker (.cbm)"
 FALLBACK_ENGINE = "Analytical fallback"
@@ -74,18 +112,32 @@ def binary_flag(value: Any) -> int:
         return int(value.strip().lower() in ("1", "true", "yes", "да", "✅ да", "✅"))
     return int(bool(finite_number(value)))
 
-# Канонические маршруты из синтетического датасета для точного попадания в категориальный словарь CatBoost
+
+# Канонические маршруты V1 (legacy): UAE, Thailand, Maldives, Egypt ошибочно ссылались на Турцию
 DESTINATION_TO_CANONICAL_CITIES: Dict[str, str] = {
     "sochi": "Сочи -> Красная Поляна -> Сириус",
     "georgia": "Тбилиси -> Батуми -> Кутаиси",
     "turkey": "Стамбул -> Анталья -> Каппадокия",
     "spb": "Москва -> СПб -> Казань",
     "altai": "Екатеринбург -> Тюмень -> Тобольск",
-    # Ближайшие по структуре и логистике маршруты для остальных курортных направлений
+    # Ближайшие по структуре и логистике маршруты для остальных курортных направлений в legacy-модели
     "uae": "Стамбул -> Анталья -> Каппадокия",
     "thailand": "Стамбул -> Анталья -> Каппадокия",
     "maldives": "Стамбул -> Анталья -> Каппадокия",
     "egypt": "Стамбул -> Анталья -> Каппадокия",
+}
+
+# Канонические маршруты V2: точные, географически корректные цепочки городов для каждого из 9 направлений
+DESTINATION_TO_CANONICAL_CITIES_V2: Dict[str, str] = {
+    "sochi": "Сочи -> Красная Поляна -> Сириус",
+    "georgia": "Тбилиси -> Батуми -> Гудаури",
+    "turkey": "Стамбул -> Анталья -> Каппадокия",
+    "spb": "Санкт-Петербург -> Петергоф -> Пушкин",
+    "altai": "Горно-Алтайск -> Манжерок -> Чемал",
+    "uae": "Дубай -> Абу-Даби -> Шарджа",
+    "thailand": "Бангкок -> Пхукет -> Самуи",
+    "maldives": "Мале -> Северный Мале -> Ари Атолл",
+    "egypt": "Шарм-эль-Шейх -> Наама Бей -> Хадаба",
 }
 
 DEFAULT_MODEL_PATH = Path(__file__).resolve().parent.parent / "data" / "catboost_travel_ranker.cbm"
@@ -104,6 +156,7 @@ class LTRService:
     _lock = RLock()
     _load_error: Optional[str] = None
     _inference_failed = False
+    _schema_version: str = FEATURE_SCHEMA_V1
     _online_feedback_buffer = deque(maxlen=10000)
     _online_feedback_events = 0
 
@@ -112,10 +165,24 @@ class LTRService:
         return cls._model_path
 
     @classmethod
-    def load_model(cls, model_path: Optional[Path] = None) -> Optional[Any]:
-        """Загружает модель CatBoostRanker из `.cbm` файла (один раз на процесс)."""
+    def get_feature_schema(cls) -> str:
+        """Возвращает версию схемы признаков текущей загруженной модели ('v1' или 'v2')."""
+        return getattr(cls, "_schema_version", FEATURE_SCHEMA_V1)
+
+    @classmethod
+    def load_model(cls, model_path: Optional[Path] = None, fail_fast: bool = False) -> Optional[Any]:
+        """
+        Загружает модель CatBoostRanker из `.cbm` файла (один раз на процесс).
+        При fail_fast=True выбрасывает RuntimeError вместо возврата None при любой ошибке загрузки.
+        """
         with cls._lock:
-            return cls._load_model(model_path)
+            model = cls._load_model(model_path)
+            if fail_fast and model is None:
+                raise RuntimeError(
+                    f"CatBoost LTR model could not be loaded from {cls.get_model_path()} "
+                    f"(reason: {cls._load_error})"
+                )
+            return model
 
     @classmethod
     def _load_model(cls, model_path: Optional[Path] = None) -> Optional[Any]:
@@ -150,10 +217,16 @@ class LTRService:
         try:
             ranker = CatBoostRanker()
             ranker.load_model(str(target_path))
-            if list(ranker.feature_names_) != FEATURE_COLUMNS or ranker.get_cat_feature_indices() != [0, 1]:
-                raise ValueError("Схема признаков модели не совпадает с FEATURE_COLUMNS / CAT_FEATURES")
+            feat_names = list(ranker.feature_names_)
+            cat_indices = ranker.get_cat_feature_indices()
+            if feat_names == FEATURE_COLUMNS_V1 and cat_indices == [0, 1]:
+                cls._schema_version = FEATURE_SCHEMA_V1
+            elif feat_names == FEATURE_COLUMNS_V2 and cat_indices == [0, 1]:
+                cls._schema_version = FEATURE_SCHEMA_V2
+            else:
+                raise ValueError("Схема признаков модели не совпадает с FEATURE_COLUMNS_V1 или FEATURE_COLUMNS_V2")
             cls._model = ranker
-            logger.info("Модель CatBoostRanker успешно загружена из %s", target_path)
+            logger.info("Модель CatBoostRanker (%s) успешно загружена из %s", cls._schema_version, target_path)
             return cls._model
         except Exception as exc:
             cls._load_error = "model_load_failed"
@@ -166,16 +239,19 @@ class LTRService:
         """Возвращает диагностический статус LTR-ранжировщика для `/health` и UI."""
         path = cls.get_model_path()
         model = cls.load_model()
+        schema_v = cls.get_feature_schema()
+        cols = FEATURE_COLUMNS_V2 if schema_v == FEATURE_SCHEMA_V2 else FEATURE_COLUMNS_V1
         return {
             "available": HAS_CATBOOST and model is not None and not cls._inference_failed,
             "engine": NATIVE_ENGINE if HAS_CATBOOST and model is not None and not cls._inference_failed else FALLBACK_ENGINE,
             "model_present": path.is_file(),
             "catboost_installed": HAS_CATBOOST,
             "model_loaded": model is not None,
+            "feature_schema": schema_v,
             "fallback_reason": "inference_failed" if cls._inference_failed else cls._load_error,
             "model_file": path.name,
             "model_size_kb": round(path.stat().st_size / 1024, 1) if path.exists() else 0.0,
-            "features_count": len(FEATURE_COLUMNS),
+            "features_count": len(cols),
             "online_feedback_events": cls._online_feedback_events,
             "feedback_buffer_size": len(cls._online_feedback_buffer),
             "feedback_buffer_capacity": cls._online_feedback_buffer.maxlen,
@@ -206,13 +282,43 @@ class LTRService:
             return "solo"
         return "solo"
 
-    @staticmethod
-    def resolve_canonical_cities(destination_id: str, city_name: Optional[str] = None) -> str:
+    @classmethod
+    def resolve_canonical_cities(
+        cls,
+        destination_id: str,
+        city_name: Optional[str] = None,
+        schema: str = FEATURE_SCHEMA_V1,
+    ) -> str:
         """
-        Сопоставляет `destination_id` или название города с каноническим маршрутом `cities`,
-        использованным при обучении CatBoost LTR.
+        Сопоставляет `destination_id` или название города с каноническим маршрутом `cities`.
+        schema='v1' использует legacy-маппинг (совместимый с catboost_travel_ranker.cbm).
+        schema='v2' использует точный маппинг для всех 9 направлений каталога.
         """
         dest_key = str(destination_id or "").lower().strip()
+        if schema == FEATURE_SCHEMA_V2:
+            if dest_key in DESTINATION_TO_CANONICAL_CITIES_V2:
+                return DESTINATION_TO_CANONICAL_CITIES_V2[dest_key]
+            city_lower = str(city_name or "").lower()
+            if any(w in city_lower for w in ("дубай", "абу-даби", "шардж")):
+                return DESTINATION_TO_CANONICAL_CITIES_V2["uae"]
+            if any(w in city_lower for w in ("пхукет", "самуи", "бангкок", "патонг", "ката")):
+                return DESTINATION_TO_CANONICAL_CITIES_V2["thailand"]
+            if any(w in city_lower for w in ("мале", "хулхумале", "атолл")):
+                return DESTINATION_TO_CANONICAL_CITIES_V2["maldives"]
+            if any(w in city_lower for w in ("шарм", "хургад", "наама", "хадаб")):
+                return DESTINATION_TO_CANONICAL_CITIES_V2["egypt"]
+            if any(w in city_lower for w in ("сочи", "сириус", "полян", "адлер")):
+                return DESTINATION_TO_CANONICAL_CITIES_V2["sochi"]
+            if any(w in city_lower for w in ("тбилис", "батум", "кутаис", "гудаур", "казбег")):
+                return DESTINATION_TO_CANONICAL_CITIES_V2["georgia"]
+            if any(w in city_lower for w in ("стамбул", "анталь", "каппадок", "кемер", "белек", "каш", "алань")):
+                return DESTINATION_TO_CANONICAL_CITIES_V2["turkey"]
+            if any(w in city_lower for w in ("петербург", "спб", "пушкин", "петергоф")):
+                return DESTINATION_TO_CANONICAL_CITIES_V2["spb"]
+            if any(w in city_lower for w in ("алтай", "манжерок", "чемал", "горно-алтайск")):
+                return DESTINATION_TO_CANONICAL_CITIES_V2["altai"]
+            return DESTINATION_TO_CANONICAL_CITIES_V2.get(dest_key, "Сочи -> Красная Поляна -> Сириус")
+
         if dest_key in DESTINATION_TO_CANONICAL_CITIES:
             return DESTINATION_TO_CANONICAL_CITIES[dest_key]
 
@@ -240,7 +346,7 @@ class LTRService:
 
     @staticmethod
     def _parse_dist_center_km(hotel: Dict[str, Any]) -> float:
-        """Преобразует расстояние до моря/центра в километры (`dist_center_km`)."""
+        """Legacy V1: преобразует расстояние до моря/центра в километры (`dist_center_km`)."""
         if "dist_center_km" in hotel and hotel["dist_center_km"] is not None:
             try:
                 value = float(hotel["dist_center_km"])
@@ -266,6 +372,110 @@ class LTRService:
         if "первая линия" in dist_str.lower() or "пляж" in dist_str.lower():
             return 0.2
         return 1.5
+
+    @staticmethod
+    def _parse_dist_center_km_v2(hotel: Dict[str, Any]) -> Tuple[float, int]:
+        """
+        V2: Извлекает расстояние до центра без подмены расстоянием до моря.
+        Возвращает (dist_center_km, has_dist_center).
+        Не придумывает расстояние до центра при его отсутствии в каталоге.
+        """
+        if "dist_center_km" in hotel and hotel["dist_center_km"] is not None:
+            try:
+                val = float(hotel["dist_center_km"])
+                if math.isfinite(val) and val >= 0:
+                    return round(val, 2), 1
+            except (ValueError, TypeError):
+                pass
+        features = [str(f).lower() for f in (hotel.get("features") or [])]
+        if "city_center" in features:
+            return 0.5, 1
+        return 0.0, 0
+
+    @staticmethod
+    def _parse_dist_sea_km_v2(hotel: Dict[str, Any]) -> Tuple[float, int]:
+        """
+        V2: Извлекает расстояние до моря в километрах.
+        Возвращает (dist_sea_km, has_dist_sea).
+        """
+        if "distance_to_sea_meters" in hotel and hotel["distance_to_sea_meters"] is not None:
+            try:
+                meters = float(hotel["distance_to_sea_meters"])
+                if math.isfinite(meters) and meters > 0:
+                    return round(meters / 1000.0, 2), 1
+            except (ValueError, TypeError):
+                pass
+        dist_str = str(hotel.get("distance_to_sea", "") or "").strip().lower()
+        if dist_str:
+            m_km = re.search(r"(\d+(?:[.,]\d+)?)\s*км", dist_str)
+            if m_km:
+                return round(float(m_km.group(1).replace(",", ".")), 2), 1
+            m_m = re.search(r"(\d+)\s*м\b", dist_str)
+            if m_m:
+                return round(float(m_m.group(1)) / 1000.0, 2), 1
+            if "первая линия" in dist_str or "пляж" in dist_str:
+                return 0.1, 1
+        return 0.0, 0
+
+    @staticmethod
+    def _parse_departure_hour(departure_time: Any) -> Tuple[float, int]:
+        """
+        V2: Преобразует строку времени 'HH:MM' в час вылета float (0.0 .. 23.99).
+        Возвращает (departure_hour, has_departure_time).
+        """
+        if not departure_time:
+            return 0.0, 0
+        s = str(departure_time).strip()
+        m = re.match(r"^(\d{1,2}):(\d{2})", s)
+        if m:
+            hh = int(m.group(1))
+            mm = int(m.group(2))
+            if 0 <= hh <= 23 and 0 <= mm <= 59:
+                return round(hh + mm / 60.0, 2), 1
+        return 0.0, 0
+
+    @staticmethod
+    def _check_preference_matches(
+        flight: Dict[str, Any],
+        hotel: Dict[str, Any],
+        profile_or_request: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, int]:
+        """
+        V2: Вычисляет соответствие варианта мягким предпочтениям запроса:
+        - is_direct_flight (1/0)
+        - matches_direct_pref (1/0)
+        - matches_time_pref (1/0)
+        """
+        req = profile_or_request or {}
+        soft = req.get("soft_preference") or {}
+        pref_attr = soft.get("attribute") or req.get("flight_time_pref")
+
+        flight_type = str(flight.get("flight_type", "")).lower()
+        is_direct = int(flight_type == "direct")
+        prefers_direct = int(bool(req.get("prefer_direct_flight") or pref_attr == "direct"))
+        matches_direct = int(is_direct == 1 and prefers_direct == 1)
+
+        dep_time_str = flight.get("departure_time")
+        matches_time = 0
+        if dep_time_str and pref_attr in ("morning", "day", "evening"):
+            try:
+                m = re.match(r"^(\d{1,2}):(\d{2})", str(dep_time_str).strip())
+                if m:
+                    mins = int(m.group(1)) * 60 + int(m.group(2))
+                    if pref_attr == "morning" and 360 <= mins < 720:
+                        matches_time = 1
+                    elif pref_attr == "day" and 720 <= mins < 1080:
+                        matches_time = 1
+                    elif pref_attr == "evening" and 1080 <= mins < 1440:
+                        matches_time = 1
+            except Exception:
+                pass
+
+        return {
+            "is_direct_flight": is_direct,
+            "matches_direct_pref": matches_direct,
+            "matches_time_pref": matches_time,
+        }
 
     @staticmethod
     def _parse_pet_friendly(hotel: Dict[str, Any]) -> int:
@@ -294,6 +504,100 @@ class LTRService:
         return 0
 
     @classmethod
+    def extract_candidate_features_v2(
+        cls,
+        hotel: Dict[str, Any],
+        destination_id: str,
+        profile: Optional[Dict[str, Any]] = None,
+        nights: int = 7,
+        logistics: Optional[Dict[str, Any]] = None,
+        breakdown: Optional[Dict[str, Any]] = None,
+        reference_price: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """
+        Формирует вектор признаков схемы V2 (22 признака) для подачи в CatBoostRanker V2.
+        """
+        profile = profile or {}
+        archetype = cls.resolve_archetype(profile)
+        cities = cls.resolve_canonical_cities(destination_id, hotel.get("city"), schema=FEATURE_SCHEMA_V2)
+        days = max(1, int(finite_number(nights if nights is not None else profile.get("nights"), 7)))
+
+        if breakdown and "mandatory" in breakdown:
+            price = max(0.0, finite_number((breakdown["mandatory"] or {}).get("total_mandatory_rub")))
+        else:
+            per_night = max(0.0, finite_number(hotel.get("price_per_night_rub"), 5000))
+            rooms = max(1, int(finite_number(profile.get("rooms_count"), 1)))
+            price = per_night * days * rooms + 25000.0
+
+        transfers_count = 1
+        layover_hours = 1.5
+        flight_dict: Dict[str, Any] = {}
+        if logistics:
+            flight = logistics.get("flight") or {}
+            flight_dict = flight
+            timeline = logistics.get("timeline") or {}
+            layover_details = timeline.get("layover_details") or {}
+            is_connecting = (
+                flight.get("flight_type") == "connecting"
+                or bool(layover_details.get("is_connecting"))
+                or finite_number(flight.get("layover_duration_minutes")) > 0
+            )
+            has_ground_transfer = not bool(profile.get("without_transfer"))
+            transfers_count = (1 if is_connecting else 0) + (1 if has_ground_transfer else 0)
+            layover_min = finite_number(
+                layover_details.get("duration_minutes")
+                or flight.get("layover_duration_minutes")
+                or 0
+            )
+            if layover_min > 0:
+                layover_hours = round(float(layover_min) / 60.0, 2)
+            else:
+                buffer_min = max(0.0, finite_number(timeline.get("post_flight_buffer_min"), 60))
+                layover_hours = round(float(buffer_min) / 60.0, 2)
+
+        price_per_day = price / max(1, days)
+        log_price = float(np.log1p(price))
+        log_price_per_day = float(np.log1p(price_per_day))
+        stars_val = cls._parse_stars(hotel.get("stars"))
+        stars_per_10k = float(stars_val / max(0.1, price_per_day / 10000.0))
+
+        dist_center_km, has_dist_center = cls._parse_dist_center_km_v2(hotel)
+        dist_sea_km, has_dist_sea = cls._parse_dist_sea_km_v2(hotel)
+        dep_hour, has_dep_time = cls._parse_departure_hour(flight_dict.get("departure_time"))
+
+        pref_matches = cls._check_preference_matches(flight_dict, hotel, profile)
+
+        ref_p = price if reference_price is None else max(0.0, reference_price)
+        price_delta = max(0.0, price - ref_p)
+        rel_surcharge = round(price_delta / max(1.0, ref_p), 4)
+
+        return {
+            "archetype": archetype,
+            "cities": cities,
+            "days": days,
+            "price": price,
+            "log_price": log_price,
+            "log_price_per_day": log_price_per_day,
+            "transfers": int(transfers_count),
+            "layover_hours": float(layover_hours),
+            "hotel_stars": stars_val,
+            "stars_per_10k": round(stars_per_10k, 4),
+            "pet_friendly": cls._parse_pet_friendly(hotel),
+            "breakfast": cls._parse_breakfast(hotel),
+            "dist_center_km": dist_center_km,
+            "has_dist_center": has_dist_center,
+            "dist_sea_km": dist_sea_km,
+            "has_dist_sea": has_dist_sea,
+            "departure_hour": dep_hour,
+            "has_departure_time": has_dep_time,
+            "is_direct_flight": pref_matches["is_direct_flight"],
+            "matches_time_pref": pref_matches["matches_time_pref"],
+            "matches_direct_pref": pref_matches["matches_direct_pref"],
+            "price_delta_vs_cheapest": round(price_delta, 2),
+            "relative_surcharge_pct": rel_surcharge,
+        }
+
+    @classmethod
     def extract_candidate_features(
         cls,
         hotel: Dict[str, Any],
@@ -302,23 +606,27 @@ class LTRService:
         nights: int = 7,
         logistics: Optional[Dict[str, Any]] = None,
         breakdown: Optional[Dict[str, Any]] = None,
+        schema: str = FEATURE_SCHEMA_V1,
+        reference_price: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
-        Формирует вектор из 10 признаков кандидата для подачи в `CatBoostRanker`:
-        - `archetype` (str)
-        - `cities` (str)
-        - `days` (int)
-        - `price` (float)
-        - `transfers` (int)
-        - `layover_hours` (float)
-        - `hotel_stars` (int)
-        - `dist_center_km` (float)
-        - `pet_friendly` (int: 1/0)
-        - `breakfast` (int: 1/0)
+        Формирует вектор признаков кандидата для подачи в `CatBoostRanker`.
+        Поддерживает схему V1 (12 признаков, по умолчанию) и схему V2 (22 признака).
         """
+        if schema == FEATURE_SCHEMA_V2:
+            return cls.extract_candidate_features_v2(
+                hotel=hotel,
+                destination_id=destination_id,
+                profile=profile,
+                nights=nights,
+                logistics=logistics,
+                breakdown=breakdown,
+                reference_price=reference_price,
+            )
+
         profile = profile or {}
         archetype = cls.resolve_archetype(profile)
-        cities = cls.resolve_canonical_cities(destination_id, hotel.get("city"))
+        cities = cls.resolve_canonical_cities(destination_id, hotel.get("city"), schema=FEATURE_SCHEMA_V1)
         days = max(1, int(finite_number(nights if nights is not None else profile.get("nights"), 7)))
 
         # Полная стоимость пакета или оценка на основе цены номера за ночь
@@ -385,7 +693,7 @@ class LTRService:
         arch = feat["archetype"]
         price = float(feat.get("price", np.expm1(feat.get("log_price", 0.0))))
         stars = int(feat["hotel_stars"])
-        dist = float(feat["dist_center_km"])
+        dist = float(feat.get("dist_center_km", 0.0))
         transfers = int(feat["transfers"])
         layover = float(feat["layover_hours"])
         pet = int(feat["pet_friendly"])
@@ -430,6 +738,7 @@ class LTRService:
     def score_features_batch(cls, features_list: List[Dict[str, Any]]) -> Tuple[List[float], float, str]:
         """
         Вычисляет LTR-скоры для списка векторов признаков.
+        Поддерживает как модель V1, так и модель V2.
         Возвращает кортеж: `(scores, latency_ms, engine_name)`.
         """
         if not features_list:
@@ -437,15 +746,18 @@ class LTRService:
 
         t0 = time.perf_counter()
         model = cls.load_model()
+        schema_version = cls.get_feature_schema()
 
         # Категории всегда строки, числовые фичи конечны даже для неполного входа.
-        features_list = [cls.normalize_features(feat) for feat in features_list]
+        features_list = [cls.normalize_features(feat, schema=schema_version) for feat in features_list]
         if model is not None and Pool is not None:
+            cols = FEATURE_COLUMNS_V2 if schema_version == FEATURE_SCHEMA_V2 else FEATURE_COLUMNS_V1
+            cat_cols = CAT_FEATURES_V2 if schema_version == FEATURE_SCHEMA_V2 else CAT_FEATURES_V1
             try:
                 pool = Pool(
-                    data=[[feat[column] for column in FEATURE_COLUMNS] for feat in features_list],
-                    feature_names=FEATURE_COLUMNS,
-                    cat_features=CAT_FEATURES,
+                    data=[[feat.get(column, 0.0) for column in cols] for feat in features_list],
+                    feature_names=cols,
+                    cat_features=cat_cols,
                 )
                 preds = model.predict(pool)
                 values = np.asarray(preds, dtype=float).ravel()
@@ -463,19 +775,23 @@ class LTRService:
         latency_ms = round((time.perf_counter() - t0) * 1000.0, 2)
         return scores, latency_ms, FALLBACK_ENGINE
 
-    @staticmethod
-    def normalize_features(feat: Dict[str, Any]) -> Dict[str, Any]:
+    @classmethod
+    def normalize_features(cls, feat: Dict[str, Any], schema: Optional[str] = None) -> Dict[str, Any]:
+        use_v2 = (schema == FEATURE_SCHEMA_V2) or (schema is None and "has_dist_center" in feat)
+        cols = FEATURE_COLUMNS_V2 if use_v2 else FEATURE_COLUMNS_V1
+        cat_cols = CAT_FEATURES_V2 if use_v2 else CAT_FEATURES_V1
+
         result = {}
         price = max(0.0, finite_number(feat.get("price"), 0.0))
         days = max(1, int(finite_number(feat.get("days"), 7)))
         price_per_day = price / days
         stars = max(1, min(5, int(finite_number(feat.get("hotel_stars"), 4))))
 
-        for column in FEATURE_COLUMNS:
+        for column in cols:
             value = feat.get(column)
-            if column in CAT_FEATURES:
+            if column in cat_cols:
                 result[column] = str(value) if value is not None and not (isinstance(value, float) and not math.isfinite(value)) else "unknown"
-            elif column in ("pet_friendly", "breakfast"):
+            elif column in ("pet_friendly", "breakfast", "has_dist_center", "has_dist_sea", "has_departure_time", "is_direct_flight", "matches_time_pref", "matches_direct_pref"):
                 result[column] = binary_flag(value)
             elif column == "log_price":
                 result[column] = float(np.log1p(price)) if value is None else max(0.0, finite_number(value))
@@ -483,6 +799,10 @@ class LTRService:
                 result[column] = float(np.log1p(price_per_day)) if value is None else max(0.0, finite_number(value))
             elif column == "stars_per_10k":
                 result[column] = float(stars / max(0.1, price_per_day / 10000.0)) if value is None else max(0.0, finite_number(value))
+            elif column == "departure_hour":
+                result[column] = round(max(0.0, min(24.0, finite_number(value))), 2)
+            elif column in ("price_delta_vs_cheapest", "relative_surcharge_pct"):
+                result[column] = round(max(0.0, finite_number(value)), 4)
             else:
                 result[column] = max(0.0, finite_number(value))
         result["days"] = max(1, int(result["days"]))
