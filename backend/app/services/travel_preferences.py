@@ -13,7 +13,7 @@ ATTRIBUTES = {
     "breakfast": r"(?:включ[её]нн\w+\s+)?завтрак\w*",
     "stars": r"отел\w*\s+(?:более высок\w+\s+категори\w+|повыше классом|с большим числом звезд)|больше звезд",
 }
-SOFT_WORDS = r"предпочита\w+|предпочтительн\w*|желател(?:ен|ьн\w*)|лучше бы|хотелось бы|главное"
+SOFT_WORDS = r"предпочита\w+|предпочтител(?:ен|ьн\w*)|желател(?:ен|ьн\w*)|лучше бы|хотелось бы|главное"
 HARD_WORDS = r"только|обязател(?:ен|ьн\w*)|строго|исключительно|непременно"
 NUMBER = r"\d{1,3}(?:[ \u00a0\u202f]\d{3})+|\d+(?:[,.]\d+)?"
 AMOUNT = (rf"(?P<amount>{NUMBER})(?![\d,.]|[ \u00a0\u202f]\d{{3}}\b)\s*(?P<thousands>тыс\w*\.?|[кk]\b)?"
@@ -113,7 +113,8 @@ def matches_preference(candidate, attribute, reference):
     if attribute == "direct":
         return route.flight["flight_type"] == "direct"
     if attribute == "stars":
-        return feat["hotel_stars"] > reference["features"]["hotel_stars"]
+        ref_stars = reference["features"]["hotel_stars"] if reference else 1
+        return feat["hotel_stars"] > ref_stars
     if attribute == "breakfast":
         return bool(feat["breakfast"])
     start = {"morning": 360, "day": 720, "evening": 1080}[attribute]
@@ -130,7 +131,15 @@ def prioritize_preference(ranked, value):
     reference_price = cheapest["features"]["price"]
     preferred = next((c for c in ranked if matches_preference(c, attribute, cheapest)
                       and (cap is None or c["features"]["price"] - reference_price <= cap)), None)
-    first = ranked[0] if cap is None else preferred or cheapest
+    if cap is None:
+        first = ranked[0]
+    elif preferred is not None:
+        first = preferred
+    else:
+        if matches_preference(ranked[0], attribute, cheapest):
+            first = cheapest
+        else:
+            first = ranked[0]
     leaders = [first]
     if cap is None and preferred is not None and preferred is not first:
         leaders.append(preferred)

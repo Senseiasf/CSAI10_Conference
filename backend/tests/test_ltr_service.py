@@ -239,6 +239,65 @@ class LTRServiceTest(unittest.TestCase):
         self.assertEqual(res["event"]["winner"], "A")
         self.assertEqual(res["event"]["archetype"], "family")
 
+    def test_rank_evaluated_packages_v2_features(self):
+        v2_path = Path(__file__).resolve().parents[1] / "app" / "data" / "catboost_travel_ranker_v2.cbm"
+        if v2_path.exists():
+            orig_path = LTRService._model_path
+            LTRService.load_model(str(v2_path))
+            self.addCleanup(lambda: LTRService.load_model(str(orig_path)))
+            self.assertEqual(LTRService.get_feature_schema(), FEATURE_SCHEMA_V2)
+
+        h = {"id": "h1", "name": "Hotel", "stars": 4, "price_per_night_rub": 5000, "meals": "Завтрак включен"}
+        logistics = {"flight": {"flight_type": "direct", "departure_time": "09:00"}, "timeline": {}}
+        b1 = {"mandatory": {"total_mandatory_rub": 60000}}
+        b2 = {"mandatory": {"total_mandatory_rub": 80000}}
+        ranked, meta = LTRService.rank_evaluated_packages(
+            [(h, logistics, b1), (h, logistics, b2)],
+            destination_id="sochi",
+            profile={"archetype": "budget"},
+            nights=5,
+        )
+        self.assertEqual(len(ranked), 2)
+        # Cheaper package must score higher or equal
+        self.assertGreaterEqual(ranked[0][0]["ltr_score"], ranked[1][0]["ltr_score"])
+
+    def test_pareto_monotonicity_all_archetypes(self):
+        v2_path = Path(__file__).resolve().parents[1] / "app" / "data" / "catboost_travel_ranker_v2.cbm"
+        if v2_path.exists():
+            orig_path = LTRService._model_path
+            LTRService.load_model(str(v2_path))
+            self.addCleanup(lambda: LTRService.load_model(str(orig_path)))
+
+        from app.services.ltr_service import ARCHETYPES
+        for arch in ARCHETYPES:
+            with self.subTest(archetype=arch):
+                feat_cheap = {
+                    "archetype": arch, "cities": "Сочи -> Красная Поляна -> Сириус", "days": 5,
+                    "price": 50000.0, "log_price": 10.8, "log_price_per_day": 9.2,
+                    "transfers": 1, "layover_hours": 0.0, "hotel_stars": 4,
+                    "stars_per_10k": 4.0 / (50000.0 / 5 / 10000.0),
+                    "pet_friendly": 1, "breakfast": 1, "dist_center_km": 1.0, "has_dist_center": 1,
+                    "dist_sea_km": 0.5, "has_dist_sea": 1, "departure_hour": 10.0, "has_departure_time": 1,
+                    "is_direct_flight": 1, "matches_time_pref": 1, "matches_direct_pref": 1,
+                    "price_delta_vs_cheapest": 0.0, "relative_surcharge_pct": 0.0,
+                }
+                feat_exp = dict(feat_cheap)
+                feat_exp["price"] = 80000.0
+                feat_exp["log_price"] = 11.3
+                feat_exp["log_price_per_day"] = 9.7
+                feat_exp["stars_per_10k"] = 4.0 / (80000.0 / 5 / 10000.0)
+                feat_exp["price_delta_vs_cheapest"] = 30000.0
+                feat_exp["relative_surcharge_pct"] = 0.60
+
+                # Surrogate score must respect Pareto monotonicity
+                score_cheap = LTRService._surrogate_score(feat_cheap)
+                score_exp = LTRService._surrogate_score(feat_exp)
+                self.assertGreaterEqual(score_cheap, score_exp)
+
+                # Batch scoring must respect Pareto monotonicity
+                scores, _, _ = LTRService.score_features_batch([feat_cheap, feat_exp])
+                self.assertGreaterEqual(scores[0], scores[1])
+
 
 if __name__ == "__main__":
     unittest.main()

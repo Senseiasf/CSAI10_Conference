@@ -705,12 +705,22 @@ class LTRService:
         bf = int(feat["breakfast"])
         days = int(feat["days"])
 
+        matches_time = int(feat.get("matches_time_pref", 0))
+        matches_direct = int(feat.get("matches_direct_pref", 0))
+        rel_surcharge = float(feat.get("relative_surcharge_pct", 0.0))
+
         score = 0.0
         # Общие факторы комфорта логистики
         score -= 0.35 * transfers
         score -= 0.12 * layover
         score -= 0.18 * dist
         score += 0.04 * days
+
+        # Линейный учет базовых предпочтений (вылет, прямой рейс, относительная надбавка)
+        score += 0.85 * matches_time
+        score += 0.90 * matches_direct
+        if matches_time or matches_direct:
+            score -= 1.5 * rel_surcharge
 
         if arch == "pet":
             score += 3.5 if pet == 1 else -3.5
@@ -838,12 +848,23 @@ class LTRService:
                 "top_score": 0.0,
             }
 
+        nights_val = nights if nights is not None else (profile or {}).get("nights", 7)
+        rooms_val = (profile or {}).get("rooms_count", 1)
+        est_prices = [
+            finite_number(h.get("price_per_night_rub", 5000)) * max(1, nights_val) * max(1, rooms_val) + 25000.0
+            for h in hotels
+        ]
+        ref_p = min(est_prices) if est_prices else None
+        active_schema = cls.get_feature_schema()
+
         features_batch = [
             cls.extract_candidate_features(
                 hotel=h,
                 destination_id=destination_id,
                 profile=profile,
                 nights=nights,
+                schema=active_schema,
+                reference_price=ref_p,
             )
             for h in hotels
         ]
@@ -899,6 +920,13 @@ class LTRService:
                 "top_score": 0.0,
             }
 
+        active_schema = cls.get_feature_schema()
+        prices = [
+            max(0.0, finite_number(((opt[2] or {}).get("mandatory") or {}).get("total_mandatory_rub")))
+            for opt in evaluated_options
+        ]
+        ref_p = min(prices) if prices else None
+
         features_batch = [
             cls.extract_candidate_features(
                 hotel=opt[0],
@@ -907,6 +935,8 @@ class LTRService:
                 nights=nights,
                 logistics=opt[1],
                 breakdown=opt[2],
+                schema=active_schema,
+                reference_price=ref_p,
             )
             for opt in evaluated_options
         ]

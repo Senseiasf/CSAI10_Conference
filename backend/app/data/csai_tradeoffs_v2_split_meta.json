@@ -1,30 +1,39 @@
 {
   "split_seed": 42,
   "source_labeled_file": "csai_tradeoffs_labeled_v2.json",
-  "total_pairs": 213,
-  "definitive_pairs": 210,
-  "tie_pairs": 3,
-  "train_pairs": 145,
-  "val_pairs": 41,
-  "test_pairs": 24,
+  "total_pairs": 402,
+  "definitive_pairs": 402,
+  "tie_pairs": 0,
+  "train_pairs": 192,
+  "val_pairs": 105,
+  "test_pairs": 105,
   "train_families": [
     "budget_direct_vs_price_georgia",
     "budget_stars_vs_price_spb",
-    "luxury_comfort_vs_price_turkey",
+    "family_stars_vs_price_uae",
+    "family_time_vs_price_sochi",
     "luxury_direct_vs_price_uae",
-    "luxury_stars_vs_price_maldives",
-    "solo_stars_vs_price_thailand",
-    "solo_time_vs_price_uae"
+    "luxury_time_vs_price_dubai",
+    "pet_stars_vs_price_altai",
+    "pet_stars_vs_price_sochi",
+    "solo_direct_vs_price_thailand",
+    "solo_stars_vs_price_thailand"
   ],
   "val_families": [
+    "budget_time_vs_price_spb",
     "family_breakfast_vs_price_egypt",
-    "pet_time_vs_price_georgia"
+    "luxury_stars_vs_price_maldives",
+    "pet_direct_vs_price_georgia",
+    "solo_time_vs_price_uae"
   ],
   "test_families": [
-    "family_time_vs_price_sochi",
-    "pet_stars_vs_price_altai"
+    "budget_breakfast_vs_price_sochi",
+    "family_direct_vs_price_georgia",
+    "luxury_comfort_vs_price_turkey",
+    "pet_time_vs_price_georgia",
+    "solo_breakfast_vs_price_georgia"
   ],
-  "train_sha256": "e936604cf2cf675770c349feb50dbc9ada710e2665d22b29c1555cd8a0cdc70f",
-  "val_sha256": "53af864609f2373fb1e923c1e29ee55e8f69874fc6ca8c0031307a4b050b82e4",
-  "test_sha256": "bdcc09498382197f38cdcf8e3d285685a149c91dfb5072490b031aa3c992f56a"
+  "train_sha256": "67ff458170c7b010ff6e54d742ed499648b96e6f5420a4efc046649aa6a1563f",
+  "val_sha256": "97ab6fa85aeda73ffe474eeeffe5ff802d7ef4bbb208afedf26953a1e87e5036",
+  "test_sha256": "192ca1ae55a84f0bb6ff02671876bf845e9e82ee355c0d6b6408d9f2027a9818"
 }

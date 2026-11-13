@@ -196,11 +196,13 @@ def candidate_pool(routes, request, strict):
         rejected.update(logistics | constraints)
         if price is None or (strict and (logistics or constraints)):
             continue
-        valid_assessed.append((route, back, price))
+        valid_assessed.append((route, back, price, not (logistics or constraints)))
     
-    min_price = min((p for _, _, p in valid_assessed), default=None)
-    for route, back, price in valid_assessed:
-        candidates.append({"route": route, "back": back, "features": features(route, request, price, min_price)})
+    admissible_prices = [price for _, _, price, is_admissible in valid_assessed if is_admissible]
+    pool_min_price = min(admissible_prices) if admissible_prices else min((price for _, _, price, _ in valid_assessed), default=None)
+
+    for route, back, price, _ in valid_assessed:
+        candidates.append({"route": route, "back": back, "features": features(route, request, price, pool_min_price)})
     return candidates, rejected
 
 
@@ -226,7 +228,9 @@ def rank(candidates, mode, model, preference=None):
         zip(candidates, scores(candidates, mode, model)),
         key=lambda item: (-item[1], item[0]["features"]["price"], item[0]["route"].key),
     )]
-    return prioritize_preference(ranked, preference)
+    if preference:
+        return prioritize_preference(ranked, preference)
+    return ranked
 
 
 def offer_is_success(candidate, reference, candidate_pool=None):
@@ -241,18 +245,24 @@ def offer_is_success(candidate, reference, candidate_pool=None):
     if pref and candidate_pool:
         attr = pref.get("attribute")
         cap = pref.get("max_extra_rub")
-        admissible_dest = [c for c in candidate_pool if c["route"].destination in reference["expected_destinations"]]
-        if admissible_dest:
+        dest = route.destination
+        admissible_dest = []
+        for c in candidate_pool:
+            if c["route"].destination == dest:
+                log, con, _ = assess(c["route"], reference, c["back"])
+                if not log and not con:
+                    admissible_dest.append(c)
+        if cap is not None and admissible_dest:
             cheapest = min(admissible_dest, key=lambda c: (c["features"]["price"], c["route"].key))
             min_p = cheapest["features"]["price"]
             has_matching = any(
-                matches_preference(c, attr, cheapest) and (cap is None or c["features"]["price"] - min_p <= cap)
+                matches_preference(c, attr, cheapest) and (c["features"]["price"] - min_p <= cap)
                 for c in admissible_dest
             )
             if has_matching:
                 if not matches_preference(candidate, attr, cheapest):
                     return False
-                if cap is not None and candidate["features"]["price"] - min_p > cap:
+                if candidate["features"]["price"] - min_p > cap:
                     return False
     return True
 
@@ -445,8 +455,9 @@ async def run(args):
             candidates, rejected = candidate_pool(paths, request, strict) if request else ([], Counter())
             detected.update(rejected)
             t0 = time.perf_counter()
-            preference = request.get("soft_preference") if strict and mode != "price" and request else None
+            preference = request.get("soft_preference") if strict and request else None
             ranked = rank(candidates, mode, model, preference)
+            pure_ranked = rank(candidates, mode, model, preference=None)
             top = select_offers(ranked, diversify=strict and args.top3 == "diverse")
             elapsed = (time.perf_counter() - t0) * 1000
             score_top = select_offers(ranked)
@@ -470,9 +481,9 @@ async def run(args):
                 "hit2": bool(set(ids) & set(q["expected_destinations"])), "returned": n,
                 "lfr": sum(not p["logistics_errors"] for p in emitted_packages) / n if n else 0,
                 "csr": sum(not p["constraint_errors"] for p in emitted_packages) / n if n else 0,
-                "success": any(p["destination_match"] and not p["logistics_errors"] and not p["constraint_errors"]
-                               for p in emitted_packages),
+                "success": any(offer_is_success(c, eval_ref, candidates) for c in top),
                 "success_at_1": bool(top and offer_is_success(top[0], eval_ref, candidates)),
+                "pure_success_at_1": bool(pure_ranked and offer_is_success(pure_ranked[0], eval_ref, candidates)),
                 "success_score_at_3": any(offer_is_success(c, eval_ref, candidates) for c in score_top),
                 "success_diverse_at_3": any(offer_is_success(c, eval_ref, candidates) for c in diverse_top),
                 "score_top_destinations": len({c["route"].destination for c in score_top}),
@@ -513,7 +524,7 @@ async def run(args):
                 "model_sha256": file_hash(model_path)}
     pd.DataFrame(summaries).to_csv(out / "summary_table.csv", index=False)
     pd.DataFrame(query_runs).groupby("config")[[
-        "success_at_1", "success_score_at_3", "success_diverse_at_3",
+        "pure_success_at_1", "success_at_1", "success_score_at_3", "success_diverse_at_3",
         "score_top_destinations", "diverse_top_destinations",
     ]].mean().to_csv(out / "top3_comparison.csv")
     pd.DataFrame(pair_rows).to_csv(out / "pairwise_confusion_matrix.csv", index=False)
@@ -562,7 +573,7 @@ def main():
     parser.add_argument("--retrieval", choices=("numpy", "pgvector"), default="numpy")
     parser.add_argument("--judge", choices=("pareto", "live"), default="pareto")
     parser.add_argument("--output-dir", type=Path, default=OUT_DIR)
-    parser.add_argument("--queries", type=Path, default=DATA / "csai_150_benchmark_queries.json")
+    parser.add_argument("--queries", type=Path, default=DATA / "csai_200_benchmark_queries.json")
     parser.add_argument("--top3", choices=("score", "diverse"), default="diverse")
     parser.add_argument("--model", type=Path, default=DATA / "catboost_travel_ranker_v2.cbm" if (DATA / "catboost_travel_ranker_v2.cbm").exists() else DATA / "catboost_travel_ranker.cbm")
     logging.basicConfig(level=logging.WARNING)

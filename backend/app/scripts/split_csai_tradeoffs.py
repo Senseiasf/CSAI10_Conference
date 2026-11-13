@@ -81,18 +81,32 @@ def split_labeled_dataset(
     for p in definitive_pairs:
         families[p["scenario_family_id"]].append(p)
 
-    all_family_ids = sorted(families.keys())
+    # Группируем семейства по архетипам для стратифицированного сплита без ликаджа
+    arch_families = defaultdict(list)
+    for fam_id in sorted(families.keys()):
+        arch = families[fam_id][0]["archetype"]
+        arch_families[arch].append(fam_id)
+
     rng = random.Random(seed)
-    rng.shuffle(all_family_ids)
-
-    n_families = len(all_family_ids)
-    n_test = max(2, int(round(n_families * test_ratio)))
-    n_val = max(2, int(round(n_families * val_ratio)))
-    n_train = n_families - n_test - n_val
-
-    test_fam = set(all_family_ids[:n_test])
-    val_fam = set(all_family_ids[n_test : n_test + n_val])
-    train_fam = set(all_family_ids[n_test + n_val :])
+    train_fam, val_fam, test_fam = set(), set(), set()
+    for arch, fam_list in sorted(arch_families.items()):
+        shuffled = list(fam_list)
+        rng.shuffle(shuffled)
+        if len(shuffled) >= 4:
+            train_fam.update(shuffled[:2])
+            val_fam.add(shuffled[2])
+            test_fam.add(shuffled[3])
+            if len(shuffled) > 4:
+                train_fam.update(shuffled[4:])
+        elif len(shuffled) == 3:
+            train_fam.add(shuffled[0])
+            val_fam.add(shuffled[1])
+            test_fam.add(shuffled[2])
+        elif len(shuffled) == 2:
+            train_fam.add(shuffled[0])
+            val_fam.add(shuffled[1])
+        else:
+            train_fam.add(shuffled[0])
 
     logger.info("Семейства в Test: %s", sorted(test_fam))
     logger.info("Семейства в Validation: %s", sorted(val_fam))

@@ -60,3 +60,46 @@ class PreferenceTest(unittest.TestCase):
         self.assertEqual(select_offers([a, b, c, d], diversify=True), [a, d, b])
         self.assertEqual(select_offers([a, b, c], diversify=True), [a, b, c])
         self.assertEqual(select_offers([], diversify=True), [])
+
+    def test_parse_preference_morphology_all_forms(self):
+        cases = [
+            ("Предпочтителен отель с включенным завтраком.", {"attribute": "breakfast", "max_extra_rub": None}),
+            ("Отели более высокой категории предпочтительнее.", {"attribute": "stars", "max_extra_rub": None}),
+            ("Предпочтительна первая линия.", None), # not in attributes
+            ("Желателен утренний вылет.", {"attribute": "morning", "max_extra_rub": None}),
+            ("Хотелось бы прямой авиаперелет.", {"attribute": "direct", "max_extra_rub": None}),
+        ]
+        for text, expected in cases:
+            with self.subTest(text=text):
+                res = parse_preference(text)
+                if expected is None:
+                    self.assertIsNone(res)
+                else:
+                    self.assertIsNotNone(res)
+                    self.assertEqual(res, expected)
+
+    def test_merge_preferences_no_phantom_cap(self):
+        text = "Предпочтителен отель с включенным завтраком."
+        request = {"archetype": "solo", "soft_preference": None}
+        merged = request_from_prediction({"action": "plan", "nights": 5, "budget_rub": 150000, "adults_count": 1}, text)
+        self.assertIsNotNone(merged)
+        self.assertEqual(merged["soft_preference"], {"attribute": "breakfast", "max_extra_rub": None})
+
+    def test_prioritize_preference_luxury_fallback_preserves_top_rank(self):
+        # Luxury 5* hotel without breakfast is ranked #1 (score 0.95, price 500k)
+        # 1* hostel without breakfast is cheapest (price 30k)
+        # 5* hotel with breakfast costs 560k (surcharge 530k vs cheapest, cap is 20k)
+        luxury_top = offer("luxury_top", 500000, destination="uae")
+        luxury_top["features"] = {"price": 500000, "hotel_stars": 5, "breakfast": 0, "archetype": "luxury"}
+        
+        hostel = offer("hostel", 30000, destination="uae")
+        hostel["features"] = {"price": 30000, "hotel_stars": 1, "breakfast": 0, "archetype": "luxury"}
+        
+        luxury_bf = offer("luxury_bf", 560000, destination="uae")
+        luxury_bf["features"] = {"price": 560000, "hotel_stars": 5, "breakfast": 1, "archetype": "luxury"}
+        
+        ranked = [luxury_top, luxury_bf, hostel]
+        res = prioritize_preference(ranked, {"attribute": "breakfast", "max_extra_rub": 20000})
+        # Since luxury_bf is over cap, the fallback MUST be luxury_top, NOT the 1* hostel!
+        self.assertIs(res[0], luxury_top)
+        self.assertIsNot(res[0], hostel)

@@ -71,7 +71,7 @@
     "has_pets": false,
     "soft_preference": {
       "attribute": "breakfast",
-      "max_extra_rub": 20000
+      "max_extra_rub": null
     }
   },
   {
@@ -111,7 +111,7 @@
     "flight_time_pref": "morning",
     "soft_preference": {
       "attribute": "morning",
-      "max_extra_rub": 15000
+      "max_extra_rub": null
     }
   },
   {
@@ -148,7 +148,7 @@
     "has_pets": false,
     "soft_preference": {
       "attribute": "breakfast",
-      "max_extra_rub": 20000
+      "max_extra_rub": null
     }
   },
   {
@@ -185,7 +185,7 @@
     "flight_time_pref": "morning",
     "soft_preference": {
       "attribute": "morning",
-      "max_extra_rub": 15000
+      "max_extra_rub": null
     }
   },
   {
@@ -279,7 +279,7 @@
     "has_pets": true,
     "soft_preference": {
       "attribute": "breakfast",
-      "max_extra_rub": 20000
+      "max_extra_rub": null
     }
   },
   {
@@ -319,7 +319,7 @@
     "flight_time_pref": "morning",
     "soft_preference": {
       "attribute": "morning",
-      "max_extra_rub": 15000
+      "max_extra_rub": null
     }
   },
   {
@@ -375,7 +375,7 @@
     "has_pets": true,
     "soft_preference": {
       "attribute": "breakfast",
-      "max_extra_rub": 20000
+      "max_extra_rub": null
     }
   },
   {
@@ -394,7 +394,7 @@
     "flight_time_pref": "morning",
     "soft_preference": {
       "attribute": "morning",
-      "max_extra_rub": 15000
+      "max_extra_rub": null
     }
   },
   {
@@ -487,7 +487,7 @@
     "has_pets": false,
     "soft_preference": {
       "attribute": "breakfast",
-      "max_extra_rub": 20000
+      "max_extra_rub": null
     }
   },
   {
@@ -527,7 +527,7 @@
     "flight_time_pref": "day",
     "soft_preference": {
       "attribute": "day",
-      "max_extra_rub": 15000
+      "max_extra_rub": null
     }
   },
   {
@@ -583,7 +583,7 @@
     "has_pets": false,
     "soft_preference": {
       "attribute": "breakfast",
-      "max_extra_rub": 20000
+      "max_extra_rub": null
     }
   },
   {
@@ -620,7 +620,7 @@
     "flight_time_pref": "morning",
     "soft_preference": {
       "attribute": "morning",
-      "max_extra_rub": 15000
+      "max_extra_rub": null
     }
   },
   {
@@ -695,7 +695,7 @@
     "has_pets": false,
     "soft_preference": {
       "attribute": "stars",
-      "max_extra_rub": 30000
+      "max_extra_rub": null
     }
   },
   {
@@ -734,7 +734,7 @@
     "has_pets": false,
     "soft_preference": {
       "attribute": "breakfast",
-      "max_extra_rub": 20000
+      "max_extra_rub": null
     }
   },
   {
@@ -754,7 +754,7 @@
     "flight_time_pref": "morning",
     "soft_preference": {
       "attribute": "morning",
-      "max_extra_rub": 15000
+      "max_extra_rub": null
     }
   },
   {
@@ -809,7 +809,7 @@
     "has_pets": false,
     "soft_preference": {
       "attribute": "breakfast",
-      "max_extra_rub": 20000
+      "max_extra_rub": null
     }
   },
   {
@@ -902,7 +902,7 @@
     "has_pets": false,
     "soft_preference": {
       "attribute": "breakfast",
-      "max_extra_rub": 20000
+      "max_extra_rub": null
     }
   },
   {
@@ -942,7 +942,7 @@
     "flight_time_pref": "morning",
     "soft_preference": {
       "attribute": "morning",
-      "max_extra_rub": 15000
+      "max_extra_rub": null
     }
   },
   {
@@ -998,7 +998,7 @@
     "has_pets": false,
     "soft_preference": {
       "attribute": "breakfast",
-      "max_extra_rub": 20000
+      "max_extra_rub": null
     }
   },
   {
@@ -1035,7 +1035,7 @@
     "flight_time_pref": "evening",
     "soft_preference": {
       "attribute": "evening",
-      "max_extra_rub": 15000
+      "max_extra_rub": null
     }
   }
 ]

@@ -5,7 +5,7 @@
 из ровно 200 запросов (по 40 на каждый из 5 архетипов: budget, pet, family, luxury, solo)
 для статьи CSAI 2026.
 
-Сохраняет результат в backend/app/data/csai_150_benchmark_queries.json.
+Сохраняет результат в backend/app/data/csai_200_benchmark_queries.json.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ from filter_diversity import (
 from generate_raw_queries import generate_raw_queries
 
 DESTINATIONS_FILE = BACKEND_DIR / "app" / "data" / "destinations.json"
-OUTPUT_FILE = BACKEND_DIR / "app" / "data" / "csai_150_benchmark_queries.json"
+OUTPUT_FILE = BACKEND_DIR / "app" / "data" / "csai_200_benchmark_queries.json"
 
 
 def main() -> None:

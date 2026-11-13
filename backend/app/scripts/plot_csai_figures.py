@@ -50,7 +50,7 @@ def plot_fig1_general_ablation(data: dict, output: Path) -> None:
     hit2 = [float(r["Destination_Hit_at_2_pct"]) for r in summary]
     lfr = [float(r["Logistics_Feasibility_pct"]) for r in summary]
     
-    top3_csv = output / "csai_150_benchmark_v2" / "top3_comparison.csv"
+    top3_csv = output / "csai_200_benchmark_v2" / "top3_comparison.csv"
     if not top3_csv.exists():
         top3_csv = output / "top3_comparison.csv"
     if top3_csv.exists():
@@ -120,19 +120,19 @@ def plot_fig1b_preference_holdout(output: Path) -> None:
         hit2 = merged["Destination_Hit_at_2_pct"].tolist()
         lfr = merged["Logistics_Feasibility_pct"].tolist()
         succ1 = (merged["success_at_1"] * 100).tolist()
-        succ3 = (merged["success_score_at_3"] * 100).tolist()
+        succ3 = (merged["success_score_at_3"] * 100).tolist() if "success_score_at_3" in merged.columns else (merged["Success_at_3_pct"]).tolist()
     else:
         configs = ["C1: Lexical\n/ Price", "C2: Hybrid\n/ Price", "C3: Graph\n/ Heuristic", "C4: Graph\n/ CatBoost"]
         hit2 = [66.7, 100.0, 100.0, 100.0]
         lfr = [35.6, 52.2, 100.0, 100.0]
         succ1 = [16.7, 23.3, 80.0, 93.3]
-        succ3 = [30.0, 36.7, 80.0, 96.7]
+        succ3 = [30.0, 36.7, 80.0, 88.3]
 
     metrics = [
         ("Destination Hit@2 (%)", hit2, PALETTE[0]),
         ("Logistics Feasibility (%)", lfr, PALETTE[1]),
         ("Success@1 (Top-1 Offer) (%)", succ1, PALETTE[2]),
-        ("Success@3 (Top-3 Offers) (%)", succ3, PALETTE[3]),
+        ("Success@3 (Top-3 Score) (%)", succ3, PALETTE[3]),
     ]
 
     x = np.arange(len(configs))
@@ -146,7 +146,8 @@ def plot_fig1b_preference_holdout(output: Path) -> None:
             h = b.get_height()
             if not np.isfinite(h):
                 continue
-            is_c4_win = (idx >= 2 and b.get_x() > 2.5)
+            prev_max = max((v for i, v in enumerate(vals) if i < len(configs) - 1), default=0.0)
+            is_c4_win = (idx >= 2 and b.get_x() >= len(configs) - 1 - 0.35 and h > prev_max)
             ax.annotate(
                 f"{h:.1f}",
                 xy=(b.get_x() + b.get_width() / 2, h),
@@ -215,7 +216,7 @@ def plot_fig2_tradeoffs_single(output: Path) -> None:
 
     b1 = ax.bar(x - width, c1_vals, width, label="C1: Price Sort Baseline", color="#94A3B8", edgecolor="white", zorder=3)
     b2 = ax.bar(x, c3_vals, width, label="C3: Analytical Heuristic (_surrogate_score)", color="#0EA5E9", edgecolor="white", zorder=3)
-    b3 = ax.bar(x + width, c4_vals, width, label="C4: CatBoostRanker V2 (Soft Preferences)", color="#10B981", edgecolor="white", zorder=3)
+    b3 = ax.bar(x + width, c4_vals, width, label="CatBoost with Explicit Surcharge Limit", color="#10B981", edgecolor="white", zorder=3)
 
     for bars in (b1, b2, b3):
         for b in bars:
@@ -318,7 +319,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, default=OUT_DIR)
     output = parser.parse_args().output_dir
-    data = json.loads((output / "benchmark_results.json").read_text(encoding="utf-8"))
+    res_path = output / "csai_200_benchmark_v2" / "benchmark_results.json"
+    if not res_path.exists():
+        res_path = output / "benchmark_results.json"
+    data = json.loads(res_path.read_text(encoding="utf-8"))
 
     plot_fig1_general_ablation(data, output)
     plot_fig1b_preference_holdout(output)

@@ -10,14 +10,14 @@ from app.scripts.run_csai_benchmark import (
 )
 
 
-def make_route(airport="MLE", arrival="15:11", flight_type="direct", layover=None):
+def make_route(airport="MLE", arrival="15:11", flight_type="direct", layover=None, destination="maldives"):
     flight = {"from": "SVO", "to": airport, "flight_no": "F1", "flight_type": flight_type,
               "departure_time": "07:00", "arrival_time": arrival, "duration_minutes": 120,
               "price_rub_roundtrip": 10000, "layover_duration_minutes": layover}
     back = {**flight, "from": airport, "to": "SVO", "flight_no": "F2", "flight_type": "direct"}
     hotel = {"id": "H", "stars": 4, "price_per_night_rub": 1000, "pet_friendly": True}
     transfer = {"type": "seaplane", "name": "Boat plane", "price_rub": 1000, "duration_minutes": 40}
-    return Route("maldives", hotel, flight, transfer, (back,))
+    return Route(destination, hotel, flight, transfer, (back,))
 
 
 REQUEST = {"days": 5, "adults_count": 2, "kids_count": 0, "budget": 30000,
@@ -99,3 +99,57 @@ class BenchmarkTest(unittest.IsolatedAsyncioTestCase):
         table_rows = [line for line in rendered.splitlines() if "&" in line]
         assert all(line.count("&") == len(row) - 1 for line in table_rows)
         assert "Success@3" in rendered
+
+    def test_rank_is_symmetric_across_all_modes(self):
+        from app.scripts.run_csai_benchmark import rank
+        # Create candidates where A is cheap without pref, B is slightly more expensive with pref
+        r_a = make_route(flight_type="connecting")
+        r_b = make_route(flight_type="direct")
+        cand_a = {"route": r_a, "back": None, "features": {"price": 50000, "hotel_stars": 3, "breakfast": 0, "pet_friendly": 0, "archetype": "solo", "days": 5, "transfers": 2, "layover_hours": 2.0, "dist_center_km": 1.0, "price_delta_vs_cheapest": 0.0, "relative_surcharge_pct": 0.0}}
+        cand_b = {"route": r_b, "back": None, "features": {"price": 55000, "hotel_stars": 3, "breakfast": 0, "pet_friendly": 0, "archetype": "solo", "days": 5, "transfers": 1, "layover_hours": 0.0, "dist_center_km": 1.0, "price_delta_vs_cheapest": 5000.0, "relative_surcharge_pct": 0.10}}
+        candidates = [cand_a, cand_b]
+        pref = {"attribute": "direct", "max_extra_rub": 10000}
+
+        for mode in ("price", "heuristic"):
+            pure = rank(candidates, mode, model=None, preference=None)
+            self.assertEqual(len(pure), 2)
+            with_pref = rank(candidates, mode, model=None, preference=pref)
+            self.assertIs(with_pref[0], cand_b)
+
+    def test_offer_is_success_multi_destination_localized_baseline(self):
+        from app.scripts.run_csai_benchmark import offer_is_success
+        r_spb = make_route(destination="spb", airport="LED", flight_type="direct")
+        r_geo_base = make_route(destination="georgia", airport="TBS", flight_type="connecting", layover=120)
+        r_geo_pref = make_route(destination="georgia", airport="TBS", flight_type="direct")
+
+        cand_spb = {"route": r_spb, "back": r_spb.returns[0], "features": {"price": 20000, "hotel_stars": 2, "breakfast": 0, "archetype": "solo"}}
+        cand_geo_base = {"route": r_geo_base, "back": r_geo_base.returns[0], "features": {"price": 100000, "hotel_stars": 3, "breakfast": 0, "archetype": "solo"}}
+        cand_geo_pref = {"route": r_geo_pref, "back": r_geo_pref.returns[0], "features": {"price": 110000, "hotel_stars": 3, "breakfast": 0, "archetype": "solo"}}
+
+        pool = [cand_spb, cand_geo_base, cand_geo_pref]
+        ref = {
+            "expected_destinations": ["spb", "georgia"],
+            "days": 5, "adults_count": 1, "kids_count": 0, "budget": 200000, "archetype": "solo",
+            "soft_preference": {"attribute": "direct", "max_extra_rub": 20000},
+        }
+        self.assertTrue(offer_is_success(cand_geo_pref, ref, candidate_pool=pool))
+
+    def test_offer_is_success_strict_false_invalid_candidates(self):
+        from app.scripts.run_csai_benchmark import offer_is_success
+        r_broken = Route("sochi", {"id": "h_broken", "stars": 1, "price_per_night_rub": 500},
+                         {"from": "SVO", "to": "AER", "flight_no": "F_BROKEN", "flight_type": "direct", "departure_time": "08:00"},
+                         {"type": "bus", "name": "Bus", "price_rub": 500}, ())
+        r_valid_base = make_route(airport="AER", flight_type="connecting", layover=120, destination="sochi")
+        r_valid_pref = make_route(airport="AER", flight_type="direct", destination="sochi")
+
+        cand_broken = {"route": r_broken, "back": None, "features": {"price": 10000, "hotel_stars": 1, "breakfast": 0, "archetype": "solo"}}
+        cand_valid_base = {"route": r_valid_base, "back": r_valid_base.returns[0], "features": {"price": 50000, "hotel_stars": 4, "breakfast": 0, "archetype": "solo"}}
+        cand_valid_pref = {"route": r_valid_pref, "back": r_valid_pref.returns[0], "features": {"price": 60000, "hotel_stars": 4, "breakfast": 0, "archetype": "solo"}}
+
+        pool = [cand_broken, cand_valid_base, cand_valid_pref]
+        ref = {
+            "expected_destinations": ["sochi"],
+            "days": 5, "adults_count": 2, "kids_count": 0, "budget": 100000, "archetype": "solo",
+            "soft_preference": {"attribute": "direct", "max_extra_rub": 15000},
+        }
+        self.assertTrue(offer_is_success(cand_valid_pref, ref, candidate_pool=pool))
