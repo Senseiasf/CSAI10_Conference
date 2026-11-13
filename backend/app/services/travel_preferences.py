@@ -88,7 +88,7 @@ def merge_preferences(request, text, model_preference=None, *, from_model=False)
         parsed and parsed["max_extra_rub"] is not None
     ):
         return {**request, "preference_needs_clarification": True}
-    preference = parsed or supplied
+    preference = parsed or supplied or normalize_preference(request.get("soft_preference"))
     if preference is None:
         return request
     result = {**request, "soft_preference": preference}

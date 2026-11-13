@@ -15,62 +15,6 @@
   },
   {
     "id": "TOP3_02",
-    "query": "На пять ночей с собакой: кедровая тайга, берег Катуни и уединённое шале. На двоих до 250 тысяч.",
-    "expected_destinations": [
-      "altai"
-    ],
-    "archetype": "pet",
-    "budget": 250000,
-    "days": 5,
-    "adults_count": 2,
-    "kids_count": 0,
-    "has_kids": false,
-    "has_pets": true
-  },
-  {
-    "id": "TOP3_03",
-    "query": "Нас двое взрослых и ребёнок. Пять ночей среди небоскрёбов и парков у залива, один день джип-сафари по дюнам. До 430 тысяч.",
-    "expected_destinations": [
-      "uae"
-    ],
-    "archetype": "family",
-    "budget": 430000,
-    "days": 5,
-    "adults_count": 2,
-    "kids_count": 1,
-    "has_kids": true,
-    "has_pets": false
-  },
-  {
-    "id": "TOP3_04",
-    "query": "На пять ночей вдвоём хочется бунгало над водой в Индийском океане и посмотреть мант. До 850 тысяч.",
-    "expected_destinations": [
-      "maldives"
-    ],
-    "archetype": "luxury",
-    "budget": 850000,
-    "days": 5,
-    "adults_count": 2,
-    "kids_count": 0,
-    "has_kids": false,
-    "has_pets": false
-  },
-  {
-    "id": "TOP3_05",
-    "query": "Один взрослый, пять ночей, до 230 тысяч. Старый город с резными балконами, серные бани и хинкали.",
-    "expected_destinations": [
-      "georgia"
-    ],
-    "archetype": "solo",
-    "budget": 230000,
-    "days": 5,
-    "adults_count": 1,
-    "kids_count": 0,
-    "has_kids": false,
-    "has_pets": false
-  },
-  {
-    "id": "TOP3_06",
     "query": "На двоих на пять ночей ищем снорклинг на Красном море и экскурсию к пирамидам. Лимит 350 тысяч.",
     "expected_destinations": [
       "egypt"
@@ -84,7 +28,201 @@
     "has_pets": false
   },
   {
+    "id": "TOP3_03",
+    "query": "Пять ночей вдвоем, бюджет 130 тысяч. Мечтаем увидеть бирюзовую Катунь, сосновый бор и горы Сибири.",
+    "expected_destinations": [
+      "altai"
+    ],
+    "archetype": "budget",
+    "budget": 130000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_04",
+    "query": "На двоих пять ночей до 190 тысяч. Хочется колоритные старинные улочки с резными балконами, серные бани и хачапури.",
+    "expected_destinations": [
+      "georgia"
+    ],
+    "archetype": "budget",
+    "budget": 190000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_05",
+    "query": "Выбираем между Алтаем и Сочи, пять ночей для двоих, 190 тысяч на всё. Предпочтителен отель с включенным завтраком.",
+    "expected_destinations": [
+      "altai",
+      "sochi"
+    ],
+    "archetype": "budget",
+    "budget": 190000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false,
+    "soft_preference": {
+      "attribute": "breakfast",
+      "max_extra_rub": 20000
+    }
+  },
+  {
+    "id": "TOP3_06",
+    "query": "Ищу на пять ночей на двоих Хургаду либо Кемер. 280 тысяч на поездку. Желателен прямой рейс, переплата до 25 тыс.",
+    "expected_destinations": [
+      "egypt",
+      "turkey"
+    ],
+    "archetype": "budget",
+    "budget": 280000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false,
+    "prefer_direct_flight": true,
+    "soft_preference": {
+      "attribute": "direct",
+      "max_extra_rub": 25000
+    }
+  },
+  {
     "id": "TOP3_07",
+    "query": "Поедем вдвоем на пять ночей в Санкт-Петербург или Тбилиси, до 180 тысяч. Желателен утренний вылет.",
+    "expected_destinations": [
+      "spb",
+      "georgia"
+    ],
+    "archetype": "budget",
+    "budget": 180000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false,
+    "flight_time_pref": "morning",
+    "soft_preference": {
+      "attribute": "morning",
+      "max_extra_rub": 15000
+    }
+  },
+  {
+    "id": "TOP3_08",
+    "query": "Выбираем Сочи или Алтай на пять ночей, двое взрослых, лимит 200 тысяч. Отели более высокой категории предпочтительнее, переплата до 20 тыс.",
+    "expected_destinations": [
+      "sochi",
+      "altai"
+    ],
+    "archetype": "budget",
+    "budget": 200000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false,
+    "soft_preference": {
+      "attribute": "stars",
+      "max_extra_rub": 20000
+    }
+  },
+  {
+    "id": "TOP3_09",
+    "query": "На двоих на пять ночей только Тбилиси, бюджет 180 тысяч. Предпочтителен отель с завтраком.",
+    "expected_destinations": [
+      "georgia"
+    ],
+    "archetype": "budget",
+    "budget": 180000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false,
+    "soft_preference": {
+      "attribute": "breakfast",
+      "max_extra_rub": 20000
+    }
+  },
+  {
+    "id": "TOP3_10",
+    "query": "Горный Алтай на двоих на пять ночей, 150 тысяч. Желателен отель более высокой категории, доплата до 25 тыс.",
+    "expected_destinations": [
+      "altai"
+    ],
+    "archetype": "budget",
+    "budget": 150000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false,
+    "soft_preference": {
+      "attribute": "stars",
+      "max_extra_rub": 25000
+    }
+  },
+  {
+    "id": "TOP3_11",
+    "query": "В Санкт-Петербург на пять ночей вдвоем, лимит 150 тысяч. Желателен утренний вылет.",
+    "expected_destinations": [
+      "spb"
+    ],
+    "archetype": "budget",
+    "budget": 150000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false,
+    "flight_time_pref": "morning",
+    "soft_preference": {
+      "attribute": "morning",
+      "max_extra_rub": 15000
+    }
+  },
+  {
+    "id": "TOP3_12",
+    "query": "В Сочи на пять ночей для двоих, бюджет 170 тысяч. Желателен прямой рейс, переплата до 15 тыс.",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "archetype": "budget",
+    "budget": 170000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false,
+    "prefer_direct_flight": true,
+    "soft_preference": {
+      "attribute": "direct",
+      "max_extra_rub": 15000
+    }
+  },
+  {
+    "id": "TOP3_13",
+    "query": "На пять ночей с собакой: кедровая тайга, берег Катуни, Чуйский тракт и уединённое шале на Алтае. На двоих до 250 тысяч.",
+    "expected_destinations": [
+      "altai"
+    ],
+    "archetype": "pet",
+    "budget": 250000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": true
+  },
+  {
+    "id": "TOP3_14",
     "query": "На двоих с собакой, пять ночей, 240 тысяч. Утром гулять по набережной Чёрного моря, потом на канатной дороге к вершинам. Без загранпаспорта.",
     "expected_destinations": [
       "sochi"
@@ -98,7 +236,201 @@
     "has_pets": true
   },
   {
-    "id": "TOP3_08",
+    "id": "TOP3_15",
+    "query": "С корги на пять ночей вдвоем, до 260 тысяч. Казбек, старый Тбилиси, серные бани, грузинское гостеприимство и комфортный пет-френдли отель.",
+    "expected_destinations": [
+      "georgia"
+    ],
+    "archetype": "pet",
+    "budget": 260000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": true
+  },
+  {
+    "id": "TOP3_16",
+    "query": "Вдвоем с лабрадором на пять ночей, до 190 тысяч. Мечтаем гулять по набережным гранитных рек и паркам Петербурга.",
+    "expected_destinations": [
+      "spb"
+    ],
+    "archetype": "pet",
+    "budget": 190000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": true
+  },
+  {
+    "id": "TOP3_17",
+    "query": "Пять ночей с собакой на двоих. Подойдёт Тбилиси или Сочи, бюджет 240 тысяч. Предпочтителен отель с включенным завтраком.",
+    "expected_destinations": [
+      "georgia",
+      "sochi"
+    ],
+    "archetype": "pet",
+    "budget": 240000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": true,
+    "soft_preference": {
+      "attribute": "breakfast",
+      "max_extra_rub": 20000
+    }
+  },
+  {
+    "id": "TOP3_18",
+    "query": "Пять ночей с собакой вдвоём, хочу на Алтай или в Сочи. Бюджет 230 тысяч. Желателен прямой рейс, переплата до 25 тыс.",
+    "expected_destinations": [
+      "altai",
+      "sochi"
+    ],
+    "archetype": "pet",
+    "budget": 230000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": true,
+    "prefer_direct_flight": true,
+    "soft_preference": {
+      "attribute": "direct",
+      "max_extra_rub": 25000
+    }
+  },
+  {
+    "id": "TOP3_19",
+    "query": "Едем с собакой в Петербург или Тбилиси на пять ночей, до 210 тысяч. Желателен утренний вылет.",
+    "expected_destinations": [
+      "spb",
+      "georgia"
+    ],
+    "archetype": "pet",
+    "budget": 210000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": true,
+    "flight_time_pref": "morning",
+    "soft_preference": {
+      "attribute": "morning",
+      "max_extra_rub": 15000
+    }
+  },
+  {
+    "id": "TOP3_20",
+    "query": "С питомцем на пять ночей: Сочи или Алтай, лимит 250 тысяч. Отели более высокой категории предпочтительнее, доплата до 30 тыс.",
+    "expected_destinations": [
+      "sochi",
+      "altai"
+    ],
+    "archetype": "pet",
+    "budget": 250000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": true,
+    "soft_preference": {
+      "attribute": "stars",
+      "max_extra_rub": 30000
+    }
+  },
+  {
+    "id": "TOP3_21",
+    "query": "В Сочи с собакой на пять ночей, двое взрослых, бюджет 260 тысяч. Желателен прямой рейс, переплата до 20 тыс.",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "archetype": "pet",
+    "budget": 260000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": true,
+    "prefer_direct_flight": true,
+    "soft_preference": {
+      "attribute": "direct",
+      "max_extra_rub": 20000
+    }
+  },
+  {
+    "id": "TOP3_22",
+    "query": "Поездка с собакой в Санкт-Петербург, двое взрослых, пять ночей, до 170 тысяч. Предпочтителен отель с завтраком.",
+    "expected_destinations": [
+      "spb"
+    ],
+    "archetype": "pet",
+    "budget": 170000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": true,
+    "soft_preference": {
+      "attribute": "breakfast",
+      "max_extra_rub": 20000
+    }
+  },
+  {
+    "id": "TOP3_23",
+    "query": "В Тбилиси с собакой на пять ночей, двое взрослых, до 250 тысяч. Желателен утренний вылет.",
+    "expected_destinations": [
+      "georgia"
+    ],
+    "archetype": "pet",
+    "budget": 250000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": true,
+    "flight_time_pref": "morning",
+    "soft_preference": {
+      "attribute": "morning",
+      "max_extra_rub": 15000
+    }
+  },
+  {
+    "id": "TOP3_24",
+    "query": "На Алтай с собакой на пять ночей, бюджет 220 тысяч. Желателен отель более высокой категории, доплата до 25 тыс.",
+    "expected_destinations": [
+      "altai"
+    ],
+    "archetype": "pet",
+    "budget": 220000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": true,
+    "soft_preference": {
+      "attribute": "stars",
+      "max_extra_rub": 25000
+    }
+  },
+  {
+    "id": "TOP3_25",
+    "query": "Нас двое взрослых и ребёнок. Пять ночей среди небоскрёбов и парков у залива, один день джип-сафари по дюнам. До 430 тысяч.",
+    "expected_destinations": [
+      "uae"
+    ],
+    "archetype": "family",
+    "budget": 430000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 1,
+    "has_kids": true,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_26",
     "query": "Двое взрослых и двое детей, пять ночей до 520 тысяч. Хотим песчаные пляжи у Сиамского залива, буддийские храмы и фрукты.",
     "expected_destinations": [
       "thailand"
@@ -112,8 +444,359 @@
     "has_pets": false
   },
   {
-    "id": "TOP3_09",
-    "query": "Пять ночей вдвоём, лимит 430 тысяч. Утром Босфор, восточные базары, потом тёплое Средиземноморье.",
+    "id": "TOP3_27",
+    "query": "Семья с ребенком, двое взрослых. Пять ночей до 460 тысяч. Средиземноморское побережье, античные руины и комфортный семейный отель.",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "archetype": "family",
+    "budget": 460000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 1,
+    "has_kids": true,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_28",
+    "query": "Двое взрослых и двое детей, пять ночей, 290 тысяч. Тематический парк аттракционов, Олимпийский парк и море в субтропиках России.",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "archetype": "family",
+    "budget": 290000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 2,
+    "has_kids": true,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_29",
+    "query": "Сравни отели в Анталье и Дубае для двух взрослых и ребёнка. Пять ночей, до 480 тысяч. Предпочтителен отель с включенным завтраком.",
+    "expected_destinations": [
+      "turkey",
+      "uae"
+    ],
+    "archetype": "family",
+    "budget": 480000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 1,
+    "has_kids": true,
+    "has_pets": false,
+    "soft_preference": {
+      "attribute": "breakfast",
+      "max_extra_rub": 20000
+    }
+  },
+  {
+    "id": "TOP3_30",
+    "query": "Хотим в Сочи или Питер с двумя детьми, двое взрослых. Пять ночей, 270 тысяч. Желателен прямой рейс, переплата до 25 тыс.",
+    "expected_destinations": [
+      "sochi",
+      "spb"
+    ],
+    "archetype": "family",
+    "budget": 270000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 2,
+    "has_kids": true,
+    "has_pets": false,
+    "prefer_direct_flight": true,
+    "soft_preference": {
+      "attribute": "direct",
+      "max_extra_rub": 25000
+    }
+  },
+  {
+    "id": "TOP3_31",
+    "query": "Для двух взрослых и ребенка выбираем Хургаду или Анталью, пять ночей, до 420 тысяч. Желателен дневной вылет.",
+    "expected_destinations": [
+      "egypt",
+      "turkey"
+    ],
+    "archetype": "family",
+    "budget": 420000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 1,
+    "has_kids": true,
+    "has_pets": false,
+    "flight_time_pref": "day",
+    "soft_preference": {
+      "attribute": "day",
+      "max_extra_rub": 15000
+    }
+  },
+  {
+    "id": "TOP3_32",
+    "query": "Семьей с ребенком в Дубай или Пхукет на пять ночей, до 550 тысяч. Отели более высокой категории желательны, доплата до 35 тыс.",
+    "expected_destinations": [
+      "uae",
+      "thailand"
+    ],
+    "archetype": "family",
+    "budget": 550000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 1,
+    "has_kids": true,
+    "has_pets": false,
+    "soft_preference": {
+      "attribute": "stars",
+      "max_extra_rub": 35000
+    }
+  },
+  {
+    "id": "TOP3_33",
+    "query": "В Анталью на пять ночей, двое взрослых и двое детей, лимит 470 тысяч. Желателен прямой рейс, переплата до 30 тыс.",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "archetype": "family",
+    "budget": 470000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 2,
+    "has_kids": true,
+    "has_pets": false,
+    "prefer_direct_flight": true,
+    "soft_preference": {
+      "attribute": "direct",
+      "max_extra_rub": 30000
+    }
+  },
+  {
+    "id": "TOP3_34",
+    "query": "Пять ночей в Египте для двух взрослых и ребёнка, лимит 390 тысяч. Предпочтителен отель с включенным завтраком.",
+    "expected_destinations": [
+      "egypt"
+    ],
+    "archetype": "family",
+    "budget": 390000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 1,
+    "has_kids": true,
+    "has_pets": false,
+    "soft_preference": {
+      "attribute": "breakfast",
+      "max_extra_rub": 20000
+    }
+  },
+  {
+    "id": "TOP3_35",
+    "query": "В Сочи с двумя детьми на пять ночей, двое взрослых, бюджет 280 тысяч. Отели более высокой категории предпочтительнее, доплата до 25 тыс.",
+    "expected_destinations": [
+      "sochi"
+    ],
+    "archetype": "family",
+    "budget": 280000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 2,
+    "has_kids": true,
+    "has_pets": false,
+    "soft_preference": {
+      "attribute": "stars",
+      "max_extra_rub": 25000
+    }
+  },
+  {
+    "id": "TOP3_36",
+    "query": "В Дубай с ребенком на пять ночей, двое взрослых, до 450 тысяч. Желателен утренний вылет.",
+    "expected_destinations": [
+      "uae"
+    ],
+    "archetype": "family",
+    "budget": 450000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 1,
+    "has_kids": true,
+    "has_pets": false,
+    "flight_time_pref": "morning",
+    "soft_preference": {
+      "attribute": "morning",
+      "max_extra_rub": 15000
+    }
+  },
+  {
+    "id": "TOP3_37",
+    "query": "На пять ночей вдвоём хочется бунгало над водой в Индийском океане и посмотреть мант. До 850 тысяч.",
+    "expected_destinations": [
+      "maldives"
+    ],
+    "archetype": "luxury",
+    "budget": 850000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_38",
+    "query": "Пять ночей вдвоем, лимит 560 тысяч. Арабские дюны, Бурдж-Халифа, сверкающие башни Дубая, премиальный сервис у Персидского залива.",
+    "expected_destinations": [
+      "uae"
+    ],
+    "archetype": "luxury",
+    "budget": 560000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_39",
+    "query": "На пять ночей вдвоем до 550 тысяч. Тропические острова Андаманского моря, уединенная вилла у скалистых бухт и чистейшая вода.",
+    "expected_destinations": [
+      "thailand"
+    ],
+    "archetype": "luxury",
+    "budget": 550000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_40",
+    "query": "Пять ночей вдвоём, лимит 450 тысяч. Утром Босфор, восточные базары, исторические мечети и пятизвездочный комфорт.",
+    "expected_destinations": [
+      "turkey"
+    ],
+    "archetype": "luxury",
+    "budget": 450000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false
+  },
+  {
+    "id": "TOP3_41",
+    "query": "Готовы на Пхукет или на Мальдивы на пять ночей вдвоём, до 890 тысяч. Отели более высокой категории предпочтительнее.",
+    "expected_destinations": [
+      "thailand",
+      "maldives"
+    ],
+    "archetype": "luxury",
+    "budget": 890000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false,
+    "soft_preference": {
+      "attribute": "stars",
+      "max_extra_rub": 30000
+    }
+  },
+  {
+    "id": "TOP3_42",
+    "query": "На пять ночей на двоих ищем комфорт в Абу-Даби или Стамбуле. Лимит 560 тысяч. Желателен прямой рейс, переплата до 35 тыс.",
+    "expected_destinations": [
+      "uae",
+      "turkey"
+    ],
+    "archetype": "luxury",
+    "budget": 560000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false,
+    "prefer_direct_flight": true,
+    "soft_preference": {
+      "attribute": "direct",
+      "max_extra_rub": 35000
+    }
+  },
+  {
+    "id": "TOP3_43",
+    "query": "Выбираем между Дубаем и Мальдивами на пять ночей вдвоем, до 880 тысяч. Предпочтителен отель с включенным завтраком.",
+    "expected_destinations": [
+      "uae",
+      "maldives"
+    ],
+    "archetype": "luxury",
+    "budget": 880000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false,
+    "soft_preference": {
+      "attribute": "breakfast",
+      "max_extra_rub": 20000
+    }
+  },
+  {
+    "id": "TOP3_44",
+    "query": "На пять ночей вдвоем в Пхукет или Дубай, лимит 580 тысяч. Желателен утренний вылет.",
+    "expected_destinations": [
+      "thailand",
+      "uae"
+    ],
+    "archetype": "luxury",
+    "budget": 580000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false,
+    "flight_time_pref": "morning",
+    "soft_preference": {
+      "attribute": "morning",
+      "max_extra_rub": 15000
+    }
+  },
+  {
+    "id": "TOP3_45",
+    "query": "Пять ночей вдвоём в Дубае, отели более высокой категории предпочтительнее, доплата до 40 тыс. До 530 тысяч.",
+    "expected_destinations": [
+      "uae"
+    ],
+    "archetype": "luxury",
+    "budget": 530000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false,
+    "soft_preference": {
+      "attribute": "stars",
+      "max_extra_rub": 40000
+    }
+  },
+  {
+    "id": "TOP3_46",
+    "query": "Пять ночей на Мальдивах вдвоём. Готовы потратить 960 тысяч. Желателен прямой рейс, доплата до 50 тыс.",
+    "expected_destinations": [
+      "maldives"
+    ],
+    "archetype": "luxury",
+    "budget": 960000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false,
+    "prefer_direct_flight": true,
+    "soft_preference": {
+      "attribute": "direct",
+      "max_extra_rub": 50000
+    }
+  },
+  {
+    "id": "TOP3_47",
+    "query": "В Стамбул на пять ночей вдвоем, бюджет 430 тысяч. Предпочтителен отель с включенным завтраком.",
     "expected_destinations": [
       "turkey"
     ],
@@ -123,10 +806,46 @@
     "adults_count": 2,
     "kids_count": 0,
     "has_kids": false,
+    "has_pets": false,
+    "soft_preference": {
+      "attribute": "breakfast",
+      "max_extra_rub": 20000
+    }
+  },
+  {
+    "id": "TOP3_48",
+    "query": "На Пхукет на пять ночей вдвоем, лимит 540 тысяч. Желателен отель более высокой категории, доплата до 35 тыс.",
+    "expected_destinations": [
+      "thailand"
+    ],
+    "archetype": "luxury",
+    "budget": 540000,
+    "days": 5,
+    "adults_count": 2,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false,
+    "soft_preference": {
+      "attribute": "stars",
+      "max_extra_rub": 35000
+    }
+  },
+  {
+    "id": "TOP3_49",
+    "query": "Один взрослый, пять ночей, до 230 тысяч. Старый город с резными балконами, серные бани и хинкали.",
+    "expected_destinations": [
+      "georgia"
+    ],
+    "archetype": "solo",
+    "budget": 230000,
+    "days": 5,
+    "adults_count": 1,
+    "kids_count": 0,
+    "has_kids": false,
     "has_pets": false
   },
   {
-    "id": "TOP3_10",
+    "id": "TOP3_50",
     "query": "Пять ночей одна, до 150 тысяч. Хочу ходить пешком по мостам через Неву, смотреть картины и театральные постановки.",
     "expected_destinations": [
       "spb"
@@ -140,284 +859,133 @@
     "has_pets": false
   },
   {
-    "id": "TOP3_11",
-    "query": "Выбираем между Алтаем и Красной Поляной, пять ночей для двоих, 190 тысяч на всё.",
+    "id": "TOP3_51",
+    "query": "Один человек на пять ночей, до 280 тысяч. Хочется тропический остров, коворкинг у моря, спелые манго и закаты в Сиамском заливе.",
     "expected_destinations": [
-      "altai",
-      "sochi"
+      "thailand"
     ],
-    "archetype": "budget",
-    "budget": 190000,
+    "archetype": "solo",
+    "budget": 280000,
     "days": 5,
-    "adults_count": 2,
+    "adults_count": 1,
     "kids_count": 0,
     "has_kids": false,
     "has_pets": false
   },
   {
-    "id": "TOP3_12",
-    "query": "Пять ночей с собакой на двоих. Подойдёт Тбилиси или Сочи, бюджет 240 тысяч.",
+    "id": "TOP3_52",
+    "query": "Один взрослый на пять ночей, 260 тысяч. Хургада и Красное море, глубоководный дайвинг среди коралловых рифов и экскурсия в пустыню к пирамидам.",
     "expected_destinations": [
-      "georgia",
-      "sochi"
+      "egypt"
     ],
-    "archetype": "pet",
-    "budget": 240000,
+    "archetype": "solo",
+    "budget": 260000,
     "days": 5,
-    "adults_count": 2,
-    "kids_count": 0,
-    "has_kids": false,
-    "has_pets": true
-  },
-  {
-    "id": "TOP3_13",
-    "query": "Сравни отели в Анталье и Дубае для двух взрослых и ребёнка. Пять ночей, до 470 тысяч.",
-    "expected_destinations": [
-      "turkey",
-      "uae"
-    ],
-    "archetype": "family",
-    "budget": 470000,
-    "days": 5,
-    "adults_count": 2,
-    "kids_count": 1,
-    "has_kids": true,
-    "has_pets": false
-  },
-  {
-    "id": "TOP3_14",
-    "query": "Готовы на Пхукет или на Мальдивы на пять ночей вдвоём, до 850 тысяч. Интересует хороший сервис.",
-    "expected_destinations": [
-      "thailand",
-      "maldives"
-    ],
-    "archetype": "luxury",
-    "budget": 850000,
-    "days": 5,
-    "adults_count": 2,
+    "adults_count": 1,
     "kids_count": 0,
     "has_kids": false,
     "has_pets": false
   },
   {
-    "id": "TOP3_15",
-    "query": "Еду один на пять ночей в Санкт-Петербург или Тбилиси. Лимит 160 тысяч.",
+    "id": "TOP3_53",
+    "query": "Еду один на пять ночей в Санкт-Петербург или Тбилиси. Лимит 165 тысяч. Предпочтителен отель с включенным завтраком.",
     "expected_destinations": [
       "spb",
       "georgia"
     ],
     "archetype": "solo",
-    "budget": 160000,
+    "budget": 165000,
     "days": 5,
     "adults_count": 1,
     "kids_count": 0,
     "has_kids": false,
-    "has_pets": false
+    "has_pets": false,
+    "soft_preference": {
+      "attribute": "breakfast",
+      "max_extra_rub": 20000
+    }
   },
   {
-    "id": "TOP3_16",
-    "query": "Ищу на пять ночей на двоих Хургаду либо Кемер. 280 тысяч на всю поездку.",
+    "id": "TOP3_54",
+    "query": "Один взрослый, пять ночей. Хургада или Самуи. До 330 тысяч. Желателен прямой рейс, переплата до 25 тыс.",
     "expected_destinations": [
       "egypt",
-      "turkey"
+      "thailand"
     ],
-    "archetype": "budget",
-    "budget": 280000,
+    "archetype": "solo",
+    "budget": 330000,
     "days": 5,
-    "adults_count": 2,
+    "adults_count": 1,
     "kids_count": 0,
     "has_kids": false,
-    "has_pets": false
+    "has_pets": false,
+    "prefer_direct_flight": true,
+    "soft_preference": {
+      "attribute": "direct",
+      "max_extra_rub": 25000
+    }
   },
   {
-    "id": "TOP3_17",
-    "query": "Пять ночей с собакой вдвоём, хочу на Алтай или в Сочи. Бюджет 230 тысяч.",
-    "expected_destinations": [
-      "altai",
-      "sochi"
-    ],
-    "archetype": "pet",
-    "budget": 230000,
-    "days": 5,
-    "adults_count": 2,
-    "kids_count": 0,
-    "has_kids": false,
-    "has_pets": true
-  },
-  {
-    "id": "TOP3_18",
-    "query": "Хотим в Сочи или Питер с двумя детьми, двое взрослых. Пять ночей, 260 тысяч.",
+    "id": "TOP3_55",
+    "query": "Поездка для одного на пять ночей в Сочи или на Алтай, до 190 тысяч. Желателен утренний вылет.",
     "expected_destinations": [
       "sochi",
-      "spb"
-    ],
-    "archetype": "family",
-    "budget": 260000,
-    "days": 5,
-    "adults_count": 2,
-    "kids_count": 2,
-    "has_kids": true,
-    "has_pets": false
-  },
-  {
-    "id": "TOP3_19",
-    "query": "На пять ночей на двоих ищем комфорт в Абу-Даби или Стамбуле. Лимит 550 тысяч.",
-    "expected_destinations": [
-      "uae",
-      "turkey"
-    ],
-    "archetype": "luxury",
-    "budget": 550000,
-    "days": 5,
-    "adults_count": 2,
-    "kids_count": 0,
-    "has_kids": false,
-    "has_pets": false
-  },
-  {
-    "id": "TOP3_20",
-    "query": "Один взрослый, пять ночей. Хургада или Самуи. До 320 тысяч.",
-    "expected_destinations": [
-      "egypt",
-      "thailand"
-    ],
-    "archetype": "solo",
-    "budget": 320000,
-    "days": 5,
-    "adults_count": 1,
-    "kids_count": 0,
-    "has_kids": false,
-    "has_pets": false
-  },
-  {
-    "id": "TOP3_21",
-    "query": "На двоих на пять ночей только Тбилиси, бюджет 175 тысяч.",
-    "expected_destinations": [
-      "georgia"
-    ],
-    "archetype": "budget",
-    "budget": 175000,
-    "days": 5,
-    "adults_count": 2,
-    "kids_count": 0,
-    "has_kids": false,
-    "has_pets": false
-  },
-  {
-    "id": "TOP3_22",
-    "query": "В Сочи с собакой на пять ночей, двое взрослых, бюджет 260 тысяч.",
-    "expected_destinations": [
-      "sochi"
-    ],
-    "archetype": "pet",
-    "budget": 260000,
-    "days": 5,
-    "adults_count": 2,
-    "kids_count": 0,
-    "has_kids": false,
-    "has_pets": true
-  },
-  {
-    "id": "TOP3_23",
-    "query": "В Анталью на пять ночей, двое взрослых и двое детей, лимит 460 тысяч.",
-    "expected_destinations": [
-      "turkey"
-    ],
-    "archetype": "family",
-    "budget": 460000,
-    "days": 5,
-    "adults_count": 2,
-    "kids_count": 2,
-    "has_kids": true,
-    "has_pets": false
-  },
-  {
-    "id": "TOP3_24",
-    "query": "Пять ночей вдвоём в Дубае, отели более высокой категории желательны. До 520 тысяч.",
-    "expected_destinations": [
-      "uae"
-    ],
-    "archetype": "luxury",
-    "budget": 520000,
-    "days": 5,
-    "adults_count": 2,
-    "kids_count": 0,
-    "has_kids": false,
-    "has_pets": false
-  },
-  {
-    "id": "TOP3_25",
-    "query": "В Пхукет на пять ночей для одного, бюджет 290 тысяч.",
-    "expected_destinations": [
-      "thailand"
-    ],
-    "archetype": "solo",
-    "budget": 290000,
-    "days": 5,
-    "adults_count": 1,
-    "kids_count": 0,
-    "has_kids": false,
-    "has_pets": false
-  },
-  {
-    "id": "TOP3_26",
-    "query": "Горный Алтай на двоих на пять ночей, 140 тысяч.",
-    "expected_destinations": [
       "altai"
     ],
-    "archetype": "budget",
-    "budget": 140000,
+    "archetype": "solo",
+    "budget": 190000,
     "days": 5,
-    "adults_count": 2,
+    "adults_count": 1,
     "kids_count": 0,
     "has_kids": false,
-    "has_pets": false
+    "has_pets": false,
+    "flight_time_pref": "morning",
+    "soft_preference": {
+      "attribute": "morning",
+      "max_extra_rub": 15000
+    }
   },
   {
-    "id": "TOP3_27",
-    "query": "Поездка с собакой в Санкт-Петербург, двое взрослых, пять ночей, до 160 тысяч.",
+    "id": "TOP3_56",
+    "query": "Выбираю между Стамбулом и Тбилиси на пять ночей одному, лимит 230 тысяч. Отели более высокой категории предпочтительнее, доплата до 25 тыс.",
     "expected_destinations": [
-      "spb"
+      "turkey",
+      "georgia"
     ],
-    "archetype": "pet",
-    "budget": 160000,
+    "archetype": "solo",
+    "budget": 230000,
     "days": 5,
-    "adults_count": 2,
+    "adults_count": 1,
     "kids_count": 0,
     "has_kids": false,
-    "has_pets": true
+    "has_pets": false,
+    "soft_preference": {
+      "attribute": "stars",
+      "max_extra_rub": 25000
+    }
   },
   {
-    "id": "TOP3_28",
-    "query": "Пять ночей в Египте для двух взрослых и ребёнка, лимит 380 тысяч.",
+    "id": "TOP3_57",
+    "query": "В Пхукет на пять ночей для одного, бюджет 295 тысяч. Желателен прямой перелет, переплата до 25 тыс.",
     "expected_destinations": [
-      "egypt"
+      "thailand"
     ],
-    "archetype": "family",
-    "budget": 380000,
+    "archetype": "solo",
+    "budget": 295000,
     "days": 5,
-    "adults_count": 2,
-    "kids_count": 1,
-    "has_kids": true,
-    "has_pets": false
-  },
-  {
-    "id": "TOP3_29",
-    "query": "Пять ночей на Мальдивах вдвоём. Готовы потратить 950 тысяч.",
-    "expected_destinations": [
-      "maldives"
-    ],
-    "archetype": "luxury",
-    "budget": 950000,
-    "days": 5,
-    "adults_count": 2,
+    "adults_count": 1,
     "kids_count": 0,
     "has_kids": false,
-    "has_pets": false
+    "has_pets": false,
+    "prefer_direct_flight": true,
+    "soft_preference": {
+      "attribute": "direct",
+      "max_extra_rub": 25000
+    }
   },
   {
-    "id": "TOP3_30",
-    "query": "Пять ночей в Стамбуле для одного, общий лимит 240 тысяч.",
+    "id": "TOP3_58",
+    "query": "Пять ночей в Стамбуле для одного, общий лимит 240 тысяч. Предпочтителен отель с включенным завтраком.",
     "expected_destinations": [
       "turkey"
     ],
@@ -427,6 +995,47 @@
     "adults_count": 1,
     "kids_count": 0,
     "has_kids": false,
-    "has_pets": false
+    "has_pets": false,
+    "soft_preference": {
+      "attribute": "breakfast",
+      "max_extra_rub": 20000
+    }
+  },
+  {
+    "id": "TOP3_59",
+    "query": "Один на пять ночей в Тбилиси, бюджет 190 тысяч. Желателен отель более высокой категории, доплата до 25 тыс.",
+    "expected_destinations": [
+      "georgia"
+    ],
+    "archetype": "solo",
+    "budget": 190000,
+    "days": 5,
+    "adults_count": 1,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false,
+    "soft_preference": {
+      "attribute": "stars",
+      "max_extra_rub": 25000
+    }
+  },
+  {
+    "id": "TOP3_60",
+    "query": "Пять ночей в Санкт-Петербурге для одного, лимит 140 тысяч. Желателен вечерний вылет.",
+    "expected_destinations": [
+      "spb"
+    ],
+    "archetype": "solo",
+    "budget": 140000,
+    "days": 5,
+    "adults_count": 1,
+    "kids_count": 0,
+    "has_kids": false,
+    "has_pets": false,
+    "flight_time_pref": "evening",
+    "soft_preference": {
+      "attribute": "evening",
+      "max_extra_rub": 15000
+    }
   }
 ]

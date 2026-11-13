@@ -27,6 +27,9 @@ class LTRServiceTest(unittest.TestCase):
         self.assertEqual(LTRService.resolve_archetype({"interests": ["luxury"]}), "luxury")
         self.assertEqual(LTRService.resolve_archetype({"interests": ["budget_friendly"]}), "budget")
         self.assertEqual(LTRService.resolve_archetype({"budget_rub": 85000}), "budget")
+        self.assertEqual(LTRService.resolve_archetype({"budget": 85000}), "budget")
+        self.assertEqual(LTRService.resolve_archetype({"archetype": "luxury"}), "luxury")
+        self.assertEqual(LTRService.resolve_archetype({"archetype": "budget"}), "budget")
         self.assertEqual(LTRService.resolve_archetype({"party_size": "соло", "adults_count": 1}), "solo")
         self.assertEqual(LTRService.resolve_archetype({}), "solo")
 

@@ -266,6 +266,10 @@ class LTRService:
         if not profile:
             return "solo"
 
+        raw_arch = profile.get("archetype")
+        if raw_arch and str(raw_arch).lower() in ARCHETYPES:
+            return str(raw_arch).lower()
+
         interests = [str(x).lower() for x in (profile.get("interests") or [])]
 
         if binary_flag(profile.get("has_pets")) or "pet_friendly" in interests:
@@ -274,8 +278,9 @@ class LTRService:
             return "family"
         if any(t in interests for t in ("luxury", "extreme_luxury", "luxury_extreme", "splurge")):
             return "luxury"
+        budget_val = profile.get("budget_rub") if profile.get("budget_rub") is not None else profile.get("budget")
         if "budget_friendly" in interests or (
-            0 < finite_number(profile.get("budget_rub")) <= 110000
+            0 < finite_number(budget_val) <= 110000
         ):
             return "budget"
         if profile.get("party_size") == "соло" or profile.get("adults_count") == 1:

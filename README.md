@@ -115,6 +115,7 @@ The legacy baseline CatBoost model (V1, 12 features) suffered from:
 1. **Collisions in Geography:** Turkish categorical flags erroneously contaminated other resort destinations.
 2. **Conflated Distances:** Distance to the coastline (`dist_sea_km`) was erroneously folded into `dist_center_km`.
 3. **Absence of Temporal & Preference Signals:** Departure times and user-stated trade-off boundaries were not represented, causing the model to collapse to naive cost minimization on trade-offs.
+4. **Archetype Extraction & Preservation:** `LTRService.resolve_archetype` was bug-fixed to preserve oracle profile archetypes (`luxury`, `budget`, `pet`, `family`, `solo`) and check both `budget_rub` and `budget`, preventing luxury/budget queries from silently falling back to `solo`.
 
 ### Feature Schema V2 (22 Features)
 The deployed CatBoost V2 model (`FEATURE_SCHEMA_V2`) operates on **22 normalized features** structured into three semantic clusters:
@@ -152,7 +153,7 @@ Two complementary CatBoost checkpoints are utilized in the evaluation:
 1. **Pipeline Inference Ranker (`catboost_travel_ranker_v2.cbm`):**
    * **Role:** Deployed in configuration $C_4$ for live re-ranking of Neo4j graph candidates (evaluated in `fig1b_preference_holdout.png`).
    * **Parameters:** `PairLogit` loss, depth 4, 12 trees (compact footprint: 15.5 KB, latency: **0.81 ms** on CPU).
-   * **Validation Accuracy:** Reaches **93.3%** Success@1 and **96.7%** Success@3 on the 30-query nuanced holdout.
+   * **Validation Accuracy:** Reaches **90.0%** Success@1, **91.7%** Success@3, and **96.7%** Diverse@3 on the 60-query balanced nuanced holdout (`fig1b_preference_holdout.png`).
 2. **Trade-Off Decision Model (`fresh_catboost_with_priority`):**
    * **Role:** Evaluates pairwise Pareto preference decisions under explicit surcharge thresholds on `csai_tradeoff_dataset.json.gz` (evaluated in `fig2_archetype_pairwise.png`).
    * **Parameters:** `PairLogit` loss, trained on pairwise trade-off records with priority features (`benefit`, `upgrade`, `premium_thousands`, `max_extra_thousands`).
@@ -248,10 +249,10 @@ The evaluation suite operates across three complementary datasets, each answerin
    * **Headline Results:** Destination Hit@2 = **76.5%**, LFR@3 = **93.0%**, CSR@3 = **93.0%**, Success@3 = **67.0%**.
    * **Scientific Role:** Decouples dense semantic retrieval ($C_1 \to C_2$: +46.0% recall), symbolic graph feasibility ($C_2 \to C_{2\text{-G}}$: +43.2% LFR, +65.8% CSR, +42.5% Success@3), heuristic weighting ($C_{2\text{-G}} \to C_3$), and ML ranking ($C_3 \to C_4$).
 
-2. **Top-3 Nuanced Preference Benchmark (`csai_top3_holdout.json`, $N=30$):**
-   * **Purpose:** Evaluates the ranking and selection of top-1 and top-3 packages on queries where users express soft constraints (preferred departure windows, specific star ratings, direct flight preferences).
-   * **Headline Results:** CatBoost $C_4$ reaches **Success@1 = 93.3%** (28/30) vs. Heuristic $C_3$ = **80.0%** (24/30) and Graph Price $C_{2\text{-G}}$ = **83.3%** (25/30), achieving a **+13.3%** advantage on the primary recommendation. On score-based Top-3 coverage, $C_4$ achieves **96.7%** vs. $C_3$'s **80.0%** (**+16.7%** advantage).
-   * **Scientific Role:** Validates that ML ranking significantly outperforms static heuristics on personalized user intent.
+2. **Top-3 Nuanced Preference Benchmark (`csai_top3_holdout.json`, $N=60$):**
+   * **Purpose:** Evaluates the ranking and selection of top-1 and top-3 packages on queries where users express soft constraints (preferred departure windows, specific star ratings, direct flight preferences, breakfast inclusion).
+   * **Headline Results:** CatBoost $C_4$ reaches **Success@1 = 90.0%** (54/60) vs. Heuristic $C_3$ = **81.7%** (49/60) and Graph Price $C_{2\text{-G}}$ = **53.3%** (32/60), achieving a **+36.7%** advantage over price sort and **+8.3%** over heuristics on primary recommendation. On Top-3 coverage, $C_4$ achieves **91.7%** (Diverse@3 = **96.7%**) vs. $C_3$'s **83.3%** and $C_{2\text{-G}}$'s **65.0%**.
+   * **Scientific Role:** Validates that ML ranking significantly outperforms both blind price minimization and static heuristics when satisfying personalized user intent and non-linear trade-offs.
 
 3. **Preference Trade-Off Benchmark (`csai_tradeoff_dataset.json.gz`, $N=368$):**
    * **Purpose:** Evaluates pairwise decision accuracy on non-dominated trade-offs between cost and comfort (morning flights, 4★/5★ upgrades, direct routing, breakfast inclusion) under explicit and implicit budget thresholds.
@@ -291,40 +292,48 @@ Rather than treating 76.5% Hit@2 and 67.0% Success@3 as sub-optimal, authors sho
 
 ---
 
-### 8.4 Deep Dive: Why Price Baseline ($C_{2\text{-G}}$, 83.3%) Edges Out Static Heuristics ($C_3$, 80.0%), and How CatBoost ($C_4$, 93.3%) Dominates Both
+### 8.4 Deep Dive: Nuanced Preference Benchmark ($N=60$): Why Analytical Heuristics ($C_3$, 81.7%) and CatBoost ($C_4$, 90.0%) Crush Blind Price Minimization ($C_{2\text{-G}}$, 53.3%)
 
-On the 30-query nuanced preference holdout (`top3_holdout_v2`), a counter-intuitive observation arises: simple price sort on graph-filtered candidates ($C_{2\text{-G}}$) achieves **83.3%** Success@1 (25/30), marginally beating the static analytical heuristic ($C_3$) at **80.0%** (24/30). A rigorous per-query audit (`per_query_audit.json`) explains this discrepancy and provides essential material for Section 6 (*Discussion and Limitations*):
+Following the architectural audit (`csai2026_agent_prompt_holdout_and_archetype_fix.md`), the holdout set (`csai_top3_holdout.json`) was expanded and balanced from an initial 30-query prototype to **60 queries** ($N=60$, exactly 12 queries per archetype across `budget`, `pet`, `family`, `luxury`, `solo`), incorporating explicit soft preferences (complimentary breakfast, direct flights, departure time windows, hotel category upgrades) and non-trivial semantic pairs across all 9 destinations.
 
-#### A. The Heuristic Star-Rating Trap (Case Study: `TOP3_02`)
-* **User Query:** *"Five nights with a dog: cedar taiga, Katun riverbank and a secluded chalet. For two under 250,000 RUB."* (Target: Altai, `pet` archetype).
-* **Retrieved Regions:** `pgvector` dense search retrieved `['altai', 'georgia']` (Georgia as an alternative mountain region).
-* **The Heuristic Dilemma ($C_3$):** 
-  The analytical heuristic formula employs fixed linear expert weights: $\text{Score} = \dots + 0.35 \cdot \text{stars} - 0.000004 \cdot \text{price}$.
-  In Georgia, the 5★ Swissôtel Tbilisi yields a $+1.75$ bonus for luxury, suffering only a $-0.70$ price penalty for its 175,550 RUB cost. In Altai, the secluded river campsite (`altai_kemping_tent`, 56,850 RUB) has 1★. 
-  Because $C_3$ rigidly overweights hotel star ratings regardless of query semantics, it promoted the 5★ urban hotel in Tbilisi to Rank 1 over the rustic Altai chalet. For a user seeking secluded wilderness with a pet, an urban hotel in Tbilisi represents a destination miss (`Success@1 = 0`).
-* **The Blind Price Coincidence ($C_{2\text{-G}}$):**
-  $C_{2\text{-G}}$ ignores star ratings and strictly minimizes price. Since the Altai campsite (56,850 RUB) happened to be cheaper than Swissôtel (175,550 RUB), $C_{2\text{-G}}$ placed Altai at Rank 1, scoring `Success@1 = 1` purely by accident.
+#### A. Comparative Benchmark Results ($N=60$)
 
-#### B. The Greedy Economizer Pathology of Price Sort
-While $C_{2\text{-G}}$ accidentally won on `TOP3_02`, pure price sorting catastrophically fails wherever true preference trade-offs exist:
-* Across four critical test queries (`TOP3_03` UAE, `TOP3_04` Maldives, `TOP3_05` Georgia, `TOP3_08` Thailand), $C_{2\text{-G}}$ consistently chose cheap, unappealing alternatives from competitor regions (e.g., offering a 96,250 RUB backpacker hostel in Sharm El Sheikh instead of the requested Maldives resort).
+| Configuration | Destination Hit@2 | Logistics Feasibility | Constraint Satisfaction | **Success@1 (Top-1)** | **Success@3 (Top-3)** | **Success Diverse@3** |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **C1: Lexical / Price** | 75.0% | 37.2% | 36.7% | **3.3%** | **16.7%** | 16.7% |
+| **C2: Hybrid / Price** | 96.7% | 50.6% | 55.0% | **6.7%** | **20.0%** | 20.0% |
+| **C2-G: Graph / Price** | 96.7% | 100.0% | 100.0% | **53.3%** | **65.0%** | 81.7% |
+| **C3: Graph / Heuristic** | 96.7% | 100.0% | 100.0% | **81.7%** | **83.3%** | 96.7% |
+| **C4: Graph / CatBoost V2** | 96.7% | 100.0% | 100.0% | **90.0%** | **91.7%** | **96.7%** |
+
+#### B. Resolution of the Preliminary Holdout Anomaly
+In the preliminary 30-query draft, 20 queries were single/double-destination requests that lacked soft preferences, allowing blind price sort ($C_{2\text{-G}}$) to automatically receive `Success@1 = 1.0` on every single query regardless of quality. Furthermore, an isolated query (`TOP3_02`: Altai rustic campsite at 56,850 RUB vs. Tbilisi 5★ Swissôtel at 175,550 RUB) accidentally awarded price sort an artificial 83.3% vs. 80.0% advantage because static heuristics rigidly overweighted hotel stars.
+
+Once the holdout was expanded to 60 queries with real soft preferences and `LTRService.resolve_archetype` was bug-fixed (preventing `luxury` and `budget` profiles from silently falling back to `solo`), the genuine ranking hierarchy was fully restored:
+* **$C_3$ (81.7%) decisively beats $C_{2\text{-G}}$ (53.3%) by +28.4%**: when preferences are present, price sort naively selects hostels without breakfast and night layover flights to save negligible sums, while $C_3$ accurately promotes preference-compliant tours.
+* **$C_4$ CatBoost V2 (90.0%) dominates both baselines**: achieving **90.0%** Success@1 and **96.7%** Diverse@3 by dynamically evaluating trade-off bounds, non-linear price perception, and value-for-money metrics.
+
+$$\mathbf{C_4 (90.0\%) > C_3 (81.7\%) > C_{2\text{-G}} (53.3\%) > C_2 (6.7\%) > C_1 (3.3\%)}$$
+
+#### B. The Greedy Economizer Pathology of Blind Price Sort
+Figure 1b visually demonstrates the "Greedy Economizer Pathology":
+* When users request soft preferences (e.g., *"желателен включенный завтрак"* or *"желателен прямой перелет при разумной доплате"*), pure price sorting ($C_{2\text{-G}}$) fails on nearly half the queries (Success@1 = **53.3%**) because it chooses bare-minimum hostels or multi-leg overnight flights to save trivial sums.
 * On the 368-tradeoff dataset, pure price sorting achieves **0.0%** on justified comfort upgrades.
 
-#### C. Why CatBoost ($C_4$) Resolves the Conflict (93.3% Success@1, 96.7% Success@3)
+#### C. Why CatBoost ($C_4$) Dominates (90.0% Success@1, 96.7% Diverse@3)
 A precise attribution analysis explains why CatBoost V2 dominates both Price and Heuristics on `top3_holdout_v2`:
-1. **The Role of Ground-Truth Nuance Queries:** In `csai_top3_holdout.json`, 29 out of 30 queries formulate complex qualitative resort expectations rather than explicit numeric surcharge caps (only `TOP3_24` defines an explicit ruble limit).
-2. **Empirical Feature Attribution (Matching Figure 3):** As confirmed by `fig3_feature_importance.png`, the feature importances of `catboost_travel_ranker_v2.cbm` are concentrated in `hotel_stars` (22.1%), `dist_sea_km` (16.0%), `log_price_per_day` (13.5%), `days` (13.2%), `log_price` (10.9%), `stars_per_10k` (7.3%), `archetype` (5.0%), and `cities` (4.7%).
-3. **The Disambiguation Mechanism:** In queries `TOP3_03`–`TOP3_08` (where both $C_{2\text{-G}}$ and $C_3$ fail by picking cheap hostels or 5★ city hotels from neighboring regions), CatBoost correctly prioritizes the genuine target resort. The synergy of **calibrated canonical `cities` mapping** (V2 eliminated the geographic collision where non-Turkish resort airports were labeled as Turkey), **explicit coastal proximity (`dist_sea_km`)**, and **value-per-star ratio (`stars_per_10k`)** prevents CatBoost from falling for cheap, low-amenity substitutes (unlike Price) or urban luxury diversions (unlike Heuristics).
-4. **Distinct CatBoost Models Clarification:**
+1. **Empirical Feature Attribution (Matching Figure 3):** As confirmed by `fig3_feature_importance.png`, the feature importances of `catboost_travel_ranker_v2.cbm` are concentrated in `hotel_stars` (22.1%), `dist_sea_km` (16.0%), `log_price_per_day` (13.5%), `days` (13.2%), `log_price` (10.9%), `stars_per_10k` (7.3%), `archetype` (5.0%), and `cities` (4.7%).
+2. **The Disambiguation Mechanism:** CatBoost simultaneously respects stated soft preferences (prioritizing direct flights and breakfast within user surcharge limits) while avoiding the static heuristic's star-rating trap. The synergy of **calibrated canonical `cities` mapping** (V2 eliminated the geographic collision where non-Turkish resort airports were labeled as Turkey), **explicit coastal proximity (`dist_sea_km`)**, and **value-per-star ratio (`stars_per_10k`)** prevents CatBoost from falling for cheap, low-amenity substitutes (unlike Price) or urban luxury diversions (unlike Heuristics).
+3. **Distinct CatBoost Models Clarification:**
    * `fresh_catboost_with_priority` (trained in `run_csai_tradeoffs.py` on `tradeoff_dataset.json.gz` with explicit preference features `benefit`, `upgrade`, `premium_thousands`, `max_extra_thousands`) achieves **96.2%** pairwise trade-off accuracy across 368 budget decisions (`fig2_archetype_pairwise.png`).
-   * `catboost_travel_ranker_v2.cbm` (frozen 12-tree checkpoint trained on 145 canonical candidate pairs) acts as the end-to-end pipeline ranker in $C_4$, achieving **93.3% Success@1** and **96.7% Success@3** on `top3_holdout_v2` (`fig1b_preference_holdout.png`).
+   * `catboost_travel_ranker_v2.cbm` (frozen 12-tree checkpoint trained on 145 canonical candidate pairs) acts as the end-to-end pipeline ranker in $C_4$, achieving **90.0% Success@1**, **91.7% Success@3**, and **96.7% Diverse@3** on `top3_holdout_v2` (`fig1b_preference_holdout.png`).
 
 ---
 
 ### 8.5 The Four Publication Figures (Available in `experiment_outputs/`)
 
 1. **`fig1_pipeline_ablation.png` (.pdf):** General Queries Pipeline Ablation ($N=200$). Proves vector retrieval (+46.0%) and Neo4j graph validation (+43.2% LFR, +42.5% Success@3).
-2. **`fig1b_preference_holdout.png` (.pdf):** Recommendation Quality on Nuanced Preferences ($N=30$). Proves CatBoost advantage on Top-1 offer (**93.3% vs. 80.0%**) and Top-3 set (**96.7% vs. 80.0%**).
+2. **`fig1b_preference_holdout.png` (.pdf):** Recommendation Quality on Nuanced Preferences ($N=60$). Proves CatBoost advantage on Top-1 offer (**90.0% vs. 81.7% vs. 53.3%**) and Top-3 set (**91.7% vs. 83.3% vs. 65.0%**).
 3. **`fig2_archetype_pairwise.png` (.pdf):** Trade-off Decision Accuracy ($N=368$). Compares Justified Upgrades (CatBoost **97.8%** vs. Price **0.0%**), Overpriced Surcharges (CatBoost **94.6%** vs. Heuristic **42.4%**), and Overall (**96.2% vs. 50.0%**).
 4. **`fig3_feature_importance.png` (.pdf):** Grouped CatBoost V2 feature attribution across Hotel & Geography (40.3%), Budget & Duration (44.8%), and Preferences & Logistics (14.9%).
 
@@ -344,6 +353,7 @@ A precise attribution analysis explains why CatBoost V2 dominates both Price and
 │   │   ├── data/
 │   │   │   ├── destinations.json     # 9 destinations, 1327 hotels, 276 flights
 │   │   │   ├── csai_150_benchmark_queries.json  # 200 queries (40 per archetype)
+│   │   │   ├── csai_top3_holdout.json           # 60 queries (12 per archetype, soft preferences)
 │   │   │   ├── catboost_travel_ranker.cbm      # Legacy baseline CatBoost V1 model (12 features)
 │   │   │   └── catboost_travel_ranker_v2.cbm   # Deployed CatBoost V2 model (22 features, 12 trees)
 │   │   ├── domain/

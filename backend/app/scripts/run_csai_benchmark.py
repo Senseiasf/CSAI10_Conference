@@ -40,7 +40,7 @@ from app.services.ltr_service import (
     FEATURE_SCHEMA_V2,
     LTRService,
 )
-from app.services.travel_preferences import merge_preferences, prioritize_preference, select_offers
+from app.services.travel_preferences import matches_preference, merge_preferences, prioritize_preference, select_offers
 from app.services.vector_service import EMBEDDING_VERSION, generate_text_embedding
 
 DATA = BACKEND / "app" / "data"
@@ -229,12 +229,32 @@ def rank(candidates, mode, model, preference=None):
     return prioritize_preference(ranked, preference)
 
 
-def offer_is_success(candidate, reference):
+def offer_is_success(candidate, reference, candidate_pool=None):
     route = candidate["route"]
     if route.destination not in reference["expected_destinations"]:
         return False
     logistics, constraints, _ = assess(route, reference, candidate["back"])
-    return not logistics and not constraints
+    if logistics or constraints:
+        return False
+
+    pref = reference.get("soft_preference")
+    if pref and candidate_pool:
+        attr = pref.get("attribute")
+        cap = pref.get("max_extra_rub")
+        admissible_dest = [c for c in candidate_pool if c["route"].destination in reference["expected_destinations"]]
+        if admissible_dest:
+            cheapest = min(admissible_dest, key=lambda c: (c["features"]["price"], c["route"].key))
+            min_p = cheapest["features"]["price"]
+            has_matching = any(
+                matches_preference(c, attr, cheapest) and (cap is None or c["features"]["price"] - min_p <= cap)
+                for c in admissible_dest
+            )
+            if has_matching:
+                if not matches_preference(candidate, attr, cheapest):
+                    return False
+                if cap is not None and candidate["features"]["price"] - min_p > cap:
+                    return False
+    return True
 
 
 def pareto_winner(a, b):
@@ -425,12 +445,13 @@ async def run(args):
             candidates, rejected = candidate_pool(paths, request, strict) if request else ([], Counter())
             detected.update(rejected)
             t0 = time.perf_counter()
-            preference = request.get("soft_preference") if strict and request else None
+            preference = request.get("soft_preference") if strict and mode != "price" and request else None
             ranked = rank(candidates, mode, model, preference)
             top = select_offers(ranked, diversify=strict and args.top3 == "diverse")
             elapsed = (time.perf_counter() - t0) * 1000
             score_top = select_offers(ranked)
             diverse_top = select_offers(ranked, diversify=strict)
+            eval_ref = {**q, **(request or {})}
             emitted_packages = []
             for c in top:
                 route = c["route"]
@@ -451,9 +472,9 @@ async def run(args):
                 "csr": sum(not p["constraint_errors"] for p in emitted_packages) / n if n else 0,
                 "success": any(p["destination_match"] and not p["logistics_errors"] and not p["constraint_errors"]
                                for p in emitted_packages),
-                "success_at_1": bool(top and offer_is_success(top[0], q)),
-                "success_score_at_3": any(offer_is_success(c, q) for c in score_top),
-                "success_diverse_at_3": any(offer_is_success(c, q) for c in diverse_top),
+                "success_at_1": bool(top and offer_is_success(top[0], eval_ref, candidates)),
+                "success_score_at_3": any(offer_is_success(c, eval_ref, candidates) for c in score_top),
+                "success_diverse_at_3": any(offer_is_success(c, eval_ref, candidates) for c in diverse_top),
                 "score_top_destinations": len({c["route"].destination for c in score_top}),
                 "diverse_top_destinations": len({c["route"].destination for c in diverse_top}),
                 "ranking_ms": elapsed, "packages": emitted_packages,

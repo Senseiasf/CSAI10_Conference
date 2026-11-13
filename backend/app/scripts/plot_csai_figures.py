@@ -159,7 +159,9 @@ def plot_fig1b_preference_holdout(output: Path) -> None:
             )
 
     ax.set_ylabel("Quality Score (%)")
-    ax.set_title("Travel Planning Recommendation Quality on Nuanced Preference Queries (n=30)")
+    holdout_path = Path(__file__).resolve().parents[1] / "data" / "csai_top3_holdout.json"
+    n_queries = len(json.loads(holdout_path.read_text(encoding="utf-8"))) if holdout_path.exists() else 60
+    ax.set_title(f"Travel Planning Recommendation Quality on Nuanced Preference Queries (n={n_queries})")
     ax.set_xticks(x)
     ax.set_xticklabels(configs)
     ax.set_ylim(0, 118)
